@@ -55,9 +55,29 @@ class App {
     );
   }
 
-  initModelSelector() {
+  async initModelSelector() {
     const modelSelect = document.getElementById('modelSelect');
     if (!modelSelect) return;
+
+    // Dynamically load available models from Gateway
+    try {
+      const gatewayBase = AppState.getGatewayUrl() || '';
+      const passcode = AppState.getPasscode() || '';
+      const res = await fetch(`${gatewayBase}/api/models`, {
+        headers: passcode ? { 'Authorization': `Bearer ${passcode}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.models && Array.isArray(data.models)) {
+          const currentModel = AppState.getModel();
+          modelSelect.innerHTML = data.models.map(m =>
+            `<option value="${m.id}" ${m.id === currentModel ? 'selected' : ''}>${m.name}</option>`
+          ).join('');
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch dynamic models list from gateway:', e);
+    }
 
     modelSelect.value = AppState.getModel();
     modelSelect.addEventListener('change', (e) => {
@@ -90,6 +110,7 @@ class App {
       AppState.setPasscode(passcodeInput.value);
       AppState.setGatewayUrl(gatewayUrlInput.value);
       settingsModal.classList.remove('open');
+      this.initModelSelector();
     });
 
     clearHistoryBtn?.addEventListener('click', () => {
