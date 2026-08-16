@@ -4,6 +4,13 @@ import { ChatView } from './tabs/chat_view.js';
 import { PromptInput } from './components/prompt_input.js';
 import { Lightbox } from './components/lightbox.js';
 
+const AVAILABLE_MODELS = [
+  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash' },
+  { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash' },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview' },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite' }
+];
+
 class App {
   constructor() {
     this.chatView = new ChatView();
@@ -59,6 +66,8 @@ class App {
     const modelSelect = document.getElementById('modelSelect');
     if (!modelSelect) return;
 
+    let models = AVAILABLE_MODELS;
+
     // Dynamically load available models from Gateway
     try {
       const gatewayBase = AppState.getGatewayUrl() || '';
@@ -69,17 +78,26 @@ class App {
       if (res.ok) {
         const data = await res.json();
         if (data.models && Array.isArray(data.models)) {
-          const currentModel = AppState.getModel();
-          modelSelect.innerHTML = data.models.map(m =>
-            `<option value="${m.id}" ${m.id === currentModel ? 'selected' : ''}>${m.name}</option>`
-          ).join('');
+          models = data.models;
         }
       }
     } catch (e) {
-      console.warn('Could not fetch dynamic models list from gateway:', e);
+      console.warn('Using fallback models list:', e);
     }
 
-    modelSelect.value = AppState.getModel();
+    const currentModel = AppState.getModel();
+    modelSelect.innerHTML = models.map(m =>
+      `<option value="${m.id}" ${m.id === currentModel ? 'selected' : ''}>${m.name}</option>`
+    ).join('');
+
+    // If current model is not in list, default to gemini-3.5-flash
+    if (!models.some(m => m.id === currentModel)) {
+      AppState.setModel('gemini-3.5-flash');
+      modelSelect.value = 'gemini-3.5-flash';
+    } else {
+      modelSelect.value = currentModel;
+    }
+
     modelSelect.addEventListener('change', (e) => {
       AppState.setModel(e.target.value);
     });

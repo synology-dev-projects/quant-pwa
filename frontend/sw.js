@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quant-ai-v3';
+const CACHE_NAME = 'quant-ai-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -16,12 +16,12 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -34,9 +34,8 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -45,18 +44,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Network-first for html/js so updates are instant
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return cached shell, update in background (Stale-While-Revalidate)
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-          }
-        }).catch(() => {});
-        return cachedResponse;
+    fetch(event.request).then((networkResponse) => {
+      if (networkResponse && networkResponse.status === 200) {
+        const responseClone = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
       }
-      return fetch(event.request);
+      return networkResponse;
+    }).catch(() => {
+      return caches.match(event.request);
     })
   );
 });
