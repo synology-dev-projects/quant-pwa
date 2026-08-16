@@ -46,15 +46,18 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100dvh;
+  height: 100vh;
   width: 100%;
   max-width: 800px;
   margin: 0 auto;
   position: relative;
   background-color: var(--bg-main);
+  overflow: hidden;
 }
 
 /* Header */
 .app-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -129,6 +132,7 @@ html, body {
 
 /* Tab Bar */
 .tab-bar {
+  flex-shrink: 0;
   display: flex;
   background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
@@ -160,15 +164,22 @@ html, body {
 
 /* Tab Content Container */
 .tab-content {
-  flex: 1;
+  flex: 1 1 0%;
+  min-height: 0;
   overflow: hidden;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .tab-pane {
   display: none;
   height: 100%;
+  width: 100%;
+  flex: 1 1 0%;
+  min-height: 0;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .tab-pane.active {
@@ -180,11 +191,17 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  width: 100%;
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .chat-stream {
-  flex: 1;
+  flex: 1 1 0%;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -384,10 +401,17 @@ html, body {
 }
 
 /* Quick Chips & Prompt Bar */
+#promptContainer {
+  flex-shrink: 0;
+  z-index: 10;
+  background-color: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+}
+
 .quick-chips-bar {
   display: flex;
   overflow-x: auto;
-  padding: 6px 16px 4px 16px;
+  padding: 8px 16px 4px 16px;
   gap: 8px;
   scrollbar-width: none;
 }
@@ -397,7 +421,7 @@ html, body {
 }
 
 .chip-btn {
-  background-color: var(--bg-surface);
+  background-color: var(--bg-card);
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
@@ -410,7 +434,7 @@ html, body {
 }
 
 .chip-btn:hover, .chip-btn:active {
-  background-color: var(--bg-card);
+  background-color: var(--bg-input);
   color: var(--text-primary);
   border-color: var(--border-active);
 }
@@ -418,7 +442,6 @@ html, body {
 .prompt-bar-container {
   padding: 6px 16px calc(12px + var(--safe-bottom)) 16px;
   background-color: var(--bg-surface);
-  border-top: 1px solid var(--border-subtle);
 }
 
 .prompt-form {
