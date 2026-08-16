@@ -84,17 +84,18 @@ def list_models():
     }
 
 
-@app.get("/api/v1/gexdex/chart.png", summary="Proxy GEX/DEX Chart PNG")
+@app.get("/api/v1/gexdex/chart.png", summary="Proxy GEX/DEX Chart WebP/PNG")
 def proxy_chart_png(
     ticker: str = Query("AAPL"),
     max_dte: int = Query(50),
     strike_range: int = Query(25),
     t: Optional[str] = Query(None),
+    format: str = Query("webp"),
     api_key: Optional[str] = None
 ):
     """
-    Proxies chart PNG requests directly to the internal gexdex-api microservice.
-    Enforces strict Cache-Control headers so browsers never display stale cached charts.
+    Proxies chart image requests directly to the internal gexdex-api microservice.
+    Enforces WebP compression (~35KB) and strict Cache-Control headers.
     """
     clean_ticker = ticker.strip().upper()
     url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/chart.png"
@@ -102,7 +103,7 @@ def proxy_chart_png(
         "ticker": clean_ticker,
         "max_dte": max_dte,
         "strike_range": strike_range,
-        "format": "png"
+        "format": format
     }
     headers = {
         "X-API-Key": settings.GEXDEX_API_KEY
@@ -115,9 +116,10 @@ def proxy_chart_png(
     try:
         with httpx.Client(timeout=15.0) as client:
             resp = client.get(url, params=params, headers=headers)
+            media_type = "image/webp" if format.lower() == "webp" else "image/png"
             return Response(
                 content=resp.content,
-                media_type="image/png",
+                media_type=media_type,
                 status_code=resp.status_code,
                 headers=cache_headers
             )
