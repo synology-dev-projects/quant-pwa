@@ -88,10 +88,12 @@ def proxy_chart_png(
     ticker: str = Query("AAPL"),
     max_dte: int = Query(50),
     strike_range: int = Query(25),
+    t: Optional[str] = Query(None),
     api_key: Optional[str] = None
 ):
     """
     Proxies chart PNG requests directly to the internal gexdex-api microservice.
+    Enforces strict Cache-Control headers so browsers never display stale cached charts.
     """
     clean_ticker = ticker.strip().upper()
     url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/chart.png"
@@ -104,12 +106,22 @@ def proxy_chart_png(
     headers = {
         "X-API-Key": settings.GEXDEX_API_KEY
     }
+    cache_headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
     try:
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=15.0) as client:
             resp = client.get(url, params=params, headers=headers)
-            return Response(content=resp.content, media_type="image/png", status_code=resp.status_code)
+            return Response(
+                content=resp.content,
+                media_type="image/png",
+                status_code=resp.status_code,
+                headers=cache_headers
+            )
     except Exception as e:
-        return Response(content=b"", media_type="image/png", status_code=502)
+        return Response(content=b"", media_type="image/png", status_code=502, headers=cache_headers)
 
 
 @app.post("/api/chat/stream", summary="Stream Chat Response", dependencies=[Depends(verify_app_passcode)])

@@ -1,3 +1,4 @@
+import time
 import httpx
 from typing import Dict, Any
 from app.config import settings
@@ -48,9 +49,10 @@ def get_gexdex(ticker: str, max_dte: int = 50, strike_range: int = 25) -> Dict[s
             if response.status_code == 200:
                 data = response.json()
                 
-                # Build client-accessible authenticated chart URL
+                # Build client-accessible authenticated cache-busted chart URL
                 base_url = settings.PUBLIC_BASE_URL.rstrip("/") if settings.PUBLIC_BASE_URL else ""
-                auth_chart_url = f"{base_url}/api/v1/gexdex/chart.png?ticker={clean_ticker}&max_dte={max_dte}&strike_range={strike_range}&api_key={settings.GEXDEX_API_KEY}"
+                timestamp = int(time.time())
+                auth_chart_url = f"{base_url}/api/v1/gexdex/chart.png?ticker={clean_ticker}&max_dte={max_dte}&strike_range={strike_range}&t={timestamp}"
                 
                 data["chart_png_url"] = auth_chart_url
                 data["markdown_image"] = f"![{clean_ticker} Options Chart]({auth_chart_url})"
