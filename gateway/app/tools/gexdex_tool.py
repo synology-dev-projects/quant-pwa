@@ -25,9 +25,10 @@ from app.tools.registry import register_tool
         "required": ["ticker"]
     }
 )
-async def get_gexdex(ticker: str, max_dte: int = 50, strike_range: int = 25) -> Dict[str, Any]:
+def get_gexdex(ticker: str, max_dte: int = 50, strike_range: int = 25) -> Dict[str, Any]:
     """
     Queries gexdex-api assistant-summary endpoint over the internal Synology LAN.
+    Uses synchronous httpx.Client for compatibility with GenAI automatic function calling.
     """
     clean_ticker = ticker.strip().upper().replace("$", "")
     url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/assistant-summary"
@@ -41,8 +42,8 @@ async def get_gexdex(ticker: str, max_dte: int = 50, strike_range: int = 25) -> 
     }
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params=params, headers=headers)
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(url, params=params, headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
