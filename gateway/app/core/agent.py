@@ -19,9 +19,7 @@ TOOL HIERARCHY RULES:
 2. WEB SEARCH FOR MACRO & NEWS: Use web search grounding ONLY when the user asks about breaking market news, earnings releases, macroeconomic data (CPI, PPI, FOMC, Fed interest rate decisions), or company catalysts.
 
 RESPONSE FORMATTING:
-- Begin with a clean, punchy breakdown of the ticker, spot price, and current Gamma Regime (e.g. Positive / Mean-Reverting vs. Negative / Volatile).
-- Highlight key strike levels in bold: **Call Wall (Cap/Magnet)**, **Put Wall (Support/Floor)**, and **Gamma Flip (Regime Pivot)**.
-- Explain the tactical dealer hedging implications (e.g. dealer dip-buying in positive gamma vs. delta-hedging cascade risk in negative gamma).
+- Deliver clean, institutional quantitative breakdowns.
 - Always include the chart image in markdown if provided: `![Ticker Chart](url)`.
 - Keep tone professional, analytical, and direct. Avoid conversational filler.
 """
@@ -44,6 +42,68 @@ def extract_potential_tickers(text: str) -> List[str]:
             if clean not in found:
                 found.append(clean)
     return found
+
+
+def format_quant_digest_card(data: Dict[str, Any]) -> str:
+    """
+    Renders an institutional Markdown Quant Digest Card with zero token cost.
+    """
+    ticker = data.get("ticker", "TICKER")
+    spot = data.get("spot_price", 0.0)
+    regime = data.get("gamma_regime", "Positive Gamma")
+    cp_ratio = data.get("call_put_ratio", 1.0)
+    
+    call_wall = data.get("call_wall", data.get("key_gamma_strike", "N/A"))
+    put_wall = data.get("put_wall", "N/A")
+    gamma_flip = data.get("zero_gex_level", "N/A")
+    centroid = data.get("gamma_centroid", spot)
+    
+    exp_move_dlr = data.get("expected_move_dollars", 0.0)
+    exp_move_pct = data.get("expected_move_pct", 3.5)
+    exp_low = data.get("expected_range_low", round(spot * 0.965, 2))
+    exp_high = data.get("expected_range_high", round(spot * 1.035, 2))
+    
+    gex_above_pct = data.get("gex_above_pct", 50.0)
+    gex_below_pct = round(100.0 - gex_above_pct, 1)
+    dex_above_pct = data.get("dex_above_pct", 50.0)
+    dex_below_pct = round(100.0 - dex_above_pct, 1)
+    front_week_pct = data.get("front_week_gex_pct", 45.0)
+    dominant_exp = data.get("dominant_expiration", "Near-term")
+    
+    pin_risk = data.get("pin_risk_level", "MODERATE")
+    squeeze_risk = data.get("gamma_squeeze_risk", "LOW")
+    cascade_risk = data.get("cascade_drop_risk", "LOW")
+    
+    chart_md = data.get("markdown_image", "")
+
+    card = f"""### 🟢 **{ticker} — Institutional Options & GEX Digest**
+
+* **Spot Price:** **`${spot:.2f}`**
+* **Gamma Regime:** **`{regime}`**
+* **Call / Put Gamma Ratio:** **`{cp_ratio:.2f}`**
+
+---
+
+#### 🧱 **Key Pivot Matrix**
+* **Call Wall (Resistance / Magnet):** **`${call_wall}`**
+* **Put Wall (Support Floor):** **`${put_wall}`**
+* **Zero GEX / Gamma Flip:** **`${gamma_flip}`**
+* **Gamma Centroid (Center of Gravity):** **`${centroid}`**
+* **1-Week Expected Move:** **`±${exp_move_dlr:.2f} (±{exp_move_pct:.1f}%)`** $\rightarrow$ Range: **`${exp_low:.2f} — ${exp_high:.2f}`**
+
+---
+
+#### ⚖️ **Exposure Imbalances & Time Skew**
+* **GEX Distribution:** **`{gex_above_pct}% Above Spot`** vs. **`{gex_below_pct}% Below Spot`**
+* **DEX Distribution:** **`{dex_above_pct}% Above Spot`** vs. **`{dex_below_pct}% Below Spot`**
+* **Front-Week Velocity (0–7 DTE):** **`{front_week_pct}%`** of Total Gamma *(Dominant Expiry: `{dominant_exp}`)*
+* **Risk Signals:** Pinning Risk: **`{pin_risk}`** | Squeeze Risk: **`{squeeze_risk}`** | Cascade Risk: **`{cascade_risk}`**
+
+---
+
+{chart_md}
+"""
+    return card
 
 
 def create_genai_client() -> genai.Client:
@@ -84,7 +144,8 @@ async def stream_chat_response(
 
     # 2. Hybrid Optimization: Attempt 1-Turn Direct Pre-Fetch
     candidate_tickers = extract_potential_tickers(active_prompt)
-    prefetched_context_blocks = []
+    prefetched_cards = []
+    prefetched_ai_contexts = []
     
     if candidate_tickers:
         yield f"data: {json.dumps({'type': 'tool_start', 'name': 'get_gexdex', 'args': {'tickers': candidate_tickers}})}\n\n"
@@ -92,18 +153,29 @@ async def stream_chat_response(
             try:
                 gex_res = await asyncio.to_thread(get_gexdex, t)
                 if gex_res and "error" not in gex_res:
-                    block = f"""[LIVE GEX/DEX DATA FOR {t}]:
-- Spot Price: ${gex_res.get('spot_price', 'N/A')}
-- Net GEX: ${gex_res.get('net_gex', 'N/A')}
-- Net DEX: ${gex_res.get('net_dex', 'N/A')}
-- Zero GEX Flip Level: ${gex_res.get('zero_gex_level', 'N/A')}
-- Key Gamma Strike / Call Wall: ${gex_res.get('key_gamma_strike', 'N/A')}
-- Call / Put Ratio: {gex_res.get('call_put_ratio', 'N/A')}
-- Options Chart Markdown: {gex_res.get('markdown_image', '')}
-"""
-                    prefetched_context_blocks.append(block)
+                    card = format_quant_digest_card(gex_res)
+                    prefetched_cards.append(card)
+                    
+                    ai_ctx = f"Ticker {t}: Spot ${gex_res.get('spot_price')}, Call Wall ${gex_res.get('call_wall')}, Put Wall ${gex_res.get('put_wall')}, GEX Above: {gex_res.get('gex_above_pct')}%, Front-Week GEX: {gex_res.get('front_week_gex_pct')}%"
+                    prefetched_ai_contexts.append(ai_ctx)
             except Exception:
                 pass
+
+    # Stream the structured Digest Card immediately (Instant zero-token delivery)
+    if prefetched_cards:
+        for card_content in prefetched_cards:
+            words = card_content.split(" ")
+            for i, word in enumerate(words):
+                if client_disconnected_fn and await client_disconnected_fn():
+                    return
+                space = " " if i < len(words) - 1 else ""
+                yield f"data: {json.dumps({'type': 'token', 'content': word + space})}\n\n"
+                await asyncio.sleep(0.003)
+
+        # Micro-prompt for Gemini tactical synthesis
+        effective_prompt = f"Provide 2-3 concise, high-level institutional dealer positioning takeaways based on these metrics: " + "; ".join(prefetched_ai_contexts) + f". Context from user prompt: '{active_prompt}'."
+    else:
+        effective_prompt = active_prompt
 
     # Format history contents
     history_contents = []
@@ -121,7 +193,7 @@ async def stream_chat_response(
     config = types.GenerateContentConfig(
         system_instruction=full_system_instruction,
         temperature=0.2,
-        tools=callable_tools if not prefetched_context_blocks else None,  # No tool overhead if pre-fetched
+        tools=callable_tools if not prefetched_cards else None,  # No tool overhead if pre-fetched
     )
 
     models_to_try = [selected_model]
@@ -132,10 +204,6 @@ async def stream_chat_response(
     response = None
     active_model_used = selected_model
     last_error = None
-
-    effective_prompt = active_prompt
-    if prefetched_context_blocks:
-        effective_prompt = f"{active_prompt}\n\n" + "\n\n".join(prefetched_context_blocks)
 
     for attempt_model in models_to_try:
         try:
@@ -156,23 +224,24 @@ async def stream_chat_response(
             err_str = str(err)
             last_error = err
             if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                await asyncio.sleep(0.4)
+                await asyncio.sleep(0.3)
                 continue
             else:
                 break
 
-    if not response and last_error:
+    if not response and last_error and not prefetched_cards:
         yield f"data: {json.dumps({'type': 'error', 'message': f'Streaming Error: {str(last_error)}'})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
-    # If failover occurred, notify the user with a distinct badge
-    if active_model_used != selected_model:
-        failover_badge = f"> ℹ️ **Model Failover:** `{selected_model}` was experiencing temporary Google Cloud quota/demand limits. Routed to **`{active_model_used}`**.\n\n"
+    # If failover occurred and AI generated a response, notify user
+    if active_model_used != selected_model and not prefetched_cards:
+        failover_badge = f"> ℹ️ **Model Failover:** `{selected_model}` was experiencing temporary Google Cloud demand limits. Routed to **`{active_model_used}`**.\n\n"
         yield f"data: {json.dumps({'type': 'token', 'content': failover_badge})}\n\n"
 
-    # Stream the completed text response in smooth tokens
+    # Stream AI synthesis
     if response and response.text:
+        yield f"data: {json.dumps({'type': 'token', 'content': '\n\n#### 🧠 **Institutional Dealer Takeaways**\n'})}\n\n"
         words = response.text.split(" ")
         for i, word in enumerate(words):
             if client_disconnected_fn and await client_disconnected_fn():
