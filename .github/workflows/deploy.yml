@@ -92,9 +92,11 @@ jobs:
       - name: Deploy Docker Stack
         run: |
           cd "${{ env.DEPLOY_DIR }}"
-          echo "🐳 Launching Docker Compose stack (${{ env.COMPOSE_PROJECT_NAME }})..."
+          echo "🐳 Force-removing any conflicting containers for prefix ${{ env.CONTAINER_PREFIX }}..."
+          docker rm -f quant-gateway-${{ env.CONTAINER_PREFIX }} quant-frontend-${{ env.CONTAINER_PREFIX }} quant-cloudflared-${{ env.CONTAINER_PREFIX }} 2>/dev/null || true
           
-          docker compose down || true
+          echo "🐳 Launching Docker Compose stack (${{ env.COMPOSE_PROJECT_NAME }})..."
+          docker compose down --remove-orphans || true
           docker compose build
           docker compose ${{ env.COMPOSE_PROFILE_CMD }} up -d --force-recreate
           
@@ -107,6 +109,7 @@ jobs:
           DEV_DIR="/volume2/homes/rachardv/git-repos/develop/quant-pwa"
           if [ -d "$DEV_DIR" ]; then
             echo "🧹 Tearing down old develop containers to free Synology NAS compute..."
+            docker rm -f quant-gateway-dev quant-frontend-dev 2>/dev/null || true
             cd "$DEV_DIR"
             docker compose down --remove-orphans || true
             echo "✨ Develop containers cleanly removed."
