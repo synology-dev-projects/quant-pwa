@@ -116,7 +116,7 @@ def proxy_chart_png(
         "Expires": "0"
     }
     try:
-        with httpx.Client(timeout=15.0) as client:
+        with httpx.Client(timeout=30.0) as client:
             resp = client.get(url, params=params, headers=headers)
             media_type = "image/webp" if format.lower() == "webp" else "image/png"
             return Response(

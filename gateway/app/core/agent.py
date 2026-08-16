@@ -147,28 +147,35 @@ async def stream_chat_response(
     history_msgs = windowed_messages[:-1]
     active_prompt = last_msg.get("content", "")
 
-    # 2. Hybrid Optimization: Attempt 1-Turn Direct Pre-Fetch
+    # 2. Hybrid Optimization: Attempt 1-Turn Direct Batch Pre-Fetch
     is_force_refresh = bool(re.search(r'\b(REFRESH|FRESH|UPDATE|RELOAD|FORCE)\b', active_prompt, re.IGNORECASE))
     candidate_tickers = extract_potential_tickers(active_prompt)
     prefetched_cards = []
     prefetched_ai_contexts = []
     
     if candidate_tickers:
-        tool_start_payload = json.dumps({"type": "tool_start", "name": "get_gexdex", "args": {"tickers": candidate_tickers, "force_refresh": is_force_refresh}})
+        batch_tickers = candidate_tickers[:8]  # support up to 8 tickers concurrently in 1 batch
+        tool_start_payload = json.dumps({"type": "tool_start", "name": "get_gexdex", "args": {"tickers": batch_tickers, "force_refresh": is_force_refresh}})
         yield f"data: {tool_start_payload}\n\n"
-        for t in candidate_tickers[:2]:  # support up to 2 tickers concurrently
-            try:
-                gex_res = await asyncio.to_thread(get_gexdex, t, 50, 25, is_force_refresh)
-                if gex_res and "error" not in gex_res:
+        try:
+            gex_res = await asyncio.to_thread(get_gexdex, batch_tickers, 50, 25, is_force_refresh)
+            if gex_res and "error" not in gex_res:
+                if "batch_data" in gex_res and isinstance(gex_res["batch_data"], dict):
+                    for sym, item in gex_res["batch_data"].items():
+                        card = format_quant_digest_card(item, is_refresh=is_force_refresh)
+                        prefetched_cards.append(card)
+                        ai_ctx = f"Ticker {sym}: Spot ${item.get('spot_price')}, Call Wall ${item.get('call_wall')}, Put Wall ${item.get('put_wall')}, GEX Above: {item.get('gex_above_pct')}%, Front-Week GEX: {item.get('front_week_gex_pct')}%, Regime: {item.get('gamma_regime')}"
+                        prefetched_ai_contexts.append(ai_ctx)
+                else:
                     card = format_quant_digest_card(gex_res, is_refresh=is_force_refresh)
                     prefetched_cards.append(card)
-                    
-                    ai_ctx = f"Ticker {t}: Spot ${gex_res.get('spot_price')}, Call Wall ${gex_res.get('call_wall')}, Put Wall ${gex_res.get('put_wall')}, GEX Above: {gex_res.get('gex_above_pct')}%, Front-Week GEX: {gex_res.get('front_week_gex_pct')}%"
+                    sym = gex_res.get('ticker', 'TICKER')
+                    ai_ctx = f"Ticker {sym}: Spot ${gex_res.get('spot_price')}, Call Wall ${gex_res.get('call_wall')}, Put Wall ${gex_res.get('put_wall')}, GEX Above: {gex_res.get('gex_above_pct')}%, Front-Week GEX: {gex_res.get('front_week_gex_pct')}%, Regime: {gex_res.get('gamma_regime')}"
                     prefetched_ai_contexts.append(ai_ctx)
-            except Exception:
-                pass
+        except Exception as e:
+            logging.error(f"Error during batch prefetch: {e}")
 
-    # Stream the structured Digest Card immediately (Instant zero-token delivery)
+    # Stream all structured Digest Cards immediately (Instant zero-token delivery)
     if prefetched_cards:
         for card_content in prefetched_cards:
             words = card_content.split(" ")
@@ -180,8 +187,8 @@ async def stream_chat_response(
                 yield f"data: {card_token}\n\n"
                 await asyncio.sleep(0.003)
 
-        # Micro-prompt for Gemini tactical synthesis
-        effective_prompt = f"Provide 2-3 concise, high-level institutional dealer positioning takeaways based on these metrics: " + "; ".join(prefetched_ai_contexts) + f". Context from user prompt: '{active_prompt}'."
+        # Micro-prompt for Gemini tactical synthesis & ranking
+        effective_prompt = f"Provide a concise comparative ranking and institutional dealer positioning takeaways based on these real-time options analytics: " + "; ".join(prefetched_ai_contexts) + f". User prompt: '{active_prompt}'."
     else:
         effective_prompt = active_prompt
 
@@ -201,7 +208,7 @@ async def stream_chat_response(
     config = types.GenerateContentConfig(
         system_instruction=full_system_instruction,
         temperature=0.2,
-        tools=callable_tools if not prefetched_cards else None,  # No tool overhead if pre-fetched
+        tools=callable_tools if (not prefetched_cards or len(candidate_tickers) > len(prefetched_cards)) else None,
     )
 
     models_to_try = [selected_model]

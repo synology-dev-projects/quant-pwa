@@ -1,18 +1,22 @@
 import time
 import httpx
-from typing import Dict, Any
+from typing import Dict, Any, Union, List
 from app.config import settings
 from app.tools.registry import register_tool
 
 @register_tool(
     name="get_gexdex",
-    description="Fetch proprietary institutional options Gamma Exposure (GEX) and Delta Exposure (DEX) analytics for a stock ticker symbol (e.g. AAPL, TSLA, NVDA, SPY, QQQ). Returns spot price, net GEX/DEX, zero gamma flip level, key call/put walls, and an authenticated chart image URL.",
+    description="Fetch proprietary institutional options Gamma Exposure (GEX) and Delta Exposure (DEX) analytics for one or more stock ticker symbols (e.g. AAPL, TSLA, NVDA, SPY, QQQ). Accepts single tickers or comma-separated ticker lists. Returns spot price, net GEX/DEX, zero gamma flip level, key call/put walls, and authenticated chart image URLs.",
     parameters={
         "type": "object",
         "properties": {
             "ticker": {
                 "type": "string",
-                "description": "Stock ticker symbol (e.g. AAPL, TSLA, NVDA, SPY, QQQ)"
+                "description": "Stock ticker symbol or comma-separated list (e.g. AAPL or AAPL,TSLA,SPY)"
+            },
+            "tickers": {
+                "type": "string",
+                "description": "Optional comma-separated list of stock ticker symbols"
             },
             "max_dte": {
                 "type": "integer",
@@ -30,15 +34,26 @@ from app.tools.registry import register_tool
         "required": ["ticker"]
     }
 )
-def get_gexdex(ticker: str, max_dte: int = 50, strike_range: int = 25, force_refresh: bool = False) -> Dict[str, Any]:
+def get_gexdex(
+    ticker: Union[str, List[str]],
+    max_dte: int = 50,
+    strike_range: int = 25,
+    force_refresh: bool = False,
+    tickers: str = None
+) -> Dict[str, Any]:
     """
     Queries gexdex-api assistant-summary endpoint over the internal Synology LAN.
-    Supports force_refresh to bypass 1-hour cache on demand.
+    Supports single or batch tickers and force_refresh on demand.
     """
-    clean_ticker = ticker.strip().upper().replace("$", "")
+    raw_input = tickers or ticker
+    if isinstance(raw_input, list):
+        clean_tickers = ",".join([t.strip().upper().replace("$", "") for t in raw_input if t.strip()])
+    else:
+        clean_tickers = ",".join([t.strip().upper().replace("$", "") for t in str(raw_input).split(",") if t.strip()])
+
     url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/assistant-summary"
     params = {
-        "ticker": clean_ticker,
+        "tickers": clean_tickers,
         "max_dte": max_dte,
         "strike_range": strike_range,
         "force_refresh": str(force_refresh).lower()
@@ -48,35 +63,47 @@ def get_gexdex(ticker: str, max_dte: int = 50, strike_range: int = 25, force_ref
     }
 
     try:
-        with httpx.Client(timeout=12.0) as client:
+        with httpx.Client(timeout=30.0) as client:
             response = client.get(url, params=params, headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
                 
-                # Build client-accessible authenticated cache-busted chart URL
                 base_url = settings.PUBLIC_BASE_URL.rstrip("/") if settings.PUBLIC_BASE_URL else ""
                 timestamp = int(time.time())
                 refresh_query = "&force_refresh=true" if force_refresh else ""
-                auth_chart_url = f"{base_url}/api/v1/gexdex/chart.png?ticker={clean_ticker}&max_dte={max_dte}&strike_range={strike_range}&format=webp&t={timestamp}{refresh_query}"
+
+                # Handle batch response
+                if "batch_data" in data and isinstance(data["batch_data"], dict):
+                    for sym, item in data["batch_data"].items():
+                        auth_chart_url = f"{base_url}/api/v1/gexdex/chart.png?ticker={sym}&max_dte={max_dte}&strike_range={strike_range}&format=webp&t={timestamp}{refresh_query}"
+                        item["chart_png_url"] = auth_chart_url
+                        item["markdown_image"] = f"![{sym} Options Chart]({auth_chart_url})"
+                    
+                    first_sym = list(data["batch_data"].keys())[0]
+                    data["chart_png_url"] = data["batch_data"][first_sym]["chart_png_url"]
+                    data["markdown_image"] = data["batch_data"][first_sym]["markdown_image"]
+                else:
+                    first_ticker = clean_tickers.split(",")[0]
+                    auth_chart_url = f"{base_url}/api/v1/gexdex/chart.png?ticker={first_ticker}&max_dte={max_dte}&strike_range={strike_range}&format=webp&t={timestamp}{refresh_query}"
+                    data["chart_png_url"] = auth_chart_url
+                    data["markdown_image"] = f"![{first_ticker} Options Chart]({auth_chart_url})"
                 
-                data["chart_png_url"] = auth_chart_url
-                data["markdown_image"] = f"![{clean_ticker} Options Chart]({auth_chart_url})"
                 return data
             else:
                 return {
                     "error": f"gexdex-api returned HTTP {response.status_code}",
                     "detail": response.text,
-                    "ticker": clean_ticker
+                    "ticker": clean_tickers
                 }
     except httpx.ConnectError:
         return {
             "error": "Failed to connect to gexdex-api microservice on Synology NAS.",
             "detail": f"Could not reach {settings.GEXDEX_API_URL}. Ensure container is running.",
-            "ticker": clean_ticker
+            "ticker": clean_tickers
         }
     except Exception as e:
         return {
             "error": f"Unexpected error querying gexdex-api: {str(e)}",
-            "ticker": clean_ticker
+            "ticker": clean_tickers
         }
