@@ -91,11 +91,12 @@ def proxy_chart_png(
     strike_range: int = Query(25),
     t: Optional[str] = Query(None),
     format: str = Query("webp"),
+    force_refresh: bool = Query(False),
     api_key: Optional[str] = None
 ):
     """
     Proxies chart image requests directly to the internal gexdex-api microservice.
-    Enforces WebP compression (~35KB) and strict Cache-Control headers.
+    Enforces WebP compression (~35KB), strict Cache-Control headers, and force_refresh support.
     """
     clean_ticker = ticker.strip().upper()
     url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/chart.png"
@@ -103,7 +104,8 @@ def proxy_chart_png(
         "ticker": clean_ticker,
         "max_dte": max_dte,
         "strike_range": strike_range,
-        "format": format
+        "format": format,
+        "force_refresh": str(force_refresh).lower()
     }
     headers = {
         "X-API-Key": settings.GEXDEX_API_KEY

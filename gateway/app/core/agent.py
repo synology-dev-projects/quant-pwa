@@ -28,7 +28,8 @@ COMMON_NON_TICKERS = {
     "THE", "FOR", "AND", "GEX", "DEX", "CALL", "PUT", "WALL", "SPOT", "AI",
     "WHAT", "SHOW", "GIVE", "TELL", "HOW", "WHY", "CAN", "YOU", "ARE", "THIS",
     "FROM", "WITH", "CHART", "FLIP", "ZERO", "DELTA", "GAMMA", "LEVELS", "STRIKE",
-    "PRICE", "TODAY", "OPEN", "CLOSE", "HIGH", "LOW", "RATE", "NEWS", "NOW"
+    "PRICE", "TODAY", "OPEN", "CLOSE", "HIGH", "LOW", "RATE", "NEWS", "NOW",
+    "REFRESH", "FRESH", "UPDATE", "RELOAD", "FORCE"
 }
 
 
@@ -44,7 +45,7 @@ def extract_potential_tickers(text: str) -> List[str]:
     return found
 
 
-def format_quant_digest_card(data: Dict[str, Any]) -> str:
+def format_quant_digest_card(data: Dict[str, Any], is_refresh: bool = False) -> str:
     """
     Renders an institutional Markdown Quant Digest Card with zero token cost.
     """
@@ -75,8 +76,10 @@ def format_quant_digest_card(data: Dict[str, Any]) -> str:
     cascade_risk = data.get("cascade_drop_risk", "LOW")
     
     chart_md = data.get("markdown_image", "")
+    data_badge = "🔄 *Live On-Demand Refresh*" if is_refresh else "💾 *1-Hour Snapshot Cache*"
 
     card = f"""### 🟢 **{ticker} — Institutional Options & GEX Digest**
+*{data_badge}*
 
 * **Spot Price:** **`${spot:.2f}`**
 * **Gamma Regime:** **`{regime}`**
@@ -143,17 +146,18 @@ async def stream_chat_response(
     active_prompt = last_msg.get("content", "")
 
     # 2. Hybrid Optimization: Attempt 1-Turn Direct Pre-Fetch
+    is_force_refresh = bool(re.search(r'\b(REFRESH|FRESH|UPDATE|RELOAD|FORCE)\b', active_prompt, re.IGNORECASE))
     candidate_tickers = extract_potential_tickers(active_prompt)
     prefetched_cards = []
     prefetched_ai_contexts = []
     
     if candidate_tickers:
-        yield f"data: {json.dumps({'type': 'tool_start', 'name': 'get_gexdex', 'args': {'tickers': candidate_tickers}})}\n\n"
+        yield f"data: {json.dumps({'type': 'tool_start', 'name': 'get_gexdex', 'args': {'tickers': candidate_tickers, 'force_refresh': is_force_refresh}})}\n\n"
         for t in candidate_tickers[:2]:  # support up to 2 tickers concurrently
             try:
-                gex_res = await asyncio.to_thread(get_gexdex, t)
+                gex_res = await asyncio.to_thread(get_gexdex, t, 50, 25, is_force_refresh)
                 if gex_res and "error" not in gex_res:
-                    card = format_quant_digest_card(gex_res)
+                    card = format_quant_digest_card(gex_res, is_refresh=is_force_refresh)
                     prefetched_cards.append(card)
                     
                     ai_ctx = f"Ticker {t}: Spot ${gex_res.get('spot_price')}, Call Wall ${gex_res.get('call_wall')}, Put Wall ${gex_res.get('put_wall')}, GEX Above: {gex_res.get('gex_above_pct')}%, Front-Week GEX: {gex_res.get('front_week_gex_pct')}%"

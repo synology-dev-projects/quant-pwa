@@ -21,29 +21,34 @@ from app.tools.registry import register_tool
             "strike_range": {
                 "type": "integer",
                 "description": "Number of strikes above/below the current spot price to evaluate (default: 25)"
+            },
+            "force_refresh": {
+                "type": "boolean",
+                "description": "Force live fetch bypassing 1-hour cache (default: False)"
             }
         },
         "required": ["ticker"]
     }
 )
-def get_gexdex(ticker: str, max_dte: int = 50, strike_range: int = 25) -> Dict[str, Any]:
+def get_gexdex(ticker: str, max_dte: int = 50, strike_range: int = 25, force_refresh: bool = False) -> Dict[str, Any]:
     """
     Queries gexdex-api assistant-summary endpoint over the internal Synology LAN.
-    Uses synchronous httpx.Client for compatibility with GenAI automatic function calling.
+    Supports force_refresh to bypass 1-hour cache on demand.
     """
     clean_ticker = ticker.strip().upper().replace("$", "")
     url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/assistant-summary"
     params = {
         "ticker": clean_ticker,
         "max_dte": max_dte,
-        "strike_range": strike_range
+        "strike_range": strike_range,
+        "force_refresh": str(force_refresh).lower()
     }
     headers = {
         "X-API-Key": settings.GEXDEX_API_KEY
     }
 
     try:
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=12.0) as client:
             response = client.get(url, params=params, headers=headers)
             
             if response.status_code == 200:
@@ -52,7 +57,8 @@ def get_gexdex(ticker: str, max_dte: int = 50, strike_range: int = 25) -> Dict[s
                 # Build client-accessible authenticated cache-busted chart URL
                 base_url = settings.PUBLIC_BASE_URL.rstrip("/") if settings.PUBLIC_BASE_URL else ""
                 timestamp = int(time.time())
-                auth_chart_url = f"{base_url}/api/v1/gexdex/chart.png?ticker={clean_ticker}&max_dte={max_dte}&strike_range={strike_range}&t={timestamp}"
+                refresh_query = "&force_refresh=true" if force_refresh else ""
+                auth_chart_url = f"{base_url}/api/v1/gexdex/chart.png?ticker={clean_ticker}&max_dte={max_dte}&strike_range={strike_range}&format=webp&t={timestamp}{refresh_query}"
                 
                 data["chart_png_url"] = auth_chart_url
                 data["markdown_image"] = f"![{clean_ticker} Options Chart]({auth_chart_url})"
