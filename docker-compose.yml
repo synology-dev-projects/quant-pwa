@@ -1,4 +1,4 @@
-version: '3.8'
+﻿version: '3.8'
 
 services:
   quant-gateway:
@@ -16,7 +16,10 @@ services:
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - MAX_SLIDING_WINDOW_MESSAGES=12
     networks:
-      - quant-net
+      quant-net:
+        aliases:
+          - quant-gateway
+          - quant-gateway-${CONTAINER_PREFIX:-prod}
 
   quant-frontend:
     build:
@@ -29,7 +32,10 @@ services:
     depends_on:
       - quant-gateway
     networks:
-      - quant-net
+      quant-net:
+        aliases:
+          - quant-frontend
+          - quant-frontend-${CONTAINER_PREFIX:-prod}
 
   # Cloudflare Tunnel: Active in production profile only (master branch)
   cloudflared:
