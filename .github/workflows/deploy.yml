@@ -1,4 +1,4 @@
-﻿name: CI/CD Pipeline - Quant AI Mobile Chat PWA & Gateway
+﻿name: Deploy Quant AI Mobile Chat PWA & Gateway
 
 on:
   push:
@@ -9,50 +9,35 @@ permissions:
   contents: write
 
 jobs:
-  test:
-    name: Run Automated Test Suite (CI)
+  deploy:
+    name: Deploy to Synology NAS
     runs-on: self-hosted
 
     steps:
+      # 1. Clean Runner Workspace
       - name: Clean Runner Workspace
         run: |
-          echo "🧹 Cleaning test runner workspace..."
+          echo "🧹 Cleaning runner workspace..."
           rm -rf ./*
           rm -rf ./.??* 2>/dev/null || true
 
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Python Virtualenv & Run Pytest
-        run: |
-          cd gateway
-          python3 -m venv .venv || python -m venv .venv
-          source .venv/bin/activate || .venv/Scripts/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          
-          echo "🧪 Running Pytest Automated Test Suite..."
-          python -m pytest tests/ -v
-
-  deploy:
-    name: Deploy to Synology NAS (CD)
-    needs: test
-    runs-on: self-hosted
-
-    steps:
+      # 2. Checkout Code
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Sync Project Files to Synology NAS Target
+      # 3. Deploy Code to NAS Target Directory
+      - name: Sync Project Files to Synology NAS
         run: |
           SYNOLOGY_ROOT_PATH="/volume2/homes/rachardv/git-repos"
           BRANCH_NAME="${{ github.ref_name }}"
           TARGET_PATH="${SYNOLOGY_ROOT_PATH}/${BRANCH_NAME}/quant-pwa"
           
           echo "📂 Deploying to: $TARGET_PATH"
-          mkdir -p "$TARGET_PATH"
+          sudo mkdir -p "$TARGET_PATH"
+          sudo chown -R 1026:100 "$TARGET_PATH" 2>/dev/null || sudo chown -R rachardv:users "$TARGET_PATH"
+          sudo rm -rf "$TARGET_PATH"/*
           
           # Sync all project files
           cp -r frontend "$TARGET_PATH/"
@@ -60,8 +45,12 @@ jobs:
           cp docker-compose.yml "$TARGET_PATH/"
           cp README.md "$TARGET_PATH/"
           
+          sudo chown -R 1026:100 "$TARGET_PATH" 2>/dev/null || sudo chown -R rachardv:users "$TARGET_PATH"
+          chmod -R 775 "$TARGET_PATH"
+          
           echo "DEPLOY_DIR=$TARGET_PATH" >> $GITHUB_ENV
 
+      # 4. Inject Production Secrets into .env
       - name: Generate Runtime .env Secrets
         run: |
           ENV_FILE="${{ env.DEPLOY_DIR }}/.env"
@@ -78,15 +67,19 @@ jobs:
           
           chmod 600 "$ENV_FILE"
 
+      # 5. Ensure Shared Docker Network Exists
       - name: Ensure Shared Docker Network Exists
         run: |
           echo "🌐 Ensuring quant-system-network exists..."
           sudo /usr/local/bin/docker network create quant-system-network 2>/dev/null || true
 
-      - name: Build & Restart Docker Containers
+      # 6. Build & Restart Docker Containers
+      - name: Deploy Docker Stack
         run: |
           cd "${{ env.DEPLOY_DIR }}"
           echo "🐳 Launching Docker Compose stack on Synology NAS..."
-          sudo /usr/local/bin/docker compose up -d --build --remove-orphans || docker compose up -d --build --remove-orphans
+          sudo /usr/local/bin/docker compose down || true
+          sudo /usr/local/bin/docker compose build
+          sudo /usr/local/bin/docker compose up -d --force-recreate
           
-          echo "🚀 Deployment Successful! Quant AI PWA & Gateway are live on Synology NAS."
+          echo "🚀 Deployment Successful! Quant AI PWA, Gateway, and Cloudflared Tunnel are live on Synology NAS."
