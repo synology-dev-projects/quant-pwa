@@ -1,0 +1,77 @@
+﻿export function renderMarkdown(text) {
+  if (!text) return '';
+
+  let html = text;
+
+  // Escape raw HTML tags to prevent XSS
+  html = html
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // Code blocks: ```lang ... ```
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    return `<pre><button class="copy-btn" onclick="navigator.clipboard.writeText(this.parentElement.querySelector('code').innerText);this.innerText='Copied!';setTimeout(()=>this.innerText='Copy',1500)">Copy</button><code class="language-${lang}">${code.trim()}</code></pre>`;
+  });
+
+  // Inline code: `code`
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Images: ![alt](url) -> Render as interactive Chart Card
+  html = html.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, url) => {
+    return `
+      <div class="chart-card" onclick="window.quantLightbox && window.quantLightbox.open('${url}', '${alt}')">
+        <img class="chart-img" src="${url}" alt="${alt}" loading="lazy" />
+        <div class="chart-hint">
+          <span>📊 ${alt || 'Options Exposure Chart'}</span>
+          <span>🔍 Tap to expand</span>
+        </div>
+      </div>
+    `;
+  });
+
+  // Headers: ### Header
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+  // Bold & Italic
+  html = html.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+  // Bullet points
+  html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
+  html = html.replace(/^- (.*$)/gim, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>');
+  html = html.replace(/<\/ul>\s*<ul>/g, '');
+
+  // Line breaks & paragraphs
+  html = html.replace(/\n\n/g, '<p></p>');
+  html = html.replace(/\n/g, '<br/>');
+
+  return html;
+}
+
+export function createMessageElement(role, content, metadata = null) {
+  const bubble = document.createElement('div');
+  bubble.className = `message-bubble ${role}`;
+
+  let badgeHtml = '';
+  if (role === 'assistant' && metadata?.market) {
+    const isClosed = metadata.market.status !== 'REGULAR_HOURS';
+    badgeHtml = `
+      <div class="market-badge ${isClosed ? 'closed' : ''}">
+        <span class="dot"></span>
+        <span>${metadata.market.status}: ${metadata.market.current_time_ny}</span>
+      </div>
+    `;
+  }
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'markdown-body';
+  contentDiv.innerHTML = badgeHtml + renderMarkdown(content);
+
+  bubble.appendChild(contentDiv);
+  return bubble;
+}
