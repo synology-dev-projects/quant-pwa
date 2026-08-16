@@ -1,4 +1,4 @@
-﻿# Quant AI - Mobile Chat PWA & Agent Gateway
+# Quant AI - Mobile Chat PWA & Agent Gateway
 
 A high-performance, mobile-first **Quant AI Chat Application** powered by a server-side **Agent Gateway** hosted on your Synology NAS. 
 

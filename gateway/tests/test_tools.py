@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from datetime import datetime
 import pytz
 from app.core.temporal import get_market_status, generate_temporal_system_prompt

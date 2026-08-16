@@ -1,4 +1,4 @@
-﻿import httpx
+import httpx
 from typing import Dict, Any
 from app.config import settings
 from app.tools.registry import register_tool

@@ -1,4 +1,4 @@
-﻿import { createMessageElement } from '../components/message_renderer.js';
+import { createMessageElement } from '../components/message_renderer.js';
 
 export class ChatView {
   constructor() {

@@ -1,4 +1,4 @@
-﻿from datetime import datetime, time
+from datetime import datetime, time
 import pytz
 
 NY_TZ = pytz.timezone("America/New_York")

@@ -1,4 +1,4 @@
-﻿export class Lightbox {
+export class Lightbox {
   constructor() {
     this.overlay = document.getElementById('lightboxModal');
     this.image = document.getElementById('lightboxImage');

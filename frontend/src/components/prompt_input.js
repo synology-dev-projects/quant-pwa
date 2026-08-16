@@ -1,4 +1,4 @@
-﻿export class PromptInput {
+export class PromptInput {
   constructor(container, onSubmit, onStop) {
     this.container = container;
     this.onSubmit = onSubmit;

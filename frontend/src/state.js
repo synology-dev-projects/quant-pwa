@@ -1,4 +1,4 @@
-﻿const STORAGE_KEYS = {
+const STORAGE_KEYS = {
   PASSCODE: 'quant_app_passcode',
   MODEL: 'quant_selected_model',
   GATEWAY_URL: 'quant_gateway_url',

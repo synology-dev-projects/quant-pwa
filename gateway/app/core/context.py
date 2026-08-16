@@ -1,4 +1,4 @@
-﻿from typing import List, Dict, Any
+from typing import List, Dict, Any
 from app.config import settings
 
 def apply_sliding_window(messages: List[Dict[str, Any]], max_messages: int = None) -> List[Dict[str, Any]]:

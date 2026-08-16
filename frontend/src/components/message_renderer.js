@@ -1,4 +1,4 @@
-﻿export function renderMarkdown(text) {
+export function renderMarkdown(text) {
   if (!text) return '';
 
   let html = text;

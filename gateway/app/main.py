@@ -1,4 +1,4 @@
-﻿import json
+import json
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Header
 from fastapi.middleware.cors import CORSMiddleware

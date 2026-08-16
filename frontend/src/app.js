@@ -1,4 +1,4 @@
-﻿import { AppState } from './state.js';
+import { AppState } from './state.js';
 import { TabManager } from './tabs/tab_manager.js';
 import { ChatView } from './tabs/chat_view.js';
 import { PromptInput } from './components/prompt_input.js';

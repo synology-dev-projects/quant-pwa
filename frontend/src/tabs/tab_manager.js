@@ -1,4 +1,4 @@
-﻿export class TabManager {
+export class TabManager {
   constructor(tabBarContainer, contentContainer) {
     this.tabBarContainer = tabBarContainer;
     this.contentContainer = contentContainer;

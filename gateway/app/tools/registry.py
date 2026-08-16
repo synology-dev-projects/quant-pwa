@@ -1,4 +1,4 @@
-﻿import inspect
+import inspect
 from typing import Callable, Dict, Any, List
 
 class ToolRegistry:

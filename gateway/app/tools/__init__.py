@@ -1,4 +1,4 @@
-﻿# Tools auto-import index
+# Tools auto-import index
 from app.tools.registry import registry, register_tool
 from app.tools.gexdex_tool import get_gexdex
 
