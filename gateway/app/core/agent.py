@@ -36,11 +36,6 @@ async def stream_chat_response(
     model_name: str = None,
     client_disconnected_fn=None
 ) -> AsyncGenerator[str, None]:
-    """
-    Executes the Gemini chat streaming loop with Automatic Function Calling (AFC).
-    Uses client.chats.create and chat.send_message_stream for sub-second real-time streaming.
-    Yields SSE formatted event payloads.
-    """
     selected_model = model_name or settings.DEFAULT_GEMINI_MODEL
     market_meta = get_market_status()
     temporal_prompt = generate_temporal_system_prompt()
@@ -56,18 +51,15 @@ async def stream_chat_response(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
-    # Apply sliding window
     windowed_messages = apply_sliding_window(messages)
     if not windowed_messages:
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
-    # Separate history from the current active prompt
     last_msg = windowed_messages[-1]
     history_msgs = windowed_messages[:-1]
     active_prompt = last_msg.get("content", "")
 
-    # Format history contents for GenAI Chat session
     history_contents = []
     for msg in history_msgs:
         role = "user" if msg.get("role") == "user" else "model"
@@ -78,40 +70,41 @@ async def stream_chat_response(
             )
         )
 
-    # Collect tool definitions
     callable_tools = list(registry.get_callable_map().values())
     
-    # Configure Gemini request
+    # Configure ultra-fast generation with zero thinking budget delay
+    thinking_cfg = types.ThinkingConfig(thinking_budget=0) if "flash" in selected_model else None
+    
     config = types.GenerateContentConfig(
         system_instruction=full_system_instruction,
-        temperature=0.3,
+        temperature=0.2,
         tools=callable_tools,
+        thinking_config=thinking_cfg
     )
 
     try:
-        # Check disconnect before starting
         if client_disconnected_fn and await client_disconnected_fn():
             return
 
-        # Initialize Chat session with proper AFC support
         chat = client.chats.create(
             model=selected_model,
             config=config,
             history=history_contents
         )
 
-        # Stream response chunks
         response_stream = chat.send_message_stream(active_prompt)
 
         for chunk in response_stream:
             if client_disconnected_fn and await client_disconnected_fn():
-                # Client dropped mobile connection - abort immediately
                 break
 
-            # Stream text tokens
-            if chunk.text:
-                yield f"data: {json.dumps({'type': 'token', 'content': chunk.text})}\n\n"
-                await asyncio.sleep(0.002)
+            if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
+                for part in chunk.candidates[0].content.parts:
+                    if part.text:
+                        yield f"data: {json.dumps({'type': 'token', 'content': part.text})}\n\n"
+                        await asyncio.sleep(0.001)
+                    elif part.function_call:
+                        yield f"data: {json.dumps({'type': 'tool_start', 'name': part.function_call.name, 'args': dict(part.function_call.args or {})})}\n\n"
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
