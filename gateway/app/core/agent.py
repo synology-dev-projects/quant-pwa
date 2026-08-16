@@ -13,7 +13,7 @@ SYSTEM_INSTRUCTION_BASE = """You are Quant AI, an elite institutional Options & 
 You operate with precision, conciseness, and deep understanding of options market structure.
 
 TOOL HIERARCHY RULES:
-1. PROPRIETARY DATA FIRST: Whenever the user asks for options exposure, GEX, DEX, gamma flip, put wall, call wall, dealer positioning, or strikes on any ticker (e.g. SPY, AAPL, NVDA, TSLA), you MUST execute the `get_gexdex` tool. Do NOT search the web for proprietary options Greek exposures.
+1. PROPRIETARY DATA FIRST: Whenever the user asks for options exposure, GEX, DEX, gamma flip, put wall, call wall, dealer positioning, or strikes on any ticker (e.g. SPY, AAPL, NVDA, TSLA, AAOI), you MUST execute the `get_gexdex` tool. Do NOT search the web for proprietary options Greek exposures.
 2. WEB SEARCH FOR MACRO & NEWS: Use web search grounding ONLY when the user asks about breaking market news, earnings releases, macroeconomic data (CPI, PPI, FOMC, Fed interest rate decisions), or company catalysts.
 
 RESPONSE FORMATTING:
@@ -79,35 +79,53 @@ async def stream_chat_response(
         tools=callable_tools,
     )
 
-    try:
-        if client_disconnected_fn and await client_disconnected_fn():
-            return
+    models_to_try = [selected_model]
+    if selected_model != "gemini-2.5-flash":
+        models_to_try.append("gemini-2.5-flash")
+    if "gemini-flash-latest" not in models_to_try:
+        models_to_try.append("gemini-flash-latest")
 
-        chat = client.chats.create(
-            model=selected_model,
-            config=config,
-            history=history_contents
-        )
+    response = None
+    last_error = None
 
-        # Notify UI tool is executing
-        yield f"data: {json.dumps({'type': 'tool_start', 'name': 'get_gexdex', 'args': {'ticker': active_prompt[:10]}})}\n\n"
-        await asyncio.sleep(0.01)
+    for attempt_model in models_to_try:
+        try:
+            if client_disconnected_fn and await client_disconnected_fn():
+                return
 
-        # Execute chat completion with Automatic Function Calling
-        response = await asyncio.to_thread(chat.send_message, active_prompt)
+            chat = client.chats.create(
+                model=attempt_model,
+                config=config,
+                history=history_contents
+            )
 
-        # Stream the completed text response in smooth tokens
-        if response.text:
-            words = response.text.split(" ")
-            for i, word in enumerate(words):
-                if client_disconnected_fn and await client_disconnected_fn():
-                    break
-                space = " " if i < len(words) - 1 else ""
-                yield f"data: {json.dumps({'type': 'token', 'content': word + space})}\n\n"
-                await asyncio.sleep(0.015)
+            # Execute chat completion with Automatic Function Calling
+            response = await asyncio.to_thread(chat.send_message, active_prompt)
+            if response:
+                break
+        except Exception as err:
+            err_str = str(err)
+            last_error = err
+            # If 503 or 429 high demand error, fall through to next model in list
+            if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                await asyncio.sleep(0.5)
+                continue
+            else:
+                break
 
+    if not response and last_error:
+        yield f"data: {json.dumps({'type': 'error', 'message': f'Streaming Error: {str(last_error)}'})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        return
 
-    except Exception as e:
-        yield f"data: {json.dumps({'type': 'error', 'message': f'Streaming Error: {str(e)}'})}\n\n"
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    # Stream the completed text response in smooth tokens
+    if response and response.text:
+        words = response.text.split(" ")
+        for i, word in enumerate(words):
+            if client_disconnected_fn and await client_disconnected_fn():
+                break
+            space = " " if i < len(words) - 1 else ""
+            yield f"data: {json.dumps({'type': 'token', 'content': word + space})}\n\n"
+            await asyncio.sleep(0.012)
+
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"

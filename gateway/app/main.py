@@ -77,8 +77,9 @@ def list_models():
         "default": settings.DEFAULT_GEMINI_MODEL,
         "models": [
             {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash", "badge": "Fast + High Accuracy (Default)"},
-            {"id": "gemini-3.7-pro", "name": "Gemini 3.7 Pro", "badge": "Deep Chain-of-Thought Reasoning"},
-            {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "badge": "Ultra-Low Latency Fallback"}
+            {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "badge": "High Availability (No 503s)"},
+            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "badge": "Deep Chain-of-Thought Reasoning"},
+            {"id": "gemini-flash-latest", "name": "Gemini Flash Latest", "badge": "Production Flash"}
         ]
     }
 
