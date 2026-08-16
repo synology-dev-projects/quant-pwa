@@ -127,12 +127,14 @@ async def stream_chat_response(
     full_system_instruction = f"{SYSTEM_INSTRUCTION_BASE}\n\n{temporal_prompt}"
 
     # 1. Yield temporal metadata immediately
-    yield f"data: {json.dumps({'type': 'temporal_meta', 'meta': market_meta})}\n\n"
+    meta_payload = json.dumps({"type": "temporal_meta", "meta": market_meta})
+    yield f"data: {meta_payload}\n\n"
 
     try:
         client = create_genai_client()
     except Exception as e:
-        yield f"data: {json.dumps({'type': 'error', 'message': f'Gemini Client Init Error: {str(e)}'})}\n\n"
+        err_payload = json.dumps({"type": "error", "message": f"Gemini Client Init Error: {str(e)}"})
+        yield f"data: {err_payload}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
@@ -152,7 +154,8 @@ async def stream_chat_response(
     prefetched_ai_contexts = []
     
     if candidate_tickers:
-        yield f"data: {json.dumps({'type': 'tool_start', 'name': 'get_gexdex', 'args': {'tickers': candidate_tickers, 'force_refresh': is_force_refresh}})}\n\n"
+        tool_start_payload = json.dumps({"type": "tool_start", "name": "get_gexdex", "args": {"tickers": candidate_tickers, "force_refresh": is_force_refresh}})
+        yield f"data: {tool_start_payload}\n\n"
         for t in candidate_tickers[:2]:  # support up to 2 tickers concurrently
             try:
                 gex_res = await asyncio.to_thread(get_gexdex, t, 50, 25, is_force_refresh)
@@ -173,7 +176,8 @@ async def stream_chat_response(
                 if client_disconnected_fn and await client_disconnected_fn():
                     return
                 space = " " if i < len(words) - 1 else ""
-                yield f"data: {json.dumps({'type': 'token', 'content': word + space})}\n\n"
+                card_token = json.dumps({"type": "token", "content": word + space})
+                yield f"data: {card_token}\n\n"
                 await asyncio.sleep(0.003)
 
         # Micro-prompt for Gemini tactical synthesis
@@ -234,24 +238,30 @@ async def stream_chat_response(
                 break
 
     if not response and last_error and not prefetched_cards:
-        yield f"data: {json.dumps({'type': 'error', 'message': f'Streaming Error: {str(last_error)}'})}\n\n"
+        err_msg = json.dumps({"type": "error", "message": f"Streaming Error: {str(last_error)}"})
+        yield f"data: {err_msg}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
     # If failover occurred and AI generated a response, notify user
     if active_model_used != selected_model and not prefetched_cards:
         failover_badge = f"> ℹ️ **Model Failover:** `{selected_model}` was experiencing temporary Google Cloud demand limits. Routed to **`{active_model_used}`**.\n\n"
-        yield f"data: {json.dumps({'type': 'token', 'content': failover_badge})}\n\n"
+        badge_payload = json.dumps({"type": "token", "content": failover_badge})
+        yield f"data: {badge_payload}\n\n"
 
     # Stream AI synthesis
     if response and response.text:
-        yield f"data: {json.dumps({'type': 'token', 'content': '\n\n#### 🧠 **Institutional Dealer Takeaways**\n'})}\n\n"
+        header_text = "\n\n#### 🧠 **Institutional Dealer Takeaways**\n"
+        header_payload = json.dumps({"type": "token", "content": header_text})
+        yield f"data: {header_payload}\n\n"
+        
         words = response.text.split(" ")
         for i, word in enumerate(words):
             if client_disconnected_fn and await client_disconnected_fn():
                 break
             space = " " if i < len(words) - 1 else ""
-            yield f"data: {json.dumps({'type': 'token', 'content': word + space})}\n\n"
+            word_payload = json.dumps({"type": "token", "content": word + space})
+            yield f"data: {word_payload}\n\n"
             await asyncio.sleep(0.012)
 
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
