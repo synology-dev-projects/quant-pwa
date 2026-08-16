@@ -41,7 +41,7 @@ async def stream_chat_response(
     temporal_prompt = generate_temporal_system_prompt()
     full_system_instruction = f"{SYSTEM_INSTRUCTION_BASE}\n\n{temporal_prompt}"
 
-    # Yield temporal metadata first to update UI timestamp badge
+    # 1. Yield temporal metadata immediately
     yield f"data: {json.dumps({'type': 'temporal_meta', 'meta': market_meta})}\n\n"
 
     try:
@@ -60,6 +60,7 @@ async def stream_chat_response(
     history_msgs = windowed_messages[:-1]
     active_prompt = last_msg.get("content", "")
 
+    # Format history contents
     history_contents = []
     for msg in history_msgs:
         role = "user" if msg.get("role") == "user" else "model"
@@ -71,15 +72,11 @@ async def stream_chat_response(
         )
 
     callable_tools = list(registry.get_callable_map().values())
-    
-    # Configure ultra-fast generation with zero thinking budget delay
-    thinking_cfg = types.ThinkingConfig(thinking_budget=0) if "flash" in selected_model else None
-    
+
     config = types.GenerateContentConfig(
         system_instruction=full_system_instruction,
         temperature=0.2,
         tools=callable_tools,
-        thinking_config=thinking_cfg
     )
 
     try:
@@ -92,19 +89,22 @@ async def stream_chat_response(
             history=history_contents
         )
 
-        response_stream = chat.send_message_stream(active_prompt)
+        # Notify UI tool is executing
+        yield f"data: {json.dumps({'type': 'tool_start', 'name': 'get_gexdex', 'args': {'ticker': active_prompt[:10]}})}\n\n"
+        await asyncio.sleep(0.01)
 
-        for chunk in response_stream:
-            if client_disconnected_fn and await client_disconnected_fn():
-                break
+        # Execute chat completion with Automatic Function Calling
+        response = await asyncio.to_thread(chat.send_message, active_prompt)
 
-            if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
-                for part in chunk.candidates[0].content.parts:
-                    if part.text:
-                        yield f"data: {json.dumps({'type': 'token', 'content': part.text})}\n\n"
-                        await asyncio.sleep(0.001)
-                    elif part.function_call:
-                        yield f"data: {json.dumps({'type': 'tool_start', 'name': part.function_call.name, 'args': dict(part.function_call.args or {})})}\n\n"
+        # Stream the completed text response in smooth tokens
+        if response.text:
+            words = response.text.split(" ")
+            for i, word in enumerate(words):
+                if client_disconnected_fn and await client_disconnected_fn():
+                    break
+                space = " " if i < len(words) - 1 else ""
+                yield f"data: {json.dumps({'type': 'token', 'content': word + space})}\n\n"
+                await asyncio.sleep(0.015)
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
