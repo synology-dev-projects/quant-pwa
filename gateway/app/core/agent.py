@@ -86,6 +86,7 @@ async def stream_chat_response(
         models_to_try.append("gemini-flash-latest")
 
     response = None
+    active_model_used = selected_model
     last_error = None
 
     for attempt_model in models_to_try:
@@ -102,6 +103,7 @@ async def stream_chat_response(
             # Execute chat completion with Automatic Function Calling
             response = await asyncio.to_thread(chat.send_message, active_prompt)
             if response:
+                active_model_used = attempt_model
                 break
         except Exception as err:
             err_str = str(err)
@@ -117,6 +119,11 @@ async def stream_chat_response(
         yield f"data: {json.dumps({'type': 'error', 'message': f'Streaming Error: {str(last_error)}'})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
+
+    # If failover occurred, notify the user with a distinct badge
+    if active_model_used != selected_model:
+        failover_badge = f"> ℹ️ **Model Failover:** `{selected_model}` was experiencing temporary Google Cloud congestion (503). Routed to **`{active_model_used}`**.\n\n"
+        yield f"data: {json.dumps({'type': 'token', 'content': failover_badge})}\n\n"
 
     # Stream the completed text response in smooth tokens
     if response and response.text:
