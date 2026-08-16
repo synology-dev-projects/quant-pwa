@@ -35,18 +35,14 @@ jobs:
           TARGET_PATH="${SYNOLOGY_ROOT_PATH}/${BRANCH_NAME}/quant-pwa"
           
           echo "📂 Deploying to: $TARGET_PATH"
-          sudo mkdir -p "$TARGET_PATH"
-          sudo chown -R 1026:100 "$TARGET_PATH" 2>/dev/null || sudo chown -R rachardv:users "$TARGET_PATH"
-          sudo rm -rf "$TARGET_PATH"/*
+          mkdir -p "$TARGET_PATH"
+          rm -rf "$TARGET_PATH"/*
           
           # Sync all project files
           cp -r frontend "$TARGET_PATH/"
           cp -r gateway "$TARGET_PATH/"
           cp docker-compose.yml "$TARGET_PATH/"
           cp README.md "$TARGET_PATH/"
-          
-          sudo chown -R 1026:100 "$TARGET_PATH" 2>/dev/null || sudo chown -R rachardv:users "$TARGET_PATH"
-          chmod -R 775 "$TARGET_PATH"
           
           echo "DEPLOY_DIR=$TARGET_PATH" >> $GITHUB_ENV
 
@@ -71,15 +67,15 @@ jobs:
       - name: Ensure Shared Docker Network Exists
         run: |
           echo "🌐 Ensuring quant-system-network exists..."
-          sudo /usr/local/bin/docker network create quant-system-network 2>/dev/null || true
+          docker network create quant-system-network 2>/dev/null || true
 
       # 6. Build & Restart Docker Containers
       - name: Deploy Docker Stack
         run: |
           cd "${{ env.DEPLOY_DIR }}"
           echo "🐳 Launching Docker Compose stack on Synology NAS..."
-          sudo /usr/local/bin/docker compose down || true
-          sudo /usr/local/bin/docker compose build
-          sudo /usr/local/bin/docker compose up -d --force-recreate
+          docker compose down || true
+          docker compose build
+          docker compose up -d --force-recreate
           
           echo "🚀 Deployment Successful! Quant AI PWA, Gateway, and Cloudflared Tunnel are live on Synology NAS."
