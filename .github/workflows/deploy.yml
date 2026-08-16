@@ -2,7 +2,7 @@
 
 on:
   push:
-    branches: [ "master", "develop", "main" ]
+    branches: [ "master", "develop" ]
   workflow_dispatch:
 
 permissions:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy to Synology NAS
+    name: Branch-Based Deployment to Synology NAS
     runs-on: self-hosted
 
     steps:
@@ -27,32 +27,51 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 3. Deploy Code to NAS Target Directory
-      - name: Sync Project Files to Synology NAS
+      # 3. Configure Branch Environment (Develop vs Master)
+      - name: Configure Branch Environment Variables
         run: |
           SYNOLOGY_ROOT_PATH="/volume2/homes/rachardv/git-repos"
           BRANCH_NAME="${{ github.ref_name }}"
           TARGET_PATH="${SYNOLOGY_ROOT_PATH}/${BRANCH_NAME}/quant-pwa"
           
-          echo "📂 Deploying to: $TARGET_PATH"
+          if [ "$BRANCH_NAME" == "develop" ]; then
+            echo "🌿 Deploying to: DEVELOP (Local Home Wi-Fi Only)"
+            echo "CONTAINER_PREFIX=dev" >> $GITHUB_ENV
+            echo "FRONTEND_PORT=8096" >> $GITHUB_ENV
+            echo "COMPOSE_PROJECT_NAME=quant-pwa-dev" >> $GITHUB_ENV
+            echo "COMPOSE_PROFILE_CMD=" >> $GITHUB_ENV
+          else
+            echo "🚀 Deploying to: MASTER / PRODUCTION (Public Internet + Cloudflare Tunnel)"
+            echo "CONTAINER_PREFIX=prod" >> $GITHUB_ENV
+            echo "FRONTEND_PORT=8095" >> $GITHUB_ENV
+            echo "COMPOSE_PROJECT_NAME=quant-pwa-prod" >> $GITHUB_ENV
+            echo "COMPOSE_PROFILE_CMD=--profile production" >> $GITHUB_ENV
+          fi
+          
+          echo "DEPLOY_DIR=$TARGET_PATH" >> $GITHUB_ENV
+
+      # 4. Sync Project Files to NAS Target Directory
+      - name: Sync Project Files to Synology NAS
+        run: |
+          TARGET_PATH="${{ env.DEPLOY_DIR }}"
+          echo "📂 Syncing files to: $TARGET_PATH"
           mkdir -p "$TARGET_PATH"
           rm -rf "$TARGET_PATH"/*
           
-          # Sync all project files
           cp -r frontend "$TARGET_PATH/"
           cp -r gateway "$TARGET_PATH/"
           cp docker-compose.yml "$TARGET_PATH/"
           cp README.md "$TARGET_PATH/"
-          
-          echo "DEPLOY_DIR=$TARGET_PATH" >> $GITHUB_ENV
 
-      # 4. Inject Production Secrets into .env
+      # 5. Inject Runtime .env Secrets
       - name: Generate Runtime .env Secrets
         run: |
           ENV_FILE="${{ env.DEPLOY_DIR }}/.env"
           echo "🔐 Generating secure .env file at $ENV_FILE..."
           
-          echo "APP_PASSCODE=${{ secrets.APP_PASSCODE }}" > "$ENV_FILE"
+          echo "CONTAINER_PREFIX=${{ env.CONTAINER_PREFIX }}" > "$ENV_FILE"
+          echo "FRONTEND_PORT=${{ env.FRONTEND_PORT }}" >> "$ENV_FILE"
+          echo "APP_PASSCODE=${{ secrets.APP_PASSCODE }}" >> "$ENV_FILE"
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> "$ENV_FILE"
           echo "DEFAULT_GEMINI_MODEL=gemini-3.7-flash" >> "$ENV_FILE"
           echo "GEXDEX_API_URL=http://gexdex-api-prod:8000" >> "$ENV_FILE"
@@ -63,19 +82,32 @@ jobs:
           
           chmod 600 "$ENV_FILE"
 
-      # 5. Ensure Shared Docker Network Exists
+      # 6. Ensure Shared Docker Network Exists
       - name: Ensure Shared Docker Network Exists
         run: |
           echo "🌐 Ensuring quant-system-network exists..."
           docker network create quant-system-network 2>/dev/null || true
 
-      # 6. Build & Restart Docker Containers
+      # 7. Build & Deploy Docker Stack
       - name: Deploy Docker Stack
         run: |
           cd "${{ env.DEPLOY_DIR }}"
-          echo "🐳 Launching Docker Compose stack on Synology NAS..."
+          echo "🐳 Launching Docker Compose stack (${{ env.COMPOSE_PROJECT_NAME }})..."
+          
           docker compose down || true
           docker compose build
-          docker compose up -d --force-recreate
+          docker compose ${{ env.COMPOSE_PROFILE_CMD }} up -d --force-recreate
           
-          echo "🚀 Deployment Successful! Quant AI PWA, Gateway, and Cloudflared Tunnel are live on Synology NAS."
+          echo "✅ Deployment Successful for ${{ github.ref_name }}!"
+
+      # 8. Clean Up Ephemeral Develop Container on Master Deploy
+      - name: Tear Down Ephemeral Develop Container
+        if: github.ref_name == 'master'
+        run: |
+          DEV_DIR="/volume2/homes/rachardv/git-repos/develop/quant-pwa"
+          if [ -d "$DEV_DIR" ]; then
+            echo "🧹 Tearing down old develop containers to free Synology NAS compute..."
+            cd "$DEV_DIR"
+            docker compose down --remove-orphans || true
+            echo "✨ Develop containers cleanly removed."
+          fi

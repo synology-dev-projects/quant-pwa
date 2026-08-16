@@ -5,7 +5,7 @@ services:
     build:
       context: ./gateway
       dockerfile: Dockerfile
-    container_name: quant-gateway
+    container_name: quant-gateway-${CONTAINER_PREFIX:-prod}
     restart: unless-stopped
     environment:
       - APP_PASSCODE=${APP_PASSCODE:-quant-secret-2026}
@@ -22,20 +22,22 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: quant-frontend
+    container_name: quant-frontend-${CONTAINER_PREFIX:-prod}
     restart: unless-stopped
     ports:
-      - "8095:80"
+      - "${FRONTEND_PORT:-8095}:80"
     depends_on:
       - quant-gateway
     networks:
       - quant-net
 
-  # Cloudflare Tunnel for secure zero-open-port remote access
+  # Cloudflare Tunnel: Active in production profile only (master branch)
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: quant-cloudflared
+    container_name: quant-cloudflared-${CONTAINER_PREFIX:-prod}
     restart: unless-stopped
+    profiles:
+      - production
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
     command: tunnel --no-autoupdate run
