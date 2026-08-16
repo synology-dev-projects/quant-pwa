@@ -10,10 +10,10 @@ class Settings:
     
     # Gemini AI Configuration
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini-3.7-flash")
+    DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini-3.5-flash")
     
     # Synology Microservices Configuration
-    GEXDEX_API_URL: str = os.getenv("GEXDEX_API_URL", "http://gexdex-api:8000")
+    GEXDEX_API_URL: str = os.getenv("GEXDEX_API_URL", "http://gexdex-api-prod:8000")
     GEXDEX_API_KEY: str = os.getenv("GEXDEX_API_KEY", "YOUR_SECRET_API_KEY_HERE")
     
     # Public Cloudflare / Ingress Base URL (for client-accessible images)

@@ -74,12 +74,12 @@ def health_check():
 def list_models():
     """Returns available Gemini models for the PWA header dropdown."""
     return {
-        "default": settings.DEFAULT_GEMINI_MODEL,
+        "default": "gemini-3.5-flash",
         "models": [
-            {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash", "badge": "Fast + High Accuracy (Default)"},
-            {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "badge": "High Availability (No 503s)"},
-            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "badge": "Deep Chain-of-Thought Reasoning"},
-            {"id": "gemini-flash-latest", "name": "Gemini Flash Latest", "badge": "Production Flash"}
+            {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash", "badge": "Fast + Zero Congestion (Default)"},
+            {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash", "badge": "High Accuracy Preview"},
+            {"id": "gemini-3-flash-preview", "name": "Gemini 3 Flash Preview", "badge": "Ultra Low Latency"},
+            {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite", "badge": "Cost Efficient"}
         ]
     }
 
