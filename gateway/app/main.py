@@ -1,8 +1,9 @@
 import json
+import httpx
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Header
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from app.config import settings
@@ -30,7 +31,6 @@ def verify_app_passcode(authorization: Optional[str] = Header(None)) -> str:
     Validates Authorization Bearer passcode header against APP_PASSCODE.
     """
     if not settings.APP_PASSCODE:
-        # If no passcode is set in env, allow in open mode
         return "open"
         
     if not authorization or not authorization.startswith("Bearer "):
@@ -83,13 +83,41 @@ def list_models():
     }
 
 
+@app.get("/api/v1/gexdex/chart.png", summary="Proxy GEX/DEX Chart PNG")
+def proxy_chart_png(
+    ticker: str = Query("AAPL"),
+    max_dte: int = Query(50),
+    strike_range: int = Query(25),
+    api_key: Optional[str] = None
+):
+    """
+    Proxies chart PNG requests directly to the internal gexdex-api microservice.
+    """
+    clean_ticker = ticker.strip().upper()
+    url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/chart.png"
+    params = {
+        "ticker": clean_ticker,
+        "max_dte": max_dte,
+        "strike_range": strike_range,
+        "format": "png"
+    }
+    headers = {
+        "X-API-Key": settings.GEXDEX_API_KEY
+    }
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url, params=params, headers=headers)
+            return Response(content=resp.content, media_type="image/png", status_code=resp.status_code)
+    except Exception as e:
+        return Response(content=b"", media_type="image/png", status_code=502)
+
+
 @app.post("/api/chat/stream", summary="Stream Chat Response", dependencies=[Depends(verify_app_passcode)])
 async def chat_stream(request: Request, body: ChatStreamRequest):
     """
     Streams AI responses with low-latency Server-Sent Events (SSE).
     Monitors request.is_disconnected() to cancel upstream processing if mobile client drops.
     """
-    # Convert Pydantic messages to dict
     message_dicts = [{"role": m.role, "content": m.content} for m in body.messages]
     
     async def sse_generator():
@@ -106,6 +134,6 @@ async def chat_stream(request: Request, body: ChatStreamRequest):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"  # Disables proxy buffering for instant SSE chunk delivery
+            "X-Accel-Buffering": "no"
         }
     )
