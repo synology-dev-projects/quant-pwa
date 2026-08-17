@@ -12,101 +12,20 @@ from app.tools import registry
 from app.tools.gexdex_tool import get_gexdex
 
 SYSTEM_INSTRUCTION_BASE = """You are Quant AI, an elite institutional Options & Quantitative Market Strategist built for active traders.
-You operate with precision, conciseness, and deep understanding of options market structure.
+You operate with precision, conciseness, and deep understanding of options market structure (GEX, DEX, Gamma Regimes, Call/Put Walls, Zero Gamma Flips).
 
-TOOL HIERARCHY RULES:
-1. PROPRIETARY DATA FIRST: Whenever the user asks for options exposure, GEX, DEX, gamma flip, put wall, call wall, dealer positioning, or strikes on any ticker (e.g. SPY, AAPL, NVDA, TSLA, AAOI), you MUST utilize the proprietary Greek exposures.
-2. WEB SEARCH FOR MACRO & NEWS: Use web search grounding ONLY when the user asks about breaking market news, earnings releases, macroeconomic data (CPI, PPI, FOMC, Fed interest rate decisions), or company catalysts.
+TOOL HIERARCHY & EXECUTION RULES:
+1. PROPRIETARY DATA FIRST: Whenever the user asks for options exposure, GEX, DEX, gamma flip, put wall, call wall, dealer positioning, or strikes on any single or multiple stock tickers (e.g. SPY, AAPL, NVDA, TSLA, INTC, BLDP, AAOI, ADEA, SHLS), you MUST call the `get_gexdex` tool.
+2. MULTI-TICKER QUERIES: Pass comma-separated ticker lists (e.g. `ticker="BLDP,AAOI,ADEA,INTC,SHLS"`) to `get_gexdex` in a single tool call.
+3. WEB SEARCH: Use web search grounding ONLY when the user specifically asks about breaking news, macro events (CPI, FOMC), or earnings announcements.
 
-RESPONSE FORMATTING:
-- Deliver clean, institutional quantitative breakdowns.
-- Always include the chart image in markdown if provided: `![Ticker Chart](url)`.
-- Keep tone professional, analytical, and direct. Avoid conversational filler.
+RESPONSE FORMATTING RULES:
+- For each ticker queried, output a clean, structured quantitative breakdown including:
+  * Spot Price, Gamma Regime (Positive/Negative Gamma), and Call/Put Walls.
+  * Embed the chart image markdown: `![Ticker Options Chart](chart_png_url)` (Use the exact URL provided in the tool output).
+- Followed by a concise **Institutional Dealer Positioning Ranking** from best positioning to worst with actionable insights.
+- Keep tone professional, analytical, and direct. Avoid fluff.
 """
-
-COMMON_NON_TICKERS = {
-    "THE", "FOR", "AND", "GEX", "DEX", "CALL", "PUT", "WALL", "SPOT", "AI",
-    "WHAT", "SHOW", "GIVE", "TELL", "HOW", "WHY", "CAN", "YOU", "ARE", "THIS",
-    "FROM", "WITH", "CHART", "FLIP", "ZERO", "DELTA", "GAMMA", "LEVELS", "STRIKE",
-    "PRICE", "TODAY", "OPEN", "CLOSE", "HIGH", "LOW", "RATE", "NEWS", "NOW",
-    "REFRESH", "FRESH", "UPDATE", "RELOAD", "FORCE"
-}
-
-
-def extract_potential_tickers(text: str) -> List[str]:
-    """Extracts uppercase ticker symbols (e.g. AAOI, NVDA, AAPL) excluding common English words."""
-    words = re.findall(r'\b[A-Za-z]{1,5}\b', text)
-    found = []
-    for w in words:
-        clean = w.upper().strip()
-        if clean not in COMMON_NON_TICKERS and len(clean) >= 2:
-            if clean not in found:
-                found.append(clean)
-    return found
-
-
-def format_quant_digest_card(data: Dict[str, Any], is_refresh: bool = False) -> str:
-    """
-    Renders an institutional Markdown Quant Digest Card with zero token cost.
-    """
-    ticker = data.get("ticker", "TICKER")
-    spot = data.get("spot_price", 0.0)
-    regime = data.get("gamma_regime", "Positive Gamma")
-    cp_ratio = data.get("call_put_ratio", 1.0)
-    
-    call_wall = data.get("call_wall", data.get("key_gamma_strike", "N/A"))
-    put_wall = data.get("put_wall", "N/A")
-    gamma_flip = data.get("zero_gex_level", "N/A")
-    centroid = data.get("gamma_centroid", spot)
-    
-    exp_move_dlr = data.get("expected_move_dollars", 0.0)
-    exp_move_pct = data.get("expected_move_pct", 3.5)
-    exp_low = data.get("expected_range_low", round(spot * 0.965, 2))
-    exp_high = data.get("expected_range_high", round(spot * 1.035, 2))
-    
-    gex_above_pct = data.get("gex_above_pct", 50.0)
-    gex_below_pct = round(100.0 - gex_above_pct, 1)
-    dex_above_pct = data.get("dex_above_pct", 50.0)
-    dex_below_pct = round(100.0 - dex_above_pct, 1)
-    front_week_pct = data.get("front_week_gex_pct", 45.0)
-    dominant_exp = data.get("dominant_expiration", "Near-term")
-    
-    pin_risk = data.get("pin_risk_level", "MODERATE")
-    squeeze_risk = data.get("gamma_squeeze_risk", "LOW")
-    cascade_risk = data.get("cascade_drop_risk", "LOW")
-    
-    chart_md = data.get("markdown_image", "")
-    data_badge = "🔄 *Live On-Demand Refresh*" if is_refresh else "💾 *1-Hour Snapshot Cache*"
-
-    card = f"""### 🟢 **{ticker} — Institutional Options & GEX Digest**
-*{data_badge}*
-
-* **Spot Price:** **`${spot:.2f}`**
-* **Gamma Regime:** **`{regime}`**
-* **Call / Put Gamma Ratio:** **`{cp_ratio:.2f}`**
-
----
-
-#### 🧱 **Key Pivot Matrix**
-* **Call Wall (Resistance / Magnet):** **`${call_wall}`**
-* **Put Wall (Support Floor):** **`${put_wall}`**
-* **Zero GEX / Gamma Flip:** **`${gamma_flip}`**
-* **Gamma Centroid (Center of Gravity):** **`${centroid}`**
-* **1-Week Expected Move:** **`±${exp_move_dlr:.2f} (±{exp_move_pct:.1f}%)`** $\rightarrow$ Range: **`${exp_low:.2f} — ${exp_high:.2f}`**
-
----
-
-#### ⚖️ **Exposure Imbalances & Time Skew**
-* **GEX Distribution:** **`{gex_above_pct}% Above Spot`** vs. **`{gex_below_pct}% Below Spot`**
-* **DEX Distribution:** **`{dex_above_pct}% Above Spot`** vs. **`{dex_below_pct}% Below Spot`**
-* **Front-Week Velocity (0–7 DTE):** **`{front_week_pct}%`** of Total Gamma *(Dominant Expiry: `{dominant_exp}`)*
-* **Risk Signals:** Pinning Risk: **`{pin_risk}`** | Squeeze Risk: **`{squeeze_risk}`** | Cascade Risk: **`{cascade_risk}`**
-
----
-
-{chart_md}
-"""
-    return card
 
 
 def create_genai_client() -> genai.Client:
@@ -147,51 +66,6 @@ async def stream_chat_response(
     history_msgs = windowed_messages[:-1]
     active_prompt = last_msg.get("content", "")
 
-    # 2. Hybrid Optimization: Attempt 1-Turn Direct Batch Pre-Fetch
-    is_force_refresh = bool(re.search(r'\b(REFRESH|FRESH|UPDATE|RELOAD|FORCE)\b', active_prompt, re.IGNORECASE))
-    candidate_tickers = extract_potential_tickers(active_prompt)
-    prefetched_cards = []
-    prefetched_ai_contexts = []
-    
-    if candidate_tickers:
-        batch_tickers = candidate_tickers[:8]  # support up to 8 tickers concurrently in 1 batch
-        tool_start_payload = json.dumps({"type": "tool_start", "name": "get_gexdex", "args": {"tickers": batch_tickers, "force_refresh": is_force_refresh}})
-        yield f"data: {tool_start_payload}\n\n"
-        try:
-            gex_res = await asyncio.to_thread(get_gexdex, batch_tickers, 50, 25, is_force_refresh)
-            if gex_res and "error" not in gex_res:
-                if "batch_data" in gex_res and isinstance(gex_res["batch_data"], dict):
-                    for sym, item in gex_res["batch_data"].items():
-                        card = format_quant_digest_card(item, is_refresh=is_force_refresh)
-                        prefetched_cards.append(card)
-                        ai_ctx = f"Ticker {sym}: Spot ${item.get('spot_price')}, Call Wall ${item.get('call_wall')}, Put Wall ${item.get('put_wall')}, GEX Above: {item.get('gex_above_pct')}%, Front-Week GEX: {item.get('front_week_gex_pct')}%, Regime: {item.get('gamma_regime')}"
-                        prefetched_ai_contexts.append(ai_ctx)
-                else:
-                    card = format_quant_digest_card(gex_res, is_refresh=is_force_refresh)
-                    prefetched_cards.append(card)
-                    sym = gex_res.get('ticker', 'TICKER')
-                    ai_ctx = f"Ticker {sym}: Spot ${gex_res.get('spot_price')}, Call Wall ${gex_res.get('call_wall')}, Put Wall ${gex_res.get('put_wall')}, GEX Above: {gex_res.get('gex_above_pct')}%, Front-Week GEX: {gex_res.get('front_week_gex_pct')}%, Regime: {gex_res.get('gamma_regime')}"
-                    prefetched_ai_contexts.append(ai_ctx)
-        except Exception as e:
-            logging.error(f"Error during batch prefetch: {e}")
-
-    # Stream all structured Digest Cards immediately (Instant zero-token delivery)
-    if prefetched_cards:
-        for card_content in prefetched_cards:
-            words = card_content.split(" ")
-            for i, word in enumerate(words):
-                if client_disconnected_fn and await client_disconnected_fn():
-                    return
-                space = " " if i < len(words) - 1 else ""
-                card_token = json.dumps({"type": "token", "content": word + space})
-                yield f"data: {card_token}\n\n"
-                await asyncio.sleep(0.003)
-
-        # Micro-prompt for Gemini tactical synthesis & ranking
-        effective_prompt = f"Provide a concise comparative ranking and institutional dealer positioning takeaways based on these real-time options analytics: " + "; ".join(prefetched_ai_contexts) + f". User prompt: '{active_prompt}'."
-    else:
-        effective_prompt = active_prompt
-
     # Format history contents
     history_contents = []
     for msg in history_msgs:
@@ -208,7 +82,7 @@ async def stream_chat_response(
     config = types.GenerateContentConfig(
         system_instruction=full_system_instruction,
         temperature=0.2,
-        tools=callable_tools if (not prefetched_cards or len(candidate_tickers) > len(prefetched_cards)) else None,
+        tools=callable_tools,
     )
 
     models_to_try = [selected_model]
@@ -231,7 +105,7 @@ async def stream_chat_response(
                 history=history_contents
             )
 
-            response = await asyncio.to_thread(chat.send_message, effective_prompt)
+            response = await asyncio.to_thread(chat.send_message, active_prompt)
             if response:
                 active_model_used = attempt_model
                 break
@@ -244,31 +118,27 @@ async def stream_chat_response(
             else:
                 break
 
-    if not response and last_error and not prefetched_cards:
+    if not response and last_error:
         err_msg = json.dumps({"type": "error", "message": f"Streaming Error: {str(last_error)}"})
         yield f"data: {err_msg}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
-    # If failover occurred and AI generated a response, notify user
-    if active_model_used != selected_model and not prefetched_cards:
+    # If failover occurred, notify user
+    if active_model_used != selected_model:
         failover_badge = f"> ℹ️ **Model Failover:** `{selected_model}` was experiencing temporary Google Cloud demand limits. Routed to **`{active_model_used}`**.\n\n"
         badge_payload = json.dumps({"type": "token", "content": failover_badge})
         yield f"data: {badge_payload}\n\n"
 
-    # Stream AI synthesis
+    # Stream the complete response text with pacing for natural rendering
     if response and response.text:
-        header_text = "\n\n#### 🧠 **Institutional Dealer Takeaways**\n"
-        header_payload = json.dumps({"type": "token", "content": header_text})
-        yield f"data: {header_payload}\n\n"
-        
         words = response.text.split(" ")
         for i, word in enumerate(words):
             if client_disconnected_fn and await client_disconnected_fn():
-                break
+                return
             space = " " if i < len(words) - 1 else ""
-            word_payload = json.dumps({"type": "token", "content": word + space})
-            yield f"data: {word_payload}\n\n"
-            await asyncio.sleep(0.012)
+            token_payload = json.dumps({"type": "token", "content": word + space})
+            yield f"data: {token_payload}\n\n"
+            await asyncio.sleep(0.003)
 
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
