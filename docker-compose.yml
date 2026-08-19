@@ -1,4 +1,4 @@
-﻿version: '3.8'
+version: '3.8'
 
 services:
   quant-gateway:
@@ -18,7 +18,6 @@ services:
     networks:
       quant-net:
         aliases:
-          - quant-gateway
           - quant-gateway-${CONTAINER_PREFIX:-prod}
 
   quant-frontend:
@@ -29,12 +28,13 @@ services:
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-8095}:80"
+    environment:
+      - CONTAINER_PREFIX=${CONTAINER_PREFIX:-prod}
     depends_on:
       - quant-gateway
     networks:
       quant-net:
         aliases:
-          - quant-frontend
           - quant-frontend-${CONTAINER_PREFIX:-prod}
 
   # Cloudflare Tunnel: Active in production profile only (master branch)
