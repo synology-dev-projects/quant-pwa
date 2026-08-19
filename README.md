@@ -48,21 +48,32 @@ docker compose up -d --build
 
 ---
 
-## 🔐 Security & 6-Hour Signed Session Authentication
+## 🔐 Security & Session Architecture
 
-The PWA is guarded by a glassmorphic **Password Protected Lock Screen (Auth Gate)** powered by cryptographic **6-Hour HMAC-SHA256 Signed Sessions**:
+The PWA is guarded by a glassmorphic **Password Protected Lock Screen (Auth Gate)** backed by **6-Hour Cryptographic HMAC-SHA256 Signed Sessions** and **FAANG-grade Brute-Force Rate Limiting**:
 
 1. **Master Password Never Stored Client-Side**:
-   - The user inputs the master passcode once.
-   - The Gateway validates it against `APP_PASSCODE` and issues an HMAC-SHA256 session token (`POST /api/auth/login`).
-   - The client stores **only** this temporary token in `localStorage`.
-2. **Automatic 6-Hour Session Expiration**:
+   - The user inputs the master passcode once (`RichQuantDemo` / `APP_PASSCODE`).
+   - The Gateway validates it using constant-time comparison (`secrets.compare_digest`) and returns a signed 6-hour JWT session token (`POST /api/auth/login`).
+   - The browser stores **only** this temporary session token in `localStorage`.
+2. **5-Attempt Rate Limiting & 15-Minute Lockout**:
+   - Allows up to **5 failed login attempts within a 5-minute sliding window**.
+   - On the 5th failure, the client IP is automatically locked out for **15 minutes** (`HTTP 429 Too Many Requests` with `Retry-After: 900`).
+   - Includes **500ms anti-automation tarpitting** to slow down automated dictionary attacks.
+   - Successful login immediately clears the failed attempt counter.
+3. **Automatic 6-Hour Session Expiration**:
    - Every session automatically expires after 6 hours.
    - Any API request with an expired token is rejected with `HTTP 401 Unauthorized`, prompting the lock screen to reappear.
-3. **Manual App Lock**:
-   - Tapping **"Lock App"** in the Settings drawer immediately invalidates the local session token and returns to the lock screen.
-4. **All Environments Protected**:
-   - Operates consistently across both **develop** (port 8096) and **production** (port 8095 / Cloudflare Tunnel).
+4. **Manual App Lock**:
+   - Tapping **"Lock App"** in the Settings drawer immediately wipes the local session token and returns to the lock screen.
+5. **Hermetic Multi-Environment Isolation**:
+   - Nginx uses dynamic `envsubst` templates (`/etc/nginx/templates/default.conf.template`) to strictly isolate ingress routing:
+     - `quant-frontend-dev` (:8096) &rarr; `http://quant-gateway-dev:8000/api/`
+     - `quant-frontend-prod` (:8095) &rarr; `http://quant-gateway-prod:8000/api/`
+   - Eliminates Docker DNS alias collisions across shared networks.
+6. **Ephemeral Dev Lifecycle**:
+   - Pushing to `develop` spins up the isolated Dev stack (port 8096) for testing.
+   - Pushing to `master` deploys Prod (port 8095) and automatically purges the ephemeral Dev stack to conserve NAS memory and CPU.
 
 ---
 
