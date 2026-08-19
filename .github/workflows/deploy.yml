@@ -106,11 +106,11 @@ jobs:
       - name: Tear Down Ephemeral Develop Container
         if: github.ref_name == 'master'
         run: |
+          echo "🧹 Tearing down old develop containers to free Synology NAS compute..."
+          docker rm -f quant-gateway-dev quant-frontend-dev quant-cloudflared-dev 2>/dev/null || true
           DEV_DIR="/volume2/homes/rachardv/git-repos/develop/quant-pwa"
           if [ -d "$DEV_DIR" ]; then
-            echo "🧹 Tearing down old develop containers to free Synology NAS compute..."
-            docker rm -f quant-gateway-dev quant-frontend-dev 2>/dev/null || true
             cd "$DEV_DIR"
-            docker compose down --remove-orphans || true
-            echo "✨ Develop containers cleanly removed."
+            docker compose -p quant-pwa-dev down --remove-orphans 2>/dev/null || true
           fi
+          echo "✨ Develop containers cleanly removed."
