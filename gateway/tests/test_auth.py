@@ -66,3 +66,24 @@ def test_auth_endpoints_flow():
     res = client.get("/api/models", headers={"Authorization": f"Bearer {session_token}"})
     assert res.status_code == 200
     assert "models" in res.json()
+
+def test_rate_limiting_lockout():
+    # Use a unique test IP via X-Forwarded-For
+    headers = {"X-Forwarded-For": "198.51.100.42"}
+
+    # 4 bad attempts -> 401
+    for i in range(4):
+        res = client.post("/api/auth/login", json={"password": "wrong-guess"}, headers=headers)
+        assert res.status_code == 401
+        assert "remaining" in res.json()["detail"]
+
+    # 5th bad attempt -> 429 Too Many Requests
+    res = client.post("/api/auth/login", json={"password": "wrong-guess"}, headers=headers)
+    assert res.status_code == 429
+    assert "Locked out" in res.json()["detail"]
+    assert "Retry-After" in res.headers
+
+    # Immediate attempt even with correct password -> blocked by 429 lockout
+    res = client.post("/api/auth/login", json={"password": settings.APP_PASSCODE}, headers=headers)
+    assert res.status_code == 429
+    assert "locked for security" in res.json()["detail"]

@@ -12,7 +12,10 @@ from app.core.temporal import get_market_status
 from app.core.auth import (
     create_session_token,
     verify_session_token,
-    validate_master_password
+    validate_master_password,
+    check_rate_limit,
+    record_failed_attempt,
+    record_successful_attempt
 )
 
 app = FastAPI(
@@ -87,17 +90,52 @@ def auth_status():
 
 
 @app.post("/api/auth/login", summary="Login and Generate 6-Hour Session Token")
-def auth_login(req: LoginRequest):
+async def auth_login(req: LoginRequest, request: Request):
     """
     Validates master password and generates a signed 6-hour HMAC-SHA256 session token.
-    The master password is never retained client-side.
+    Enforces IP-based rate limiting (5 attempts per 5 minutes) and 15-minute brute-force lockout.
     """
+    # Extract client IP (handling reverse proxies & Cloudflare headers)
+    client_ip = (
+        request.headers.get("cf-connecting-ip")
+        or request.headers.get("x-real-ip")
+        or (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
+
+    # 1. Check if IP is currently locked out
+    is_allowed, lockout_remaining = check_rate_limit(client_ip)
+    if not is_allowed:
+        minutes_remaining = max(1, int(lockout_remaining / 60))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many failed login attempts. Account locked for security. Please try again in {minutes_remaining} minutes.",
+            headers={"Retry-After": str(lockout_remaining)}
+        )
+
+    # 2. Validate password
     if not validate_master_password(req.password):
+        # Tarpitting delay (500ms) to throttle automated attacks
+        import asyncio
+        await asyncio.sleep(0.5)
+
+        attempts_left, is_locked, lock_secs = record_failed_attempt(client_ip)
+        if is_locked:
+            minutes = int(lock_secs / 60)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many failed attempts. Locked out for {minutes} minutes.",
+                headers={"Retry-After": str(lock_secs)}
+            )
+        
+        attempt_msg = f"{attempts_left} attempt{'s' if attempts_left != 1 else ''} remaining before lockout."
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid passcode. Please try again."
+            detail=f"Invalid passcode. {attempt_msg}"
         )
     
+    # 3. Successful login - clear failed attempts & issue 6h token
+    record_successful_attempt(client_ip)
     token, expires_at = create_session_token(expires_in_hours=settings.SESSION_EXPIRY_HOURS)
     return {
         "token": token,

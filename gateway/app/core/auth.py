@@ -95,3 +95,83 @@ def verify_session_token(token: str) -> Optional[Dict[str, Any]]:
         return payload
     except Exception:
         return None
+
+
+# --- Brute Force & Rate Limiting Defense ---
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_DURATION_SECONDS = 900   # 15 minutes
+ATTEMPT_WINDOW_SECONDS = 300     # 5 minutes
+
+_ip_attempt_tracker: Dict[str, Dict[str, Any]] = {}
+
+
+def check_rate_limit(client_ip: str) -> Tuple[bool, int]:
+    """
+    Checks if client IP is currently locked out.
+    Returns (is_allowed, seconds_remaining_if_locked).
+    """
+    now = time.time()
+    
+    # Cleanup old entries periodically (more than 30 minutes old)
+    if len(_ip_attempt_tracker) > 1000:
+        stale_ips = [ip for ip, data in _ip_attempt_tracker.items() if now > data.get("locked_until", 0) + 1800]
+        for ip in stale_ips:
+            _ip_attempt_tracker.pop(ip, None)
+
+    record = _ip_attempt_tracker.get(client_ip)
+    if not record:
+        return True, 0
+
+    locked_until = record.get("locked_until", 0)
+    if locked_until > now:
+        return False, int(locked_until - now)
+
+    # If lockout expired, clear record
+    if locked_until > 0 and now >= locked_until:
+        _ip_attempt_tracker.pop(client_ip, None)
+        return True, 0
+
+    # If attempt window expired without lockout, reset
+    first_failed_at = record.get("first_failed_at", 0)
+    if now - first_failed_at > ATTEMPT_WINDOW_SECONDS:
+        _ip_attempt_tracker.pop(client_ip, None)
+        return True, 0
+
+    return True, 0
+
+
+def record_failed_attempt(client_ip: str) -> Tuple[int, bool, int]:
+    """
+    Records a failed login attempt for the client IP.
+    Returns (attempts_remaining, is_locked_now, lockout_seconds).
+    """
+    now = time.time()
+    record = _ip_attempt_tracker.get(client_ip, {
+        "count": 0,
+        "first_failed_at": now,
+        "locked_until": 0
+    })
+
+    # Reset if window expired
+    if now - record.get("first_failed_at", now) > ATTEMPT_WINDOW_SECONDS:
+        record["count"] = 0
+        record["first_failed_at"] = now
+
+    record["count"] += 1
+
+    if record["count"] >= MAX_FAILED_ATTEMPTS:
+        record["locked_until"] = now + LOCKOUT_DURATION_SECONDS
+        _ip_attempt_tracker[client_ip] = record
+        return 0, True, LOCKOUT_DURATION_SECONDS
+
+    _ip_attempt_tracker[client_ip] = record
+    attempts_remaining = max(0, MAX_FAILED_ATTEMPTS - record["count"])
+    return attempts_remaining, False, 0
+
+
+def record_successful_attempt(client_ip: str) -> None:
+    """
+    Resets failed attempt count upon successful authentication.
+    """
+    _ip_attempt_tracker.pop(client_ip, None)
+
