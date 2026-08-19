@@ -3,6 +3,7 @@ import { TabManager } from './tabs/tab_manager.js';
 import { ChatView } from './tabs/chat_view.js';
 import { PromptInput } from './components/prompt_input.js';
 import { Lightbox } from './components/lightbox.js';
+import { LockScreen } from './components/lock_screen.js';
 
 const AVAILABLE_MODELS = [
   { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash' },
@@ -20,16 +21,31 @@ class App {
     this.activeAbortController = null;
     this.tabManager = null;
     this.promptInput = null;
+    this.lockScreen = null;
 
     this.init();
   }
 
   async init() {
     this.initTabs();
+    this.initLockScreen();
     this.initSettingsModal();
-    this.initModelSelector();
     this.initPromptBar();
     this.registerServiceWorker();
+
+    // Check 6-hour session authentication
+    const isAuthenticated = await this.lockScreen.checkAuthentication();
+    if (isAuthenticated) {
+      this.onUnlocked();
+    }
+  }
+
+  initLockScreen() {
+    this.lockScreen = new LockScreen(() => this.onUnlocked());
+  }
+
+  onUnlocked() {
+    this.initModelSelector();
 
     // Load initial chat history
     const history = AppState.getHistory();
@@ -68,18 +84,21 @@ class App {
 
     let models = AVAILABLE_MODELS;
 
-    // Dynamically load available models from Gateway
+    // Dynamically load available models from Gateway using session token
     try {
       const gatewayBase = AppState.getGatewayUrl() || '';
-      const passcode = AppState.getPasscode() || '';
+      const token = AppState.getSessionToken();
       const res = await fetch(`${gatewayBase}/api/models`, {
-        headers: passcode ? { 'Authorization': `Bearer ${passcode}` } : {}
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (res.ok) {
         const data = await res.json();
         if (data.models && Array.isArray(data.models)) {
           models = data.models;
         }
+      } else if (res.status === 401) {
+        this.handleUnauthorized('Session expired. Please unlock the app again.');
+        return;
       }
     } catch (e) {
       console.warn('Using fallback models list:', e);
@@ -109,13 +128,15 @@ class App {
     const closeBtn = document.getElementById('settingsClose');
     const saveBtn = document.getElementById('settingsSave');
     const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+    const lockAppBtn = document.getElementById('lockAppBtn');
     const passcodeInput = document.getElementById('passcodeInput');
     const gatewayUrlInput = document.getElementById('gatewayUrlInput');
 
     if (!settingsModal) return;
 
     settingsBtn?.addEventListener('click', () => {
-      passcodeInput.value = AppState.getPasscode();
+      passcodeInput.value = '';
+      passcodeInput.placeholder = AppState.getSessionToken() ? '•••••••• (Session Active)' : 'Enter passcode to log in';
       gatewayUrlInput.value = AppState.getGatewayUrl();
       settingsModal.classList.add('open');
     });
@@ -124,11 +145,38 @@ class App {
       settingsModal.classList.remove('open');
     });
 
-    saveBtn?.addEventListener('click', () => {
-      AppState.setPasscode(passcodeInput.value);
-      AppState.setGatewayUrl(gatewayUrlInput.value);
+    saveBtn?.addEventListener('click', async () => {
+      const newGatewayUrl = gatewayUrlInput.value;
+      AppState.setGatewayUrl(newGatewayUrl);
+
+      // If user typed a new password in settings, log in and get fresh session
+      const newPassword = passcodeInput.value?.trim();
+      if (newPassword) {
+        try {
+          const res = await fetch(`${newGatewayUrl}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: newPassword })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            AppState.setSessionToken(data.token, data.expires_at);
+          } else {
+            alert('Invalid passcode. Session was not updated.');
+          }
+        } catch (err) {
+          console.warn('Failed to update session from settings:', err);
+        }
+      }
+
       settingsModal.classList.remove('open');
       this.initModelSelector();
+    });
+
+    lockAppBtn?.addEventListener('click', () => {
+      AppState.clearSession();
+      settingsModal.classList.remove('open');
+      this.lockScreen.show();
     });
 
     clearHistoryBtn?.addEventListener('click', () => {
@@ -138,6 +186,14 @@ class App {
         settingsModal.classList.remove('open');
       }
     });
+  }
+
+  handleUnauthorized(message) {
+    AppState.clearSession();
+    if (this.lockScreen) {
+      this.lockScreen.show();
+      this.lockScreen.showError(message || 'Session expired. Please unlock the app.');
+    }
   }
 
   async handleUserPrompt(promptText) {
@@ -153,7 +209,7 @@ class App {
     // 2. Prepare payload with sliding window
     const messages = this.chatView.messages;
     const model = AppState.getModel();
-    const passcode = AppState.getPasscode();
+    const token = AppState.getSessionToken();
     const gatewayBase = AppState.getGatewayUrl();
     const streamUrl = `${gatewayBase}/api/chat/stream`;
 
@@ -162,7 +218,7 @@ class App {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${passcode}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           messages: messages,
@@ -173,7 +229,8 @@ class App {
 
       if (!response.ok) {
         if (response.status === 401) {
-          throw new Error('Invalid App Passcode. Please check Settings.');
+          this.handleUnauthorized('Session expired. Please unlock the app again.');
+          return;
         }
         throw new Error(`Gateway returned HTTP ${response.status}`);
       }

@@ -48,6 +48,24 @@ docker compose up -d --build
 
 ---
 
+## 🔐 Security & 6-Hour Signed Session Authentication
+
+The PWA is guarded by a glassmorphic **Password Protected Lock Screen (Auth Gate)** powered by cryptographic **6-Hour HMAC-SHA256 Signed Sessions**:
+
+1. **Master Password Never Stored Client-Side**:
+   - The user inputs the master passcode once.
+   - The Gateway validates it against `APP_PASSCODE` and issues an HMAC-SHA256 session token (`POST /api/auth/login`).
+   - The client stores **only** this temporary token in `localStorage`.
+2. **Automatic 6-Hour Session Expiration**:
+   - Every session automatically expires after 6 hours.
+   - Any API request with an expired token is rejected with `HTTP 401 Unauthorized`, prompting the lock screen to reappear.
+3. **Manual App Lock**:
+   - Tapping **"Lock App"** in the Settings drawer immediately invalidates the local session token and returns to the lock screen.
+4. **All Environments Protected**:
+   - Operates consistently across both **develop** (port 8096) and **production** (port 8095 / Cloudflare Tunnel).
+
+---
+
 ## 🔌 Adding New Skills (Extensibility)
 
 Create a new tool file in `gateway/app/tools/levels_tool.py`:

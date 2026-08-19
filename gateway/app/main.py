@@ -9,6 +9,11 @@ from pydantic import BaseModel
 from app.config import settings
 from app.core.agent import stream_chat_response
 from app.core.temporal import get_market_status
+from app.core.auth import (
+    create_session_token,
+    verify_session_token,
+    validate_master_password
+)
 
 app = FastAPI(
     title="Quant AI Agent Gateway",
@@ -28,7 +33,9 @@ app.add_middleware(
 
 def verify_app_passcode(authorization: Optional[str] = Header(None)) -> str:
     """
-    Validates Authorization Bearer passcode header against APP_PASSCODE.
+    Validates Authorization Bearer token header.
+    Accepts valid HMAC-SHA256 session tokens (within 6h expiration)
+    or direct APP_PASSCODE matching (fallback).
     """
     if not settings.APP_PASSCODE:
         return "open"
@@ -41,14 +48,25 @@ def verify_app_passcode(authorization: Optional[str] = Header(None)) -> str:
         )
     
     token = authorization.split("Bearer ")[1].strip()
-    if token != settings.APP_PASSCODE:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid App Passcode. Update passcode in PWA Settings.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return token
+    
+    # 1. Check if token is a valid signed session token
+    session_payload = verify_session_token(token)
+    if session_payload is not None:
+        return session_payload.get("sub", "quant-user")
 
+    # 2. Check direct master password match (fallback for scripts / tooling)
+    if validate_master_password(token):
+        return "quant-master"
+        
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Session expired or invalid passcode. Please unlock the app again.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+class LoginRequest(BaseModel):
+    password: str
 
 class ChatMessage(BaseModel):
     role: str
@@ -57,6 +75,45 @@ class ChatMessage(BaseModel):
 class ChatStreamRequest(BaseModel):
     messages: List[ChatMessage]
     model: Optional[str] = None
+
+
+@app.get("/api/auth/status", summary="Authentication Gate Status")
+def auth_status():
+    """Returns authentication gate requirements and session lifetime."""
+    return {
+        "auth_required": bool(settings.APP_PASSCODE),
+        "session_expiry_hours": settings.SESSION_EXPIRY_HOURS
+    }
+
+
+@app.post("/api/auth/login", summary="Login and Generate 6-Hour Session Token")
+def auth_login(req: LoginRequest):
+    """
+    Validates master password and generates a signed 6-hour HMAC-SHA256 session token.
+    The master password is never retained client-side.
+    """
+    if not validate_master_password(req.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid passcode. Please try again."
+        )
+    
+    token, expires_at = create_session_token(expires_in_hours=settings.SESSION_EXPIRY_HOURS)
+    return {
+        "token": token,
+        "expires_at": expires_at,
+        "expires_in_hours": settings.SESSION_EXPIRY_HOURS,
+        "message": "Authenticated successfully."
+    }
+
+
+@app.get("/api/auth/verify", summary="Verify Active Session Token")
+def auth_verify(user: str = Depends(verify_app_passcode)):
+    """Verifies that the current Authorization header contains a valid active session."""
+    return {
+        "valid": True,
+        "user": user
+    }
 
 
 @app.get("/health", summary="Health Check")

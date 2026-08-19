@@ -1,5 +1,6 @@
 const STORAGE_KEYS = {
-  PASSCODE: 'quant_app_passcode',
+  SESSION_TOKEN: 'quant_session_token',
+  SESSION_EXPIRES_AT: 'quant_session_expires_at',
   MODEL: 'quant_selected_model',
   GATEWAY_URL: 'quant_gateway_url',
   ACTIVE_TAB: 'quant_active_tab',
@@ -7,12 +8,41 @@ const STORAGE_KEYS = {
 };
 
 export const AppState = {
-  getPasscode() {
-    return localStorage.getItem(STORAGE_KEYS.PASSCODE) || 'quant-secret-2026';
+  getSessionToken() {
+    return localStorage.getItem(STORAGE_KEYS.SESSION_TOKEN) || '';
   },
 
-  setPasscode(passcode) {
-    localStorage.setItem(STORAGE_KEYS.PASSCODE, passcode.trim());
+  setSessionToken(token, expiresAt) {
+    if (token) {
+      localStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, token.trim());
+      if (expiresAt) {
+        localStorage.setItem(STORAGE_KEYS.SESSION_EXPIRES_AT, String(expiresAt));
+      }
+    } else {
+      this.clearSession();
+    }
+  },
+
+  getSessionExpiresAt() {
+    const exp = localStorage.getItem(STORAGE_KEYS.SESSION_EXPIRES_AT);
+    return exp ? parseInt(exp, 10) : 0;
+  },
+
+  isSessionExpired() {
+    const exp = this.getSessionExpiresAt();
+    if (!exp) return true;
+    const now = Math.floor(Date.now() / 1000);
+    return now >= exp;
+  },
+
+  clearSession() {
+    localStorage.removeItem(STORAGE_KEYS.SESSION_TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.SESSION_EXPIRES_AT);
+  },
+
+  // Legacy helper for backward compatibility
+  getPasscode() {
+    return this.getSessionToken();
   },
 
   getModel() {
