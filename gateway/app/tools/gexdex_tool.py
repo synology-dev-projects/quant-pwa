@@ -1,6 +1,6 @@
 import time
 import httpx
-from typing import Dict, Any, Union, List
+from typing import Dict, Any, Optional
 from app.config import settings
 from app.tools.registry import register_tool, emit_tool_ui_event
 
@@ -35,11 +35,11 @@ from app.tools.registry import register_tool, emit_tool_ui_event
     }
 )
 def get_gexdex(
-    ticker: Union[str, List[str]],
+    ticker: str = "",
     max_dte: int = 50,
     strike_range: int = 25,
     force_refresh: bool = False,
-    tickers: str = None
+    tickers: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Queries gexdex-api assistant-summary endpoint over the internal Synology LAN.
