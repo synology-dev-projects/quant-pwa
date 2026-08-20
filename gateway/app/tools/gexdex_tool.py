@@ -1,8 +1,18 @@
 import time
 import httpx
+import logging
 from typing import Dict, Any, Optional
 from app.config import settings
 from app.tools.registry import register_tool, emit_tool_ui_event
+
+# 60-Second In-Memory SWR (Stale-While-Revalidate) Cache
+_GEXDEX_MEMORY_CACHE: Dict[str, Dict[str, Any]] = {}
+CACHE_TTL_SECONDS = 60.0
+
+
+def _get_cache_key(tickers: str, max_dte: int, strike_range: int) -> str:
+    return f"{tickers}:{max_dte}:{strike_range}"
+
 
 @register_tool(
     name="get_gexdex",
@@ -28,7 +38,7 @@ from app.tools.registry import register_tool, emit_tool_ui_event
             },
             "force_refresh": {
                 "type": "boolean",
-                "description": "Force live fetch bypassing 1-hour cache (default: False)"
+                "description": "Force live fetch bypassing cache (default: False)"
             }
         },
         "required": ["ticker"]
@@ -42,8 +52,7 @@ def get_gexdex(
     tickers: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Queries gexdex-api assistant-summary endpoint over the internal Synology LAN.
-    Supports single or batch tickers and force_refresh on demand.
+    Queries gexdex-api assistant-summary endpoint with automatic 3x retries and SWR cache fallback.
     """
     raw_input = tickers or ticker
     if isinstance(raw_input, list):
@@ -51,7 +60,22 @@ def get_gexdex(
     else:
         clean_tickers = ",".join([t.strip().upper().replace("$", "") for t in str(raw_input).split(",") if t.strip()])
 
-    url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/assistant-summary"
+    if not clean_tickers:
+        return {"error": "No valid ticker provided."}
+
+    cache_key = _get_cache_key(clean_tickers, max_dte, strike_range)
+    now = time.time()
+
+    # 1. Return fresh in-memory cache if valid and not force_refresh
+    if not force_refresh and cache_key in _GEXDEX_MEMORY_CACHE:
+        entry = _GEXDEX_MEMORY_CACHE[cache_key]
+        if (now - entry["timestamp"]) < CACHE_TTL_SECONDS:
+            cached_data = entry["data"]
+            # Re-emit UI events for client Canvas charts
+            _emit_ui_events_from_payload(cached_data)
+            return cached_data
+
+    url = f"{settings.GEXDEX_API_URL.rstrip('/')}/api/v1/gexdex/assistant-summary"
     params = {
         "tickers": clean_tickers,
         "max_dte": max_dte,
@@ -62,52 +86,81 @@ def get_gexdex(
         "X-API-Key": settings.GEXDEX_API_KEY
     }
 
-    try:
-        with httpx.Client(timeout=30.0) as client:
-            response = client.get(url, params=params, headers=headers)
-            
-            if response.status_code == 200:
-                data = response.json()
+    # 2. Transparent 3-attempt retry loop with exponential backoff
+    last_error = None
+    for attempt in range(3):
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                response = client.get(url, params=params, headers=headers)
                 
-                base_url = settings.PUBLIC_BASE_URL.rstrip("/") if settings.PUBLIC_BASE_URL else ""
-                timestamp = int(time.time())
-                refresh_query = "&force_refresh=true" if force_refresh else ""
-
-                # Handle batch response
-                if "batch_data" in data and isinstance(data["batch_data"], dict):
-                    for sym, item in data["batch_data"].items():
-                        # Emit Single-Flight Tool UI event for client-side Canvas rendering
-                        if "strike_distribution" in item and item["strike_distribution"]:
-                            emit_tool_ui_event("get_gexdex", item["strike_distribution"])
-                        # Strip static image fields so LLM does not output redundant markdown images
-                        item.pop("markdown_image", None)
-                        item.pop("chart_png_url", None)
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Clean and emit UI events
+                    _emit_ui_events_from_payload(data)
+                    
+                    # Store in SWR memory cache
+                    _GEXDEX_MEMORY_CACHE[cache_key] = {
+                        "data": data,
+                        "timestamp": time.time()
+                    }
+                    return data
+                elif response.status_code in (502, 503, 504):
+                    last_error = f"HTTP {response.status_code}"
+                    time.sleep(0.2 * (2 ** attempt))
+                    continue
                 else:
-                    if "strike_distribution" in data and data["strike_distribution"]:
-                        emit_tool_ui_event("get_gexdex", data["strike_distribution"])
-                
-                # Strip root-level static image fields
-                data.pop("markdown_image", None)
-                data.pop("chart_png_url", None)
-                
-                return data
-            else:
-                return {
-                    "error": f"gexdex-api returned HTTP {response.status_code}",
-                    "detail": response.text,
-                    "ticker": clean_tickers
-                }
-    except httpx.ConnectError:
-        return {
-            "error": "Failed to connect to gexdex-api microservice on Synology NAS.",
-            "detail": f"Could not reach {settings.GEXDEX_API_URL}. Ensure container is running.",
-            "ticker": clean_tickers
-        }
-    except Exception as e:
-        return {
-            "error": f"Unexpected error querying gexdex-api: {str(e)}",
-            "ticker": clean_tickers
-        }
+                    return {
+                        "error": f"gexdex-api returned HTTP {response.status_code}",
+                        "detail": response.text,
+                        "ticker": clean_tickers
+                    }
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as net_err:
+            last_error = str(net_err)
+            time.sleep(0.2 * (2 ** attempt))
+            continue
+        except Exception as e:
+            last_error = str(e)
+            break
+
+    # 3. SWR Cache Fallback: If live query failed after 3 attempts, serve stale cached data
+    if cache_key in _GEXDEX_MEMORY_CACHE:
+        entry = _GEXDEX_MEMORY_CACHE[cache_key]
+        stale_age = int(time.time() - entry["timestamp"])
+        logging.warning(f"Serving stale GEXDEX cache for {clean_tickers} ({stale_age}s old) due to upstream error: {last_error}")
+        stale_data = entry["data"]
+        _emit_ui_events_from_payload(stale_data)
+        stale_data["_cached_fallback"] = True
+        stale_data["_cache_age_seconds"] = stale_age
+        return stale_data
+
+    # 4. Graceful Structured Failure Payload
+    return {
+        "error": "Temporary connectivity delay with options data feed.",
+        "detail": f"Upstream microservice did not respond after 3 retry attempts ({last_error}).",
+        "ticker": clean_tickers,
+        "is_temporary": True
+    }
+
+
+def _emit_ui_events_from_payload(data: Dict[str, Any]) -> None:
+    """Helper to emit Canvas chart events and strip static image markdown."""
+    if not isinstance(data, dict):
+        return
+
+    if "batch_data" in data and isinstance(data["batch_data"], dict):
+        for sym, item in data["batch_data"].items():
+            if isinstance(item, dict) and "strike_distribution" in item and item["strike_distribution"]:
+                emit_tool_ui_event("get_gexdex", item["strike_distribution"])
+            if isinstance(item, dict):
+                item.pop("markdown_image", None)
+                item.pop("chart_png_url", None)
+    else:
+        if "strike_distribution" in data and data["strike_distribution"]:
+            emit_tool_ui_event("get_gexdex", data["strike_distribution"])
+
+    data.pop("markdown_image", None)
+    data.pop("chart_png_url", None)
 
 
 @register_tool(
@@ -131,7 +184,7 @@ def get_strike_distribution(
     force_refresh: bool = False
 ) -> Dict[str, Any]:
     clean_ticker = ticker.strip().upper().replace("$", "")
-    url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/strikes"
+    url = f"{settings.GEXDEX_API_URL.rstrip('/')}/api/v1/gexdex/strikes"
     params = {
         "ticker": clean_ticker,
         "strike_range": strike_range,
@@ -139,12 +192,19 @@ def get_strike_distribution(
         "force_refresh": str(force_refresh).lower()
     }
     headers = {"X-API-Key": settings.GEXDEX_API_KEY}
-    try:
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.get(url, params=params, headers=headers)
-            if resp.status_code == 200:
-                return resp.json()
-            return {"error": f"gexdex-api returned HTTP {resp.status_code}", "ticker": clean_ticker}
-    except Exception as e:
-        return {"error": str(e), "ticker": clean_ticker}
+    
+    for attempt in range(3):
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                resp = client.get(url, params=params, headers=headers)
+                if resp.status_code == 200:
+                    return resp.json()
+                elif resp.status_code in (502, 503, 504):
+                    time.sleep(0.2 * (2 ** attempt))
+                    continue
+                return {"error": f"gexdex-api returned HTTP {resp.status_code}", "ticker": clean_ticker}
+        except Exception:
+            time.sleep(0.2 * (2 ** attempt))
+            continue
 
+    return {"error": "Failed to fetch strike distribution after 3 retries.", "ticker": clean_ticker}

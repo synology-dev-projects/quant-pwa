@@ -267,10 +267,10 @@ class App {
       if (err.name === 'AbortError') {
         console.log('Stream aborted by user');
       } else {
-        this.chatView.startAssistantMessage();
-        this.chatView.appendToken(`⚠️ **Error:** ${err.message}`);
+        this.chatView.showErrorCard(err.message || 'Network error connecting to Gateway. Please retry.');
       }
     } finally {
+      this.chatView.hideToolStatus();
       const updatedMessages = this.chatView.finishAssistantMessage();
       AppState.saveHistory(updatedMessages);
       this.promptInput.setStreaming(false);
@@ -288,7 +288,8 @@ class App {
     } else if (data.type === 'tool_end') {
       this.chatView.hideToolStatus();
     } else if (data.type === 'error') {
-      this.chatView.appendToken(`\n\n⚠️ **Service Error:** ${data.message}\n\n`);
+      this.chatView.hideToolStatus();
+      this.chatView.showErrorCard(data.message);
     }
   }
 
