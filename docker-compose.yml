@@ -16,11 +16,11 @@ services:
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - MAX_SLIDING_WINDOW_MESSAGES=12
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 3s
-      timeout: 2s
-      retries: 10
-      start_period: 5s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     networks:
       quant-net:
         aliases:
@@ -37,8 +37,7 @@ services:
     environment:
       - CONTAINER_PREFIX=${CONTAINER_PREFIX:-prod}
     depends_on:
-      quant-gateway:
-        condition: service_healthy
+      - quant-gateway
     networks:
       quant-net:
         aliases:
