@@ -29,9 +29,12 @@ Mobile Phone (PWA / iOS / Android)
    - Eliminates fragile regex string parsing. Google Gemini uses full natural language intelligence to identify valid stock tickers from complex user prompts (e.g. `"ok here are my holdings: BLDP, AAOI, ADEA, INTC, SHLS..."`) and automatically batches them into a single `get_gexdex` tool invocation.
 2. **Deterministic Multi-Ticker Execution**:
    - Resolves all portfolio metrics and renders dual-sided GEX/DEX horizontal bar charts concurrently across `ThreadPoolExecutor` worker pools on the Synology NAS.
-3. **Comparative Institutional Ranking**:
+3. **Unified Single-Flight SSE & Client-Side HTML5 Canvas Rendering**:
+   - Eliminates raster image lag and failed image loading. The Gateway emits single-flight `tool_ui` events containing granular strike distribution coordinates directly over the chat SSE stream.
+   - The browser mounts a high-performance **HTML5 Canvas** component (`QuantChart`), rendering interactive dual-panel GEX & DEX charts with touch/hover tooltips, dashed Spot/Wall lines, and offline history persistence in under 10ms.
+4. **Comparative Institutional Ranking**:
    - Automatically provides dealer positioning summaries, gamma regimes, Call/Put walls, and ranked trade positioning.
-4. **Resilient Network Timeouts**:
+5. **Resilient Network Timeouts**:
    - 30-second timeout guards and retry mechanisms ensure heavy multi-asset queries never drop or throw 502 Bad Gateway errors.
 
 ---

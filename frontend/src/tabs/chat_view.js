@@ -1,4 +1,5 @@
 import { createMessageElement } from '../components/message_renderer.js';
+import { QuantChart } from '../components/quant_chart.js';
 
 export class ChatView {
   constructor() {
@@ -6,6 +7,7 @@ export class ChatView {
     this.streamContainer = null;
     this.currentAssistantElement = null;
     this.currentAssistantContent = '';
+    this.currentToolUiEvents = [];
   }
 
   render(container) {
@@ -27,7 +29,7 @@ export class ChatView {
       this.renderWelcomeMessage();
     } else {
       this.messages.forEach((msg) => {
-        const el = createMessageElement(msg.role, msg.content, msg.metadata);
+        const el = createMessageElement(msg.role, msg.content, msg.metadata, msg.toolUiEvents);
         this.streamContainer.appendChild(el);
       });
       this.scrollToBottom();
@@ -54,9 +56,29 @@ export class ChatView {
 
   startAssistantMessage(metadata = null) {
     this.currentAssistantContent = '';
+    this.currentToolUiEvents = [];
     this.currentAssistantElement = createMessageElement('assistant', '', metadata);
     this.streamContainer.appendChild(this.currentAssistantElement);
     this.scrollToBottom();
+  }
+
+  addToolUiEvent(event) {
+    if (!this.currentAssistantElement || !event) return;
+    this.currentToolUiEvents.push(event);
+
+    if (event.name === 'get_gexdex' && event.payload) {
+      const chartBox = document.createElement('div');
+      chartBox.className = 'tool-ui-slot';
+      new QuantChart(chartBox, event.payload);
+      
+      const contentDiv = this.currentAssistantElement.querySelector('.markdown-body');
+      if (contentDiv) {
+        this.currentAssistantElement.insertBefore(chartBox, contentDiv);
+      } else {
+        this.currentAssistantElement.appendChild(chartBox);
+      }
+      this.scrollToBottom();
+    }
   }
 
   appendToken(token) {
@@ -65,7 +87,11 @@ export class ChatView {
     
     const contentDiv = this.currentAssistantElement.querySelector('.markdown-body');
     if (contentDiv) {
-      contentDiv.innerHTML = createMessageElement('assistant', this.currentAssistantContent).querySelector('.markdown-body').innerHTML;
+      let cleaned = this.currentAssistantContent;
+      if (this.currentToolUiEvents.length > 0) {
+        cleaned = cleaned.replace(/!\[(.*?)Options Chart\]\(.*?\)/gi, '').trim();
+      }
+      contentDiv.innerHTML = createMessageElement('assistant', cleaned).querySelector('.markdown-body').innerHTML;
     }
     this.scrollToBottom();
   }
@@ -90,11 +116,16 @@ export class ChatView {
 
   finishAssistantMessage() {
     this.hideToolStatus();
-    if (this.currentAssistantContent) {
-      this.messages.push({ role: 'assistant', content: this.currentAssistantContent });
+    if (this.currentAssistantContent || this.currentToolUiEvents.length > 0) {
+      this.messages.push({
+        role: 'assistant',
+        content: this.currentAssistantContent,
+        toolUiEvents: [...this.currentToolUiEvents]
+      });
     }
     this.currentAssistantElement = null;
     this.currentAssistantContent = '';
+    this.currentToolUiEvents = [];
     this.scrollToBottom();
     return this.messages;
   }

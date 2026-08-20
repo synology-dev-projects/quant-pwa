@@ -41,10 +41,30 @@ export class Lightbox {
 
   open(src, alt = 'Options Chart') {
     if (!this.overlay || !this.image) return;
+    const customSlot = this.overlay.querySelector('.custom-lightbox-slot');
+    if (customSlot) customSlot.remove();
+    this.image.style.display = 'block';
     this.image.src = src;
     this.image.alt = alt;
     this.scale = 1;
     this.updateTransform();
+    this.overlay.classList.add('open');
+  }
+
+  openCustom(element) {
+    if (!this.overlay) return;
+    if (this.image) this.image.style.display = 'none';
+    const contentBox = this.overlay.querySelector('.lightbox-content');
+    if (contentBox) {
+      const oldSlot = contentBox.querySelector('.custom-lightbox-slot');
+      if (oldSlot) oldSlot.remove();
+      const slot = document.createElement('div');
+      slot.className = 'custom-lightbox-slot';
+      slot.style.width = '100%';
+      slot.style.maxWidth = '800px';
+      slot.appendChild(element);
+      contentBox.appendChild(slot);
+    }
     this.overlay.classList.add('open');
   }
 
@@ -53,7 +73,10 @@ export class Lightbox {
     this.overlay.classList.remove('open');
     if (this.image) {
       this.image.src = '';
+      this.image.style.display = 'block';
     }
+    const customSlot = this.overlay.querySelector('.custom-lightbox-slot');
+    if (customSlot) customSlot.remove();
   }
 
   toggleZoom(e) {

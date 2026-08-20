@@ -9,6 +9,7 @@ from app.config import settings
 from app.core.temporal import generate_temporal_system_prompt, get_market_status
 from app.core.context import apply_sliding_window
 from app.tools import registry
+from app.tools.registry import tool_ui_events_var
 from app.tools.gexdex_tool import get_gexdex
 
 SYSTEM_INSTRUCTION_BASE = """You are Quant AI, an elite institutional Options & Quantitative Market Strategist built for active traders.
@@ -48,6 +49,9 @@ async def stream_chat_response(
     # 1. Yield temporal metadata immediately
     meta_payload = json.dumps({"type": "temporal_meta", "meta": market_meta})
     yield f"data: {meta_payload}\n\n"
+
+    # Initialize tool UI events list for this async stream
+    tool_ui_events_var.set([])
 
     try:
         client = create_genai_client()
@@ -123,6 +127,13 @@ async def stream_chat_response(
         yield f"data: {err_msg}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
+
+    # Yield all captured Tool UI events (single-flight chart coordinates & payload)
+    captured_ui_events = tool_ui_events_var.get() or []
+    for ui_event in captured_ui_events:
+        if client_disconnected_fn and await client_disconnected_fn():
+            return
+        yield f"data: {json.dumps(ui_event)}\n\n"
 
     # If failover occurred, notify user
     if active_model_used != selected_model:

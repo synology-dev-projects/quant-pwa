@@ -1,3 +1,5 @@
+import { QuantChart } from './quant_chart.js';
+
 export function renderMarkdown(text) {
   if (!text) return '';
 
@@ -17,10 +19,10 @@ export function renderMarkdown(text) {
   // Inline code: `code`
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
 
-  // Images: ![alt](url) -> Render as interactive Chart Card
+  // Images: ![alt](url) -> Fallback to interactive card if no Canvas chart was mounted
   html = html.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, url) => {
     return `
-      <div class="chart-card" onclick="window.quantLightbox && window.quantLightbox.open('${url}', '${alt}')">
+      <div class="chart-card fallback" onclick="window.quantLightbox && window.quantLightbox.open('${url}', '${alt}')">
         <img class="chart-img" src="${url}" alt="${alt}" loading="lazy" />
         <div class="chart-hint">
           <span>📊 ${alt || 'Options Exposure Chart'}</span>
@@ -53,7 +55,7 @@ export function renderMarkdown(text) {
   return html;
 }
 
-export function createMessageElement(role, content, metadata = null) {
+export function createMessageElement(role, content, metadata = null, toolUiEvents = []) {
   const bubble = document.createElement('div');
   bubble.className = `message-bubble ${role}`;
 
@@ -68,9 +70,27 @@ export function createMessageElement(role, content, metadata = null) {
     `;
   }
 
+  // 1. If single-flight Tool UI events exist, mount interactive Canvas charts
+  if (role === 'assistant' && toolUiEvents && toolUiEvents.length > 0) {
+    toolUiEvents.forEach(evt => {
+      if (evt.name === 'get_gexdex' && evt.payload) {
+        const chartBox = document.createElement('div');
+        chartBox.className = 'tool-ui-slot';
+        new QuantChart(chartBox, evt.payload);
+        bubble.appendChild(chartBox);
+      }
+    });
+  }
+
+  // 2. Strip redundant markdown images if client-side Canvas charts are already mounted
+  let cleanedContent = content;
+  if (toolUiEvents && toolUiEvents.length > 0) {
+    cleanedContent = (content || '').replace(/!\[(.*?)Options Chart\]\(.*?\)/gi, '').trim();
+  }
+
   const contentDiv = document.createElement('div');
   contentDiv.className = 'markdown-body';
-  contentDiv.innerHTML = badgeHtml + renderMarkdown(content);
+  contentDiv.innerHTML = badgeHtml + renderMarkdown(cleanedContent);
 
   bubble.appendChild(contentDiv);
   return bubble;

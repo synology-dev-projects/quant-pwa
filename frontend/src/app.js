@@ -281,6 +281,8 @@ class App {
   handleSSEEvent(data) {
     if (data.type === 'token') {
       this.chatView.appendToken(data.content);
+    } else if (data.type === 'tool_ui') {
+      this.chatView.addToolUiEvent(data);
     } else if (data.type === 'tool_start') {
       this.chatView.showToolStatus(data.name, data.args);
     } else if (data.type === 'tool_end') {

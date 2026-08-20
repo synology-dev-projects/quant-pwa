@@ -1,5 +1,22 @@
 import inspect
-from typing import Callable, Dict, Any, List
+from contextvars import ContextVar
+from typing import Callable, Dict, Any, List, Optional
+
+tool_ui_events_var: ContextVar[Optional[List[Dict[str, Any]]]] = ContextVar("tool_ui_events_var", default=None)
+
+
+def emit_tool_ui_event(name: str, payload: Dict[str, Any]) -> None:
+    """
+    Emits a structured UI event from a tool into the current async request's SSE stream context.
+    """
+    events = tool_ui_events_var.get()
+    if events is not None and isinstance(events, list):
+        events.append({
+            "type": "tool_ui",
+            "name": name,
+            "payload": payload
+        })
+
 
 class ToolRegistry:
     def __init__(self):

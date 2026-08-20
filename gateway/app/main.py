@@ -224,6 +224,40 @@ def proxy_chart_png(
         return Response(content=b"", media_type="image/png", status_code=502, headers=cache_headers)
 
 
+@app.get("/api/v1/gexdex/strikes", summary="Proxy GEX/DEX Strike Distribution JSON", dependencies=[Depends(verify_app_passcode)])
+def proxy_strikes(
+    ticker: str = Query("AAPL"),
+    max_dte: int = Query(50),
+    strike_range: int = Query(25),
+    force_refresh: bool = Query(False)
+):
+    """
+    Proxies strike distribution JSON directly to gexdex-api.
+    Used for on-demand chart rehydration and standalone queries.
+    """
+    clean_ticker = ticker.strip().upper()
+    url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/strikes"
+    params = {
+        "ticker": clean_ticker,
+        "max_dte": max_dte,
+        "strike_range": strike_range,
+        "force_refresh": str(force_refresh).lower()
+    }
+    headers = {
+        "X-API-Key": settings.GEXDEX_API_KEY
+    }
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.get(url, params=params, headers=headers)
+            return Response(
+                content=resp.content,
+                media_type="application/json",
+                status_code=resp.status_code
+            )
+    except Exception as e:
+        return {"error": f"Failed to reach gexdex-api: {str(e)}", "ticker": clean_ticker}
+
+
 @app.post("/api/chat/stream", summary="Stream Chat Response", dependencies=[Depends(verify_app_passcode)])
 async def chat_stream(request: Request, body: ChatStreamRequest):
     """

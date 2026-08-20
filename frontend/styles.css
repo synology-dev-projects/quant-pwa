@@ -924,3 +924,197 @@ html, body {
   40%, 60% { transform: translate3d(5px, 0, 0); }
 }
 
+/* ==========================================================================
+   Interactive Quant Options Canvas Chart Styles
+   ========================================================================== */
+
+.quant-chart-card {
+  background: #0f141d;
+  border: 1px solid #1e2430;
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 12px 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  width: 100%;
+}
+
+.quant-chart-card.empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.chart-card-header {
+  padding: 12px 14px;
+  background: #151a24;
+  border-bottom: 1px solid #1e2430;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chart-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chart-ticker-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-regime-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 10px;
+}
+
+.chart-regime-pill.long {
+  background: rgba(0, 245, 212, 0.12);
+  color: #00f5d4;
+  border: 1px solid rgba(0, 245, 212, 0.3);
+}
+
+.chart-regime-pill.short {
+  background: rgba(255, 0, 110, 0.12);
+  color: #ff006e;
+  border: 1px solid rgba(255, 0, 110, 0.3);
+}
+
+.expand-btn {
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.expand-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chart-metrics-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.metric-pill {
+  background: #1c2331;
+  border: 1px solid #283244;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  color: #a0aec0;
+}
+
+.metric-pill strong {
+  color: #ffffff;
+}
+
+.metric-pill.call-wall {
+  border-color: rgba(0, 245, 212, 0.4);
+}
+
+.metric-pill.call-wall strong {
+  color: #00f5d4;
+}
+
+.metric-pill.put-wall {
+  border-color: rgba(255, 0, 110, 0.4);
+}
+
+.metric-pill.put-wall strong {
+  color: #ff006e;
+}
+
+.chart-canvas-container {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #0f141d;
+  touch-action: pan-y;
+}
+
+.quant-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: crosshair;
+}
+
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(15, 20, 29, 0.95);
+  border: 1px solid rgba(58, 134, 255, 0.5);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: #ffffff;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  min-width: 140px;
+}
+
+.tt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #212836;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
+.tt-dist {
+  color: #93c5fd;
+  font-size: 10px;
+}
+
+.tt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.tt-row.net {
+  border-top: 1px solid #212836;
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 14px 10px 14px;
+  background: #111622;
+  border-top: 1px solid #1e2430;
+  font-size: 10px;
+  color: #718096;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+
