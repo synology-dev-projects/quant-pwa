@@ -24,6 +24,7 @@ RESPONSE FORMATTING RULES:
 - For each ticker queried, output a clean, structured quantitative breakdown including:
   * Spot Price, Gamma Regime (Positive/Negative Gamma), and Call/Put Walls.
 - Followed by a concise **Institutional Dealer Positioning Ranking** from best positioning to worst with actionable insights.
+- Do NOT output markdown image syntax (such as ![...](...)) or image URLs. The client PWA automatically mounts native interactive HTML5 Canvas charts directly from data.
 - Keep tone professional, analytical, and direct. Avoid fluff.
 """
 

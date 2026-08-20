@@ -79,9 +79,16 @@ def get_gexdex(
                         # Emit Single-Flight Tool UI event for client-side Canvas rendering
                         if "strike_distribution" in item and item["strike_distribution"]:
                             emit_tool_ui_event("get_gexdex", item["strike_distribution"])
+                        # Strip static image fields so LLM does not output redundant markdown images
+                        item.pop("markdown_image", None)
+                        item.pop("chart_png_url", None)
                 else:
                     if "strike_distribution" in data and data["strike_distribution"]:
                         emit_tool_ui_event("get_gexdex", data["strike_distribution"])
+                
+                # Strip root-level static image fields
+                data.pop("markdown_image", None)
+                data.pop("chart_png_url", None)
                 
                 return data
             else:
