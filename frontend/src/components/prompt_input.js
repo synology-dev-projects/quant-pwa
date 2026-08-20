@@ -1,22 +1,73 @@
+const DEFAULT_TOOLS = [
+  {
+    name: 'get_gexdex',
+    display: '/gex SPY',
+    icon: '⚡',
+    title: 'Institutional GEX & DEX',
+    description: 'Calculates institutional Gamma & Delta Exposure, Call/Put Walls, and Zero Gamma Flip points.',
+    promptTemplate: '/gex SPY',
+    params: [
+      { name: 'ticker', type: 'string', required: true, desc: 'Stock ticker (e.g. SPY, NVDA, AAPL)' },
+      { name: 'strike_range', type: 'int', required: false, desc: 'Strikes around spot (default: 25)' },
+      { name: 'max_dte', type: 'int', required: false, desc: 'Max days to expiration (default: 50)' }
+    ],
+    example: '/gex NVDA'
+  },
+  {
+    name: 'get_strike_distribution',
+    display: '/strikes NVDA',
+    icon: '📊',
+    title: 'Strike Distribution Matrix',
+    description: 'Fetches granular strike-by-strike GEX/DEX distribution with multi-expiration breakdowns for interactive charts.',
+    promptTemplate: '/strikes NVDA',
+    params: [
+      { name: 'ticker', type: 'string', required: true, desc: 'Stock ticker (e.g. NVDA, SPY, TSLA)' },
+      { name: 'strike_range', type: 'int', required: false, desc: 'Strikes around spot (default: 25)' }
+    ],
+    example: '/strikes TSLA'
+  },
+  {
+    name: 'get_market_status',
+    display: '/market',
+    icon: '🕒',
+    title: 'Market Session Clock',
+    description: 'Returns real-time US Equities market session status (pre-market, regular, after-hours, holiday).',
+    promptTemplate: '/market',
+    params: [],
+    example: '/market'
+  },
+  {
+    name: 'macro_schedule',
+    display: '/macro',
+    icon: '🌐',
+    title: 'Macroeconomic Catalysts',
+    description: 'Queries key economic releases, CPI, FOMC rate decisions, and volatility catalysts this week.',
+    promptTemplate: '/macro',
+    params: [],
+    example: '/macro'
+  }
+];
+
 export class PromptInput {
   constructor(container, onSubmit, onStop) {
     this.container = container;
     this.onSubmit = onSubmit;
     this.onStop = onStop;
     this.isStreaming = false;
+    this.tools = [...DEFAULT_TOOLS];
+    this.longPressTimer = null;
+    this.activeTooltipBtn = null;
 
     this.render();
     this.initEvents();
+    this.initTooltip();
+    this.fetchMcpTools();
   }
 
   render() {
     this.container.innerHTML = `
-      <div class="quick-chips-bar">
-        <button class="chip-btn" data-prompt="Analyze GEX and dealer positioning on SPY">/gex SPY</button>
-        <button class="chip-btn" data-prompt="Analyze GEX and dealer positioning on NVDA">/gex NVDA</button>
-        <button class="chip-btn" data-prompt="Analyze GEX and dealer positioning on AAPL">/gex AAPL</button>
-        <button class="chip-btn" data-prompt="Analyze GEX and dealer positioning on TSLA">/gex TSLA</button>
-        <button class="chip-btn" data-prompt="What are the key macro catalysts and economic releases this week?">/macro</button>
+      <div class="quick-chips-bar" id="quickChipsBar">
+        ${this.renderChipsHtml()}
       </div>
       <div class="prompt-bar-container">
         <form class="prompt-form" id="promptForm">
@@ -41,10 +92,38 @@ export class PromptInput {
       </div>
     `;
 
+    this.chipsBar = this.container.querySelector('#quickChipsBar');
     this.textarea = this.container.querySelector('#promptTextarea');
     this.form = this.container.querySelector('#promptForm');
     this.sendBtn = this.container.querySelector('#sendBtn');
     this.stopBtn = this.container.querySelector('#stopBtn');
+  }
+
+  renderChipsHtml() {
+    return this.tools.map((tool, index) => `
+      <button
+        type="button"
+        class="skill-chip"
+        data-index="${index}"
+        data-prompt="${tool.promptTemplate}"
+        title="${tool.title}"
+      >
+        <span class="skill-chip-icon">${tool.icon}</span>
+        <span class="skill-chip-name">${tool.display}</span>
+        <span class="skill-chip-pulse"></span>
+      </button>
+    `).join('');
+  }
+
+  initTooltip() {
+    let tooltip = document.getElementById('skillTooltip');
+    if (!tooltip) {
+      tooltip = document.createElement('div');
+      tooltip.id = 'skillTooltip';
+      tooltip.className = 'skill-tooltip-card';
+      document.body.appendChild(tooltip);
+    }
+    this.tooltip = tooltip;
   }
 
   initEvents() {
@@ -73,16 +152,221 @@ export class PromptInput {
       if (this.onStop) this.onStop();
     });
 
-    // Quick chips
-    this.container.querySelectorAll('.chip-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const prompt = btn.getAttribute('data-prompt');
-        if (prompt) {
-          this.textarea.value = prompt;
-          this.submit();
+    // Attach skill chip interactions
+    this.bindChipEvents();
+
+    // Global dismiss for tooltips on outside click/scroll
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.skill-chip') && !e.target.closest('#skillTooltip')) {
+        this.hideTooltip();
+      }
+    });
+    window.addEventListener('scroll', () => this.hideTooltip(), { passive: true });
+  }
+
+  bindChipEvents() {
+    const chips = this.chipsBar.querySelectorAll('.skill-chip');
+    chips.forEach((btn) => {
+      const idx = parseInt(btn.getAttribute('data-index'), 10);
+      const tool = this.tools[idx];
+      if (!tool) return;
+
+      // 1. Click-to-Insert and Focus
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.hideTooltip();
+        this.insertPrompt(tool.promptTemplate);
+      });
+
+      // 2. Desktop Hover (mouseenter / mouseleave)
+      btn.addEventListener('mouseenter', () => {
+        this.showTooltip(tool, btn);
+      });
+      btn.addEventListener('mouseleave', () => {
+        this.hideTooltip();
+      });
+
+      // 3. Mobile Touch (Long-Press for tooltip, tap to insert)
+      btn.addEventListener('touchstart', (e) => {
+        this.longPressTimer = setTimeout(() => {
+          this.showTooltip(tool, btn);
+          if (navigator.vibrate) navigator.vibrate(25);
+        }, 380);
+      }, { passive: true });
+
+      btn.addEventListener('touchend', () => {
+        if (this.longPressTimer) {
+          clearTimeout(this.longPressTimer);
+          this.longPressTimer = null;
+        }
+      });
+
+      btn.addEventListener('touchmove', () => {
+        if (this.longPressTimer) {
+          clearTimeout(this.longPressTimer);
+          this.longPressTimer = null;
         }
       });
     });
+  }
+
+  showTooltip(tool, btnElement) {
+    if (!this.tooltip) return;
+
+    const paramsHtml = tool.params && tool.params.length > 0
+      ? `<div class="st-params-section">
+           <div class="st-params-title">PARAMETERS</div>
+           <div class="st-params-list">
+             ${tool.params.map(p => `
+               <div class="st-param-row">
+                 <span class="st-param-tag ${p.required ? 'required' : 'optional'}">${p.name} ${p.required ? '*' : ''}</span>
+                 <span class="st-param-desc">${p.desc || p.type}</span>
+               </div>
+             `).join('')}
+           </div>
+         </div>`
+      : '';
+
+    const exampleHtml = tool.example
+      ? `<div class="st-example-section">
+           <span class="st-example-lbl">QUICK PROMPT:</span>
+           <code class="st-example-chip">${tool.example}</code>
+         </div>`
+      : '';
+
+    this.tooltip.innerHTML = `
+      <div class="st-header">
+        <div class="st-title-group">
+          <span class="st-icon">${tool.icon}</span>
+          <span class="st-title">${tool.title}</span>
+        </div>
+        <span class="st-mcp-badge">MCP Skill</span>
+      </div>
+      <div class="st-desc">${tool.description}</div>
+      ${paramsHtml}
+      ${exampleHtml}
+      <div class="st-footer-hint">Click to insert into chat</div>
+    `;
+
+    this.tooltip.classList.add('visible');
+
+    // Position above the chip button
+    const rect = btnElement.getBoundingClientRect();
+    const tooltipRect = this.tooltip.getBoundingClientRect();
+
+    let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+    let top = rect.top - tooltipRect.height - 10;
+
+    // Viewport clamping
+    const pad = 12;
+    if (left < pad) left = pad;
+    if (left + tooltipRect.width > window.innerWidth - pad) {
+      left = window.innerWidth - tooltipRect.width - pad;
+    }
+
+    if (top < pad) {
+      // If no room above, flip below
+      top = rect.bottom + 10;
+    }
+
+    this.tooltip.style.left = `${Math.round(left)}px`;
+    this.tooltip.style.top = `${Math.round(top)}px`;
+    this.activeTooltipBtn = btnElement;
+  }
+
+  hideTooltip() {
+    if (this.tooltip) {
+      this.tooltip.classList.remove('visible');
+    }
+    this.activeTooltipBtn = null;
+  }
+
+  insertPrompt(promptText) {
+    this.textarea.value = `${promptText} `;
+    this.textarea.style.height = 'auto';
+    this.textarea.style.height = `${Math.min(this.textarea.scrollHeight, 120)}px`;
+    this.textarea.focus();
+    // Move cursor to end
+    this.textarea.setSelectionRange(this.textarea.value.length, this.textarea.value.length);
+  }
+
+  async fetchMcpTools() {
+    try {
+      const res = await fetch('/mcp/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'tools/list',
+          params: {}
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.result?.tools && Array.isArray(data.result.tools)) {
+          this.processMcpTools(data.result.tools);
+        }
+      }
+    } catch (e) {
+      console.debug('Dynamic MCP tool sync fallback to defaults', e);
+    }
+  }
+
+  processMcpTools(mcpTools) {
+    const iconMap = {
+      'get_gexdex': { icon: '⚡', display: '/gex SPY', example: '/gex NVDA' },
+      'get_strike_distribution': { icon: '📊', display: '/strikes NVDA', example: '/strikes TSLA' },
+      'get_market_status': { icon: '🕒', display: '/market', example: '/market' }
+    };
+
+    const syncedTools = [];
+
+    mcpTools.forEach((tool) => {
+      const meta = iconMap[tool.name] || {
+        icon: '🔌',
+        display: `/${tool.name.replace(/^get_/, '')}`,
+        example: `/${tool.name.replace(/^get_/, '')}`
+      };
+
+      const requiredProps = tool.inputSchema?.required || [];
+      const properties = tool.inputSchema?.properties || {};
+      const params = Object.keys(properties).map(key => ({
+        name: key,
+        type: properties[key].type || 'string',
+        required: requiredProps.includes(key),
+        desc: properties[key].description || ''
+      }));
+
+      syncedTools.push({
+        name: tool.name,
+        display: meta.display,
+        icon: meta.icon,
+        title: tool.name.replace(/^get_/, '').replace(/_/g, ' ').toUpperCase(),
+        description: tool.description,
+        promptTemplate: meta.display,
+        params: params,
+        example: meta.example
+      });
+    });
+
+    // Always ensure macro catalyst chip is present
+    if (!syncedTools.some(t => t.name === 'macro_schedule')) {
+      syncedTools.push({
+        name: 'macro_schedule',
+        display: '/macro',
+        icon: '🌐',
+        title: 'Macro Catalysts',
+        description: 'Queries key economic releases, CPI, FOMC rate decisions, and volatility catalysts this week.',
+        promptTemplate: '/macro',
+        params: [],
+        example: '/macro'
+      });
+    }
+
+    this.tools = syncedTools;
+    this.chipsBar.innerHTML = this.renderChipsHtml();
+    this.bindChipEvents();
   }
 
   submit() {
