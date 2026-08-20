@@ -58,11 +58,19 @@ export class ChatView {
     this.currentAssistantContent = '';
     this.currentToolUiEvents = [];
     this.currentAssistantElement = createMessageElement('assistant', '', metadata);
+    
+    // Immediately show active querying spinner while awaiting Gemini / Synology NAS
+    const pill = document.createElement('div');
+    pill.className = 'tool-pill';
+    pill.innerHTML = `<div class="tool-spinner"></div> <span>Querying Synology NAS for quant market data...</span>`;
+    this.currentAssistantElement.insertBefore(pill, this.currentAssistantElement.firstChild);
+
     this.streamContainer.appendChild(this.currentAssistantElement);
     this.scrollToBottom();
   }
 
   addToolUiEvent(event) {
+    this.hideToolStatus();
     if (!this.currentAssistantElement || !event) return;
     this.currentToolUiEvents.push(event);
 
@@ -82,6 +90,7 @@ export class ChatView {
   }
 
   appendToken(token) {
+    this.hideToolStatus();
     if (!this.currentAssistantElement) return;
     this.currentAssistantContent += token;
     
