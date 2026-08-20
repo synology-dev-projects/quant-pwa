@@ -15,6 +15,12 @@ services:
       - GEXDEX_API_KEY=${GEXDEX_API_KEY}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - MAX_SLIDING_WINDOW_MESSAGES=12
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
     networks:
       quant-net:
         aliases:
@@ -31,7 +37,8 @@ services:
     environment:
       - CONTAINER_PREFIX=${CONTAINER_PREFIX:-prod}
     depends_on:
-      - quant-gateway
+      quant-gateway:
+        condition: service_healthy
     networks:
       quant-net:
         aliases:

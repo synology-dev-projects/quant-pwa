@@ -10,6 +10,7 @@ export class LockScreen {
     this.submitBtn = document.getElementById('lockSubmitBtn');
     this.errorMsg = document.getElementById('lockErrorMsg');
     this.card = document.getElementById('lockCard');
+    this.retryTimer = null;
 
     this.init();
   }
@@ -31,6 +32,11 @@ export class LockScreen {
 
     // Clear error on user typing
     this.passwordInput?.addEventListener('input', () => {
+      if (this.retryTimer) {
+        clearTimeout(this.retryTimer);
+        this.retryTimer = null;
+        this.setLoading(false);
+      }
       this.clearError();
     });
   }
@@ -49,7 +55,7 @@ export class LockScreen {
         }
       }
     } catch (e) {
-      console.warn('Gateway status check error:', e);
+      console.warn('Gateway status check error (may still be booting):', e);
     }
 
     // 2. Check if active session exists & is not expired locally
@@ -69,7 +75,7 @@ export class LockScreen {
         return true;
       }
     } catch (e) {
-      console.warn('Session verification error:', e);
+      console.warn('Session verification error (gateway booting):', e);
     }
 
     // Token invalid or expired
@@ -90,6 +96,10 @@ export class LockScreen {
   }
 
   unlock(immediate = false) {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
     if (!this.overlay) return;
 
     if (immediate) {
@@ -126,36 +136,105 @@ export class LockScreen {
         body: JSON.stringify({ password })
       });
 
+      // 1. Gateway is still booting up (502/503/504) -> Auto-retry
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        this.startAutoRetry(password);
+        return;
+      }
+
       const data = await res.json().catch(() => ({}));
 
+      // 2. Successful Login
       if (res.ok && data.token) {
-        // Save session token (never store raw password)
         AppState.setSessionToken(data.token, data.expires_at);
+        this.clearError();
         this.unlock();
-      } else {
+      } 
+      // 3. True Credential Failure (Wrong password / Rate Limit)
+      else if (res.status === 401 || res.status === 429) {
         const errorText = data.detail || 'Invalid passcode. Please try again.';
         this.showError(errorText);
         this.shakeCard();
+        this.setLoading(false);
+      } 
+      // 4. Other Server Status -> Fallback to Auto-Retry
+      else {
+        this.startAutoRetry(password);
       }
     } catch (err) {
-      this.showError('Unable to connect to Gateway. Check connection.');
-      this.shakeCard();
-    } finally {
-      this.setLoading(false);
+      // Network connection error during container boot -> Auto-retry
+      this.startAutoRetry(password);
     }
+  }
+
+  startAutoRetry(password) {
+    this.showBootNotice('⏳ Gateway is waking up... Auto-verifying in a moment');
+    this.setLoading(true);
+
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    let attempts = 0;
+    const maxAttempts = 15; // 30 seconds max
+
+    const retry = async () => {
+      attempts++;
+      const gatewayBase = AppState.getGatewayUrl() || '';
+      try {
+        const res = await fetch(`${gatewayBase}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data.token) {
+            AppState.setSessionToken(data.token, data.expires_at);
+            this.clearError();
+            this.unlock();
+            return;
+          }
+        } else if (res.status === 401 || res.status === 429) {
+          const data = await res.json().catch(() => ({}));
+          this.showError(data.detail || 'Invalid passcode. Please try again.');
+          this.shakeCard();
+          this.setLoading(false);
+          return;
+        }
+      } catch (err) {
+        // Still booting
+      }
+
+      if (attempts < maxAttempts) {
+        const remainingSec = Math.max(2, (maxAttempts - attempts) * 2);
+        this.showBootNotice(`⏳ Gateway is initializing (${remainingSec}s)... Auto-verifying`);
+        this.retryTimer = setTimeout(retry, 2000);
+      } else {
+        this.showError('Gateway connection timed out. Please tap Unlock to retry.');
+        this.setLoading(false);
+      }
+    };
+
+    this.retryTimer = setTimeout(retry, 2000);
   }
 
   showError(message) {
     if (this.errorMsg) {
       this.errorMsg.textContent = message;
-      this.errorMsg.classList.add('visible');
+      this.errorMsg.className = 'lock-error visible';
+    }
+  }
+
+  showBootNotice(message) {
+    if (this.errorMsg) {
+      this.errorMsg.textContent = message;
+      this.errorMsg.className = 'lock-error visible boot-notice';
     }
   }
 
   clearError() {
     if (this.errorMsg) {
       this.errorMsg.textContent = '';
-      this.errorMsg.classList.remove('visible');
+      this.errorMsg.className = 'lock-error';
     }
   }
 
