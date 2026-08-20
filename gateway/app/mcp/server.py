@@ -10,6 +10,7 @@ Exposes institutional tools, resources, and prompt templates to external MCP cli
 
 import json
 import uuid
+import inspect
 import asyncio
 import logging
 from typing import Dict, Any, Optional, List
@@ -173,7 +174,9 @@ async def handle_rpc_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
                 ticker = args.get("ticker", "SPY")
                 strike_range = int(args.get("strike_range", 25))
                 max_dte = int(args.get("max_dte", 50))
-                res = await get_gexdex(ticker=ticker, strike_range=strike_range, max_dte=max_dte)
+                res = get_gexdex(ticker=ticker, strike_range=strike_range, max_dte=max_dte)
+                if inspect.isawaitable(res):
+                    res = await res
                 return {
                     "jsonrpc": "2.0",
                     "id": req_id,
@@ -189,7 +192,9 @@ async def handle_rpc_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
                 ticker = args.get("ticker", "SPY")
                 strike_range = int(args.get("strike_range", 25))
                 max_dte = int(args.get("max_dte", 50))
-                res = await get_strike_distribution(ticker=ticker, strike_range=strike_range, max_dte=max_dte)
+                res = get_strike_distribution(ticker=ticker, strike_range=strike_range, max_dte=max_dte)
+                if inspect.isawaitable(res):
+                    res = await res
                 return {
                     "jsonrpc": "2.0",
                     "id": req_id,
@@ -203,6 +208,8 @@ async def handle_rpc_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
 
             elif tool_name == "get_market_status":
                 status_res = get_market_status()
+                if inspect.isawaitable(status_res):
+                    status_res = await status_res
                 return {
                     "jsonrpc": "2.0",
                     "id": req_id,
@@ -230,6 +237,9 @@ async def handle_rpc_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
         elif method == "resources/read":
             uri = params.get("uri", "")
             if uri == "quant://market-status":
+                status_res = get_market_status()
+                if inspect.isawaitable(status_res):
+                    status_res = await status_res
                 return {
                     "jsonrpc": "2.0",
                     "id": req_id,
@@ -238,14 +248,16 @@ async def handle_rpc_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
                             {
                                 "uri": uri,
                                 "mimeType": "application/json",
-                                "text": json.dumps(get_market_status(), indent=2)
+                                "text": json.dumps(status_res, indent=2)
                             }
                         ]
                     }
                 }
             elif uri.startswith("quant://gexdex/"):
                 ticker = uri.replace("quant://gexdex/", "").strip().upper()
-                res = await get_gexdex(ticker=ticker)
+                res = get_gexdex(ticker=ticker)
+                if inspect.isawaitable(res):
+                    res = await res
                 return {
                     "jsonrpc": "2.0",
                     "id": req_id,
