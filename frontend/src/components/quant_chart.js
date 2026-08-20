@@ -116,10 +116,30 @@ export class QuantChart {
     this.ctx = this.canvas.getContext('2d');
 
     this.bindEvents();
-    this.draw();
 
-    // Responsive auto-redraw
-    window.addEventListener('resize', () => this.draw());
+    // Instant initial draw on next animation frame after DOM layout
+    requestAnimationFrame(() => this.draw());
+
+    // Continuous auto-redraw whenever container geometry changes
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0) {
+            this.draw();
+          }
+        }
+      });
+      this.resizeObserver.observe(this.canvasContainer);
+    } else {
+      window.addEventListener('resize', () => this.draw());
+    }
+  }
+
+  destroy() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
   }
 
   renderFallback() {

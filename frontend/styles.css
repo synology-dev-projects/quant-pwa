@@ -928,6 +928,12 @@ html, body {
    Interactive Quant Options Canvas Chart Styles
    ========================================================================== */
 
+.tool-ui-slot {
+  width: 100%;
+  box-sizing: border-box;
+  display: block;
+}
+
 .quant-chart-card {
   background: #0a0e17;
   border: 1px solid #1e293b;
@@ -936,6 +942,7 @@ html, body {
   margin: 12px 0;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
   width: 100%;
+  box-sizing: border-box;
 }
 
 .quant-chart-card.empty {
