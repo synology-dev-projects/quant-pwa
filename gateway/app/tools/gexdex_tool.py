@@ -108,3 +108,43 @@ def get_gexdex(
             "error": f"Unexpected error querying gexdex-api: {str(e)}",
             "ticker": clean_tickers
         }
+
+
+@register_tool(
+    name="get_strike_distribution",
+    description="Fetch granular strike-level GEX and DEX distribution with multi-expiration breakdowns for a single ticker.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "ticker": {"type": "string", "description": "Stock ticker symbol (e.g. SPY, NVDA)"},
+            "strike_range": {"type": "integer", "description": "Number of strikes above/below spot (default: 25)"},
+            "max_dte": {"type": "integer", "description": "Maximum DTE (default: 50)"},
+            "force_refresh": {"type": "boolean", "description": "Bypass cache"}
+        },
+        "required": ["ticker"]
+    }
+)
+def get_strike_distribution(
+    ticker: str = "SPY",
+    strike_range: int = 25,
+    max_dte: int = 50,
+    force_refresh: bool = False
+) -> Dict[str, Any]:
+    clean_ticker = ticker.strip().upper().replace("$", "")
+    url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/strikes"
+    params = {
+        "ticker": clean_ticker,
+        "strike_range": strike_range,
+        "max_dte": max_dte,
+        "force_refresh": str(force_refresh).lower()
+    }
+    headers = {"X-API-Key": settings.GEXDEX_API_KEY}
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.get(url, params=params, headers=headers)
+            if resp.status_code == 200:
+                return resp.json()
+            return {"error": f"gexdex-api returned HTTP {resp.status_code}", "ticker": clean_ticker}
+    except Exception as e:
+        return {"error": str(e), "ticker": clean_ticker}
+

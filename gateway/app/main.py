@@ -18,10 +18,24 @@ from app.core.auth import (
     record_successful_attempt
 )
 
+from contextlib import asynccontextmanager
+from app.mcp import mcp_router, mcp_client_manager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize MCP Client Hub
+    await mcp_client_manager.initialize()
+    yield
+    # Shutdown: Close active MCP sessions
+    await mcp_client_manager.close()
+
+
 app = FastAPI(
     title="Quant AI Agent Gateway",
-    description="Ultra-low latency BFF Gateway for Quant AI Mobile Chat PWA on Synology NAS.",
-    version="1.0.0"
+    description="Ultra-low latency BFF Gateway with bi-directional Model Context Protocol (MCP) support for Quant AI Mobile Chat PWA on Synology NAS.",
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Enable CORS for PWA and Cloudflare tunnel origins
@@ -32,6 +46,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount Model Context Protocol (MCP) Router
+app.include_router(mcp_router)
 
 
 def verify_app_passcode(authorization: Optional[str] = Header(None)) -> str:

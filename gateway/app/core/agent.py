@@ -81,7 +81,8 @@ async def stream_chat_response(
             )
         )
 
-    callable_tools = list(registry.get_callable_map().values())
+    from app.mcp.client import mcp_client_manager
+    callable_tools = list(registry.get_callable_map().values()) + mcp_client_manager.get_all_tools()
 
     config = types.GenerateContentConfig(
         system_instruction=full_system_instruction,

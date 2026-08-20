@@ -86,6 +86,21 @@ The PWA is guarded by a glassmorphic **Password Protected Lock Screen (Auth Gate
 
 ---
 
+## 🔌 Model Context Protocol (MCP) Integration (Bi-Directional)
+
+The Gateway includes native, FAANG-grade **Model Context Protocol (MCP)** support (compliant with protocol version `2024-11-05`):
+
+### 1. Inbound MCP Server (`/mcp/sse` & `/mcp/messages`)
+External tools (Cursor, Claude Desktop, Antigravity IDE, custom algos) can connect directly to your Synology NAS over MCP SSE:
+- **Tools**: `get_gexdex`, `get_strike_distribution`, `get_market_status`
+- **Resources**: `quant://market-status`, `quant://gexdex/{ticker}`
+- **Prompts**: `options-dealer-analysis`
+
+### 2. Outbound MCP Client Hub (`MCPClientManager`)
+The Gateway dynamically discovers tools from external MCP servers and registers them into Google Gemini's live function-calling context.
+
+---
+
 ## 🔌 Adding New Skills (Extensibility)
 
 Create a new tool file in `gateway/app/tools/levels_tool.py`:
@@ -99,4 +114,5 @@ from app.tools.registry import register_tool
 async def get_quant_levels(ticker: str):
     return {"ticker": ticker, "pivot": 5800, "r1": 5850}
 ```
-Import it in `gateway/app/tools/__init__.py` — the Gateway automatically registers it with Gemini with zero frontend changes needed.
+Import it in `gateway/app/tools/__init__.py` — the Gateway automatically registers it with Gemini and exposes it via MCP with zero frontend changes needed.
+
