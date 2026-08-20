@@ -32,9 +32,15 @@ Mobile Phone (PWA / iOS / Android)
 3. **Unified Single-Flight SSE & Client-Side HTML5 Canvas Rendering**:
    - Eliminates raster image lag and failed image loading. The Gateway emits single-flight `tool_ui` events containing granular strike distribution coordinates directly over the chat SSE stream.
    - The browser mounts a high-performance **HTML5 Canvas** component (`QuantChart`), rendering interactive dual-panel GEX & DEX charts with touch/hover tooltips, dashed Spot/Wall lines, and offline history persistence in under 10ms.
-4. **Comparative Institutional Ranking**:
+4. **Institutional Double-Sided Stacked Options Geometry**:
+   - **Dual Panels**: Gamma Exposure (GEX) on the Left, Delta Exposure (DEX) on the Right.
+   - **Double-Sided Zero Axis**: The vertical center line is `0`. **CALLS** extend **leftward** from `0`, while **PUTS** extend **rightward** from `0`.
+   - **Expiration Stacking**: Each strike bar is segmented and colored by individual expiration date using a dedicated palette (Crimson, Red, Orange, Amber, Tan, Navy Blue, Steel Blue).
+   - **Level Overlays**: Dashed reference lines across both panels mark **Call Wall** (Cyan `#00f5d4`), **Spot Price** (Blue `#3a86ff`), and **Put Wall** (Magenta `#ff006e`).
+   - **Crosshair Inspection**: Interactive touch and hover crosshairs display strike distance %, Call/Put dollar volume, Net Exposure, and individual expiration breakdowns.
+5. **Comparative Institutional Ranking**:
    - Automatically provides dealer positioning summaries, gamma regimes, Call/Put walls, and ranked trade positioning.
-5. **Resilient Network Timeouts**:
+6. **Resilient Network Timeouts**:
    - 30-second timeout guards and retry mechanisms ensure heavy multi-asset queries never drop or throw 502 Bad Gateway errors.
 
 ---

@@ -1,12 +1,31 @@
 /**
  * QuantChart - High Performance HTML5 Canvas Options Exposure Chart
- * Renders bi-directional dual-panel GEX & DEX horizontal bar distributions
- * with interactive touch/mouse tooltips, spot/wall markers, and vector scaling.
+ * Pixel-perfect implementation matching institutional double-sided stacked GEX & DEX charts.
+ *
+ * Layout:
+ * - Dual Panels: GEX (Left) & DEX (Right)
+ * - Double-sided X-axis centered at 0:
+ *   - CALLS on Left (stacked bars extending LEFT from 0)
+ *   - PUTS on Right (stacked bars extending RIGHT from 0)
+ * - Stacked by Expiration Date using vivid color palette
+ * - Horizontal Key Level Lines across both panels:
+ *   - Call Wall (Cyan dashed #00f5d4)
+ *   - Spot Price (Blue dashed #3a86ff)
+ *   - Put Wall (Magenta dashed #ff006e)
+ * - Interactive crosshair and touch/mouse inspection tooltips
  */
 
 const PALETTE = [
-  '#d90429', '#ef233c', '#f77f00', '#fcbf49', '#e0a96d',
-  '#1d3557', '#457b9d', '#3a86ff', '#2a9d8f', '#495057', '#6c757d'
+  '#d90429', // 0: Crimson Red
+  '#ef233c', // 1: Red
+  '#f77f00', // 2: Vibrant Orange
+  '#fcbf49', // 3: Amber Yellow
+  '#e0a96d', // 4: Tan / Sand
+  '#1d3557', // 5: Navy Blue
+  '#457b9d', // 6: Steel Blue
+  '#3a86ff', // 7: Bright Blue
+  '#2a9d8f', // 8: Teal
+  '#a8dadc'  // 9: Ice Blue
 ];
 
 export class QuantChart {
@@ -28,28 +47,34 @@ export class QuantChart {
     this.wrapper = document.createElement('div');
     this.wrapper.className = 'quant-chart-card';
 
-    // 1. Header with Macro Badges
-    const header = document.createElement('div');
-    header.className = 'chart-card-header';
-
+    // 1. Top Badges & Title Bar
     const spot = this.data.spot_price || 0;
     const callWall = this.data.call_wall || 0;
     const putWall = this.data.put_wall || 0;
     const cpRatio = this.data.call_put_ratio || 0;
-    const regime = this.data.gamma_regime || 'Neutral';
-    const isPos = regime.toLowerCase().includes('positive') || regime.toLowerCase().includes('long');
+    const ticker = this.data.ticker || 'QUANT';
 
+    const header = document.createElement('div');
+    header.className = 'chart-card-header';
     header.innerHTML = `
-      <div class="chart-title-row">
-        <div class="chart-ticker-badge">📊 ${this.data.ticker} GEX / DEX Chart</div>
-        <div class="chart-regime-pill ${isPos ? 'long' : 'short'}">${isPos ? '🟢 Long Gamma' : '🔴 Short Gamma'}</div>
+      <div class="chart-macro-grid">
+        <div class="macro-box spot-box">
+          <span class="macro-lbl">Spot Price</span>
+          <span class="macro-val">$${spot.toFixed(2)}</span>
+        </div>
+        <div class="macro-center">
+          <div class="macro-box cp-box">
+            <span class="macro-lbl">Call/Put Ratio</span>
+            <span class="macro-val">${cpRatio.toFixed(2)}</span>
+          </div>
+          <div class="chart-main-title">${ticker} GEX DEX Chart</div>
+        </div>
+        <div class="macro-box summary-box">
+          <div>Spot: <strong>$${spot.toFixed(2)}</strong></div>
+          <div style="color:#00f5d4">Call Wall: <strong>$${callWall.toFixed(2)}</strong></div>
+          <div style="color:#ff006e">Put Wall: <strong>$${putWall.toFixed(2)}</strong></div>
+        </div>
         <button class="expand-btn" title="Expand Fullscreen">🔍</button>
-      </div>
-      <div class="chart-metrics-bar">
-        <div class="metric-pill">Spot: <strong>$${spot.toFixed(2)}</strong></div>
-        <div class="metric-pill call-wall">Call Wall: <strong>$${callWall.toFixed(2)}</strong></div>
-        <div class="metric-pill put-wall">Put Wall: <strong>$${putWall.toFixed(2)}</strong></div>
-        <div class="metric-pill">C/P: <strong>${cpRatio.toFixed(2)}</strong></div>
       </div>
     `;
 
@@ -71,11 +96,13 @@ export class QuantChart {
 
     this.wrapper.appendChild(this.canvasContainer);
 
-    // 3. Expiration Legend Pills
-    if (this.data.expirations && this.data.expirations.length > 0) {
+    // 3. Expirations Legend
+    const expirations = this.data.expirations || [];
+    if (expirations.length > 0) {
       const legend = document.createElement('div');
       legend.className = 'chart-legend';
-      this.data.expirations.slice(0, 11).forEach((exp, idx) => {
+      legend.innerHTML = `<span class="legend-title">Expiries:</span>`;
+      expirations.slice(0, 10).forEach((exp, idx) => {
         const color = PALETTE[idx % PALETTE.length];
         const item = document.createElement('span');
         item.className = 'legend-item';
@@ -91,7 +118,7 @@ export class QuantChart {
     this.bindEvents();
     this.draw();
 
-    // Auto resize
+    // Responsive auto-redraw
     window.addEventListener('resize', () => this.draw());
   }
 
@@ -143,11 +170,13 @@ export class QuantChart {
   handleHover(x, y) {
     if (!this.strikesList || this.strikesList.length === 0) return;
 
-    const canvasH = this.canvas.height / (window.devicePixelRatio || 1);
-    const padding = 20;
-    const chartH = canvasH - padding * 2;
+    const dpr = window.devicePixelRatio || 1;
+    const canvasH = this.canvas.height / dpr;
+    const paddingTop = 45;
+    const paddingBottom = 40;
+    const chartH = canvasH - paddingTop - paddingBottom;
 
-    const ratio = (y - padding) / chartH;
+    const ratio = (y - paddingTop) / chartH;
     const clampedRatio = Math.max(0, Math.min(1, ratio));
 
     const strikeIdx = Math.round(clampedRatio * (this.strikesList.length - 1));
@@ -158,10 +187,29 @@ export class QuantChart {
     this.hoveredStrike = strikeData.strike;
     this.draw();
 
-    // Render Tooltip
+    // Render Detailed Tooltip
     const spot = this.data.spot_price || 0;
     const diffPct = spot > 0 ? (((strikeData.strike - spot) / spot) * 100).toFixed(1) : 0;
     const sign = diffPct > 0 ? '+' : '';
+
+    let expRowsHtml = '';
+    const expirations = this.data.expirations || [];
+    if (strikeData.exp_gex && Object.keys(strikeData.exp_gex).length > 0) {
+      expRowsHtml = `<div class="tt-exp-breakdown">`;
+      expirations.forEach((exp, idx) => {
+        const gexInfo = strikeData.exp_gex[exp];
+        if (gexInfo && (gexInfo.call > 0 || gexInfo.put > 0)) {
+          const color = PALETTE[idx % PALETTE.length];
+          expRowsHtml += `
+            <div class="tt-exp-row">
+              <span style="color:${color}">■ ${exp}:</span>
+              <span>C: $${this.formatCurrency(gexInfo.call)} / P: $${this.formatCurrency(gexInfo.put)}</span>
+            </div>
+          `;
+        }
+      });
+      expRowsHtml += `</div>`;
+    }
 
     this.tooltip.innerHTML = `
       <div class="tt-header">
@@ -169,26 +217,33 @@ export class QuantChart {
         <span class="tt-dist">(${sign}${diffPct}%)</span>
       </div>
       <div class="tt-row">
-        <span style="color:#ef233c">Call GEX:</span>
-        <span>$${this.formatCurrency(strikeData.call_gex)}</span>
+        <span style="color:#ef233c">Call GEX (Left):</span>
+        <strong>$${this.formatCurrency(strikeData.call_gex)}</strong>
       </div>
       <div class="tt-row">
-        <span style="color:#2a9d8f">Put GEX:</span>
-        <span>$${this.formatCurrency(strikeData.put_gex)}</span>
+        <span style="color:#2a9d8f">Put GEX (Right):</span>
+        <strong>$${this.formatCurrency(strikeData.put_gex)}</strong>
       </div>
-      <div class="tt-row net">
-        <span>Net GEX:</span>
-        <strong style="color:${strikeData.net_gex >= 0 ? '#00f5d4' : '#ff006e'}">$${this.formatCurrency(strikeData.net_gex)}</strong>
+      <div class="tt-row">
+        <span style="color:#f77f00">Call DEX (Left):</span>
+        <strong>$${this.formatCurrency(strikeData.call_dex)}</strong>
       </div>
+      <div class="tt-row">
+        <span style="color:#3a86ff">Put DEX (Right):</span>
+        <strong>$${this.formatCurrency(strikeData.put_dex)}</strong>
+      </div>
+      ${expRowsHtml}
     `;
 
     this.tooltip.style.display = 'block';
-    this.tooltip.style.top = `${Math.min(y, canvasH - 120)}px`;
-    this.tooltip.style.left = `${Math.min(x + 15, this.canvas.width / (window.devicePixelRatio || 1) - 180)}px`;
+    const maxTop = canvasH - 180;
+    this.tooltip.style.top = `${Math.max(10, Math.min(y - 30, maxTop))}px`;
+    const maxLeft = (this.canvas.width / dpr) - 220;
+    this.tooltip.style.left = `${Math.min(x + 20, maxLeft)}px`;
   }
 
   formatCurrency(val) {
-    const abs = Math.abs(val);
+    const abs = Math.abs(val || 0);
     const sign = val < 0 ? '-' : '';
     if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(2)}B`;
     if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}M`;
@@ -200,8 +255,8 @@ export class QuantChart {
     if (!this.canvas || !this.ctx || !this.data || !this.data.strikes) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const displayW = this.canvasContainer.clientWidth || 360;
-    const displayH = Math.max(380, Math.min(520, this.data.strikes.length * 16));
+    const displayW = this.canvasContainer.clientWidth || 380;
+    const displayH = Math.max(420, Math.min(560, this.data.strikes.length * 18));
 
     this.canvas.width = displayW * dpr;
     this.canvas.height = displayH * dpr;
@@ -212,16 +267,16 @@ export class QuantChart {
     ctx.resetTransform();
     ctx.scale(dpr, dpr);
 
-    // Background
-    ctx.fillStyle = '#0f141d';
+    // Deep Dark Navy Background
+    ctx.fillStyle = '#0a0e17';
     ctx.fillRect(0, 0, displayW, displayH);
 
-    // Grid Layout: 2 Sub-panels (GEX & DEX)
-    const paddingLeft = 45;
-    const paddingRight = 15;
-    const paddingTop = 30;
-    const paddingBottom = 25;
-    const gap = 16;
+    // Layout Dimensions
+    const paddingLeft = 44;
+    const paddingRight = 14;
+    const paddingTop = 45;
+    const paddingBottom = 40;
+    const gap = 38; // Gap between GEX and DEX panels for middle strike labels
 
     const usableW = displayW - paddingLeft - paddingRight - gap;
     const panelW = usableW / 2;
@@ -235,30 +290,42 @@ export class QuantChart {
     const p2_right = p2_left + panelW;
     const p2_center = p2_left + panelW / 2;
 
-    // Background Panels
-    ctx.fillStyle = '#151a24';
+    // Panel Backgrounds with subtle grid lines
+    ctx.fillStyle = '#0f1422';
     ctx.fillRect(p1_left, paddingTop, panelW, chartH);
     ctx.fillRect(p2_left, paddingTop, panelW, chartH);
 
-    // Subtitles
-    ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-    ctx.fillStyle = '#a0aec0';
-    ctx.textAlign = 'center';
-    ctx.fillText('Gamma Exposure (GEX)', p1_center, paddingTop - 10);
-    ctx.fillText('Delta Exposure (DEX)', p2_center, paddingTop - 10);
+    // Subtle panel borders
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(p1_left, paddingTop, panelW, chartH);
+    ctx.strokeRect(p2_left, paddingTop, panelW, chartH);
 
-    // CALLS / PUTS headers
-    ctx.font = '9px system-ui, sans-serif';
-    ctx.fillStyle = '#718096';
-    ctx.fillText('CALLS', p1_left + panelW * 0.25, paddingTop + 12);
-    ctx.fillText('PUTS', p1_left + panelW * 0.75, paddingTop + 12);
-    ctx.fillText('CALLS', p2_left + panelW * 0.25, paddingTop + 12);
-    ctx.fillText('PUTS', p2_left + panelW * 0.75, paddingTop + 12);
+    // Subtitles: Gamma Exposure (GEX) & Delta Exposure (DEX) at bottom
+    ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = '#e2e8f0';
+    ctx.textAlign = 'center';
+    ctx.fillText('Gamma Exposure (GEX)', p1_center, displayH - 12);
+    ctx.fillText('Delta Exposure (DEX)', p2_center, displayH - 12);
+
+    // CALLS (Left of 0) & PUTS (Right of 0) headers
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    
+    // Panel 1 Headers
+    ctx.fillText('CALLS', p1_left + panelW * 0.25, paddingTop - 12);
+    ctx.fillText('PUTS', p1_left + panelW * 0.75, paddingTop - 12);
+    
+    // Panel 2 Headers
+    ctx.fillText('CALLS', p2_left + panelW * 0.25, paddingTop - 12);
+    ctx.fillText('PUTS', p2_left + panelW * 0.75, paddingTop - 12);
 
     // Strikes Sorting (Top = Highest Strike, Bottom = Lowest Strike)
     this.strikesList = [...this.data.strikes].sort((a, b) => a.strike - b.strike);
     const n = this.strikesList.length;
     if (n === 0) return;
+
+    const expirations = this.data.expirations || [];
 
     // Calculate maximum magnitude for scaling
     let maxGex = 1;
@@ -268,54 +335,133 @@ export class QuantChart {
       maxDex = Math.max(maxDex, s.call_dex || 0, s.put_dex || 0);
     });
 
-    const maxGexScaled = maxGex * 1.1;
-    const maxDexScaled = maxDex * 1.1;
+    const maxGexScaled = maxGex * 1.15;
+    const maxDexScaled = maxDex * 1.15;
 
-    const barHeight = Math.max(2, (chartH / n) * 0.75);
     const rowStep = chartH / n;
+    const barHeight = Math.max(3, rowStep * 0.65);
 
-    // Draw Strike Bars
+    // Horizontal Grid Lines & Strike Bars
     this.strikesList.forEach((s, idx) => {
-      // Top = Highest Strike (reverse index)
+      // Top = Highest Strike
       const y = paddingTop + (n - 1 - idx) * rowStep + (rowStep - barHeight) / 2;
+      const centerY = y + barHeight / 2;
 
-      // Highlight row if hovered
+      // Subtle horizontal dotted grid line
+      ctx.save();
+      ctx.strokeStyle = '#172033';
+      ctx.lineWidth = 0.5;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath();
+      ctx.moveTo(p1_left, centerY);
+      ctx.lineTo(p1_right, centerY);
+      ctx.moveTo(p2_left, centerY);
+      ctx.lineTo(p2_right, centerY);
+      ctx.stroke();
+      ctx.restore();
+
+      // Highlight active hovered row
       if (this.hoveredStrike === s.strike) {
-        ctx.fillStyle = 'rgba(58, 134, 255, 0.15)';
-        ctx.fillRect(paddingLeft - 40, y - 2, displayW, barHeight + 4);
+        ctx.fillStyle = 'rgba(58, 134, 255, 0.18)';
+        ctx.fillRect(0, y - 2, displayW, barHeight + 4);
       }
 
-      // Panel 1: GEX
-      const callGexW = ((s.call_gex || 0) / maxGexScaled) * (panelW / 2);
-      const putGexW = ((s.put_gex || 0) / maxGexScaled) * (panelW / 2);
+      // ==========================================
+      // PANEL 1: GEX (Stacked by Expiration)
+      // ==========================================
+      // 1. CALLS (Left of Center) -> Stacks LEFT from p1_center
+      if (s.exp_gex && Object.keys(s.exp_gex).length > 0) {
+        let curLeft = p1_center;
+        expirations.forEach((exp, expIdx) => {
+          const segVal = s.exp_gex[exp]?.call || 0;
+          if (segVal > 0) {
+            const segW = (segVal / maxGexScaled) * (panelW / 2);
+            ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
+            ctx.fillRect(curLeft - segW, y, segW, barHeight);
+            curLeft -= segW;
+          }
+        });
+      } else if (s.call_gex > 0) {
+        const w = (s.call_gex / maxGexScaled) * (panelW / 2);
+        ctx.fillStyle = '#ef233c';
+        ctx.fillRect(p1_center - w, y, w, barHeight);
+      }
 
-      ctx.fillStyle = '#ef233c'; // Call Red
-      ctx.fillRect(p1_center - callGexW, y, callGexW, barHeight);
+      // 2. PUTS (Right of Center) -> Stacks RIGHT from p1_center
+      if (s.exp_gex && Object.keys(s.exp_gex).length > 0) {
+        let curRight = p1_center;
+        expirations.forEach((exp, expIdx) => {
+          const segVal = s.exp_gex[exp]?.put || 0;
+          if (segVal > 0) {
+            const segW = (segVal / maxGexScaled) * (panelW / 2);
+            ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
+            ctx.fillRect(curRight, y, segW, barHeight);
+            curRight += segW;
+          }
+        });
+      } else if (s.put_gex > 0) {
+        const w = (s.put_gex / maxGexScaled) * (panelW / 2);
+        ctx.fillStyle = '#2a9d8f';
+        ctx.fillRect(p1_center, y, w, barHeight);
+      }
 
-      ctx.fillStyle = '#2a9d8f'; // Put Teal
-      ctx.fillRect(p1_center, y, putGexW, barHeight);
+      // ==========================================
+      // PANEL 2: DEX (Stacked by Expiration)
+      // ==========================================
+      // 1. CALLS (Left of Center) -> Stacks LEFT from p2_center
+      if (s.exp_dex && Object.keys(s.exp_dex).length > 0) {
+        let curLeft = p2_center;
+        expirations.forEach((exp, expIdx) => {
+          const segVal = s.exp_dex[exp]?.call || 0;
+          if (segVal > 0) {
+            const segW = (segVal / maxDexScaled) * (panelW / 2);
+            ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
+            ctx.fillRect(curLeft - segW, y, segW, barHeight);
+            curLeft -= segW;
+          }
+        });
+      } else if (s.call_dex > 0) {
+        const w = (s.call_dex / maxDexScaled) * (panelW / 2);
+        ctx.fillStyle = '#f77f00';
+        ctx.fillRect(p2_center - w, y, w, barHeight);
+      }
 
-      // Panel 2: DEX
-      const callDexW = ((s.call_dex || 0) / maxDexScaled) * (panelW / 2);
-      const putDexW = ((s.put_dex || 0) / maxDexScaled) * (panelW / 2);
+      // 2. PUTS (Right of Center) -> Stacks RIGHT from p2_center
+      if (s.exp_dex && Object.keys(s.exp_dex).length > 0) {
+        let curRight = p2_center;
+        expirations.forEach((exp, expIdx) => {
+          const segVal = s.exp_dex[exp]?.put || 0;
+          if (segVal > 0) {
+            const segW = (segVal / maxDexScaled) * (panelW / 2);
+            ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
+            ctx.fillRect(curRight, y, segW, barHeight);
+            curRight += segW;
+          }
+        });
+      } else if (s.put_dex > 0) {
+        const w = (s.put_dex / maxDexScaled) * (panelW / 2);
+        ctx.fillStyle = '#3a86ff';
+        ctx.fillRect(p2_center, y, w, barHeight);
+      }
 
-      ctx.fillStyle = '#f77f00'; // Call Amber
-      ctx.fillRect(p2_center - callDexW, y, callDexW, barHeight);
-
-      ctx.fillStyle = '#3a86ff'; // Put Blue
-      ctx.fillRect(p2_center, y, putDexW, barHeight);
-
-      // Y-Axis Strike Label
-      if (idx % Math.max(1, Math.floor(n / 18)) === 0 || this.hoveredStrike === s.strike) {
-        ctx.fillStyle = this.hoveredStrike === s.strike ? '#ffffff' : '#718096';
+      // Y-Axis Strike Labels on Left Axis & Middle Gap
+      const isTick = idx % Math.max(1, Math.floor(n / 16)) === 0 || this.hoveredStrike === s.strike;
+      if (isTick) {
+        ctx.fillStyle = this.hoveredStrike === s.strike ? '#ffffff' : '#94a3b8';
         ctx.font = this.hoveredStrike === s.strike ? 'bold 10px monospace' : '9px monospace';
+        
+        // Left Axis
         ctx.textAlign = 'right';
-        ctx.fillText(`$${s.strike.toFixed(0)}`, paddingLeft - 6, y + barHeight - 1);
+        ctx.fillText(`$${s.strike.toFixed(0)}`, paddingLeft - 5, y + barHeight - 1);
+
+        // Middle Axis
+        ctx.textAlign = 'center';
+        ctx.fillText(`$${s.strike.toFixed(0)}`, p1_right + gap / 2, y + barHeight - 1);
       }
     });
 
-    // Zero Centers
-    ctx.strokeStyle = '#2d3748';
+    // Zero Axis Center Lines
+    ctx.strokeStyle = '#64748b';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(p1_center, paddingTop);
@@ -324,7 +470,26 @@ export class QuantChart {
     ctx.lineTo(p2_center, paddingTop + chartH);
     ctx.stroke();
 
-    // Helper: Draw horizontal reference lines (Spot, Call Wall, Put Wall)
+    // X-Axis Symmetric Ticks & Numbers around 0
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'center';
+
+    // Panel 1 Ticks (GEX)
+    ctx.fillText(`${this.formatCurrency(maxGex)}`, p1_left + 15, displayH - 26);
+    ctx.fillText(`${this.formatCurrency(maxGex / 2)}`, p1_left + panelW * 0.25, displayH - 26);
+    ctx.fillText('0', p1_center, displayH - 26);
+    ctx.fillText(`${this.formatCurrency(maxGex / 2)}`, p1_left + panelW * 0.75, displayH - 26);
+    ctx.fillText(`${this.formatCurrency(maxGex)}`, p1_right - 15, displayH - 26);
+
+    // Panel 2 Ticks (DEX)
+    ctx.fillText(`${this.formatCurrency(maxDex)}`, p2_left + 15, displayH - 26);
+    ctx.fillText(`${this.formatCurrency(maxDex / 2)}`, p2_left + panelW * 0.25, displayH - 26);
+    ctx.fillText('0', p2_center, displayH - 26);
+    ctx.fillText(`${this.formatCurrency(maxDex / 2)}`, p2_left + panelW * 0.75, displayH - 26);
+    ctx.fillText(`${this.formatCurrency(maxDex)}`, p2_right - 15, displayH - 26);
+
+    // Helper: Draw horizontal reference lines across BOTH panels
     const minStrike = this.strikesList[0].strike;
     const maxStrike = this.strikesList[n - 1].strike;
 
@@ -344,20 +509,24 @@ export class QuantChart {
       ctx.setLineDash([4, 4]);
 
       ctx.beginPath();
+      // Draw across Left Panel
       ctx.moveTo(p1_left, y);
+      ctx.lineTo(p1_right, y);
+      // Draw across Right Panel
+      ctx.moveTo(p2_left, y);
       ctx.lineTo(p2_right, y);
       ctx.stroke();
 
-      // Label Tag
+      // Label Tag on Left Panel
       ctx.fillStyle = color;
       ctx.font = 'bold 9px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(`${label} $${strikeVal.toFixed(0)}`, p1_left + 4, y - 3);
+      ctx.fillText(`${label} $${strikeVal.toFixed(2)}`, p1_left + 4, y - 3);
       ctx.restore();
     };
 
-    if (this.data.spot_price) drawRefLine(this.data.spot_price, '#3a86ff', 'SPOT');
     if (this.data.call_wall) drawRefLine(this.data.call_wall, '#00f5d4', 'CALL WALL');
+    if (this.data.spot_price) drawRefLine(this.data.spot_price, '#3a86ff', 'SPOT');
     if (this.data.put_wall) drawRefLine(this.data.put_wall, '#ff006e', 'PUT WALL');
   }
 }
