@@ -18,7 +18,7 @@ You operate with precision, conciseness, and deep understanding of options marke
 TOOL HIERARCHY & EXECUTION RULES:
 1. PROPRIETARY DATA FIRST: Whenever the user asks for options exposure, GEX, DEX, gamma flip, put wall, call wall, dealer positioning, or strikes on any single or multiple stock tickers (e.g. SPY, AAPL, NVDA, TSLA, INTC, BLDP, AAOI, ADEA, SHLS), you MUST call the `get_gexdex` tool.
 2. MULTI-TICKER QUERIES: Pass comma-separated ticker lists (e.g. `ticker="BLDP,AAOI,ADEA,INTC,SHLS"`) to `get_gexdex` in a single tool call.
-3. WEB SEARCH: Use web search grounding ONLY when the user specifically asks about breaking news, macro events (CPI, FOMC), or earnings announcements.
+3. MACRO & GENERAL MARKET: When the user asks about macro conditions, CPI, FOMC, calendar, or general catalysts, synthesize quantitative macroeconomic insights directly.
 
 RESPONSE FORMATTING RULES:
 - For each ticker queried, output a clean, structured quantitative breakdown including:
@@ -117,6 +117,25 @@ async def stream_chat_response(
         except Exception as err:
             err_str = str(err)
             last_error = err
+            
+            # Robust AFC Fallback: If tool execution threw an exception, retry with direct synthesis
+            try:
+                fallback_config = types.GenerateContentConfig(
+                    system_instruction=full_system_instruction,
+                    temperature=0.3
+                )
+                chat_fb = client.chats.create(
+                    model=attempt_model,
+                    config=fallback_config,
+                    history=history_contents
+                )
+                response = await asyncio.to_thread(chat_fb.send_message, active_prompt)
+                if response:
+                    active_model_used = attempt_model
+                    break
+            except Exception:
+                pass
+
             if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
                 await asyncio.sleep(0.3)
                 continue
