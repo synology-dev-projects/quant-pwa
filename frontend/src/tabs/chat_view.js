@@ -97,12 +97,12 @@ export class ChatView {
     const contentDiv = this.currentAssistantElement.querySelector('.markdown-body');
     if (contentDiv) {
       let cleaned = (this.currentAssistantContent || '')
-        .replace(/!\[.*?\]\([^)]*chart\.png[^)]*\)/gi, '')
-        .replace(/!\[.*?\]\(.*?\/api\/v1\/gexdex\/chart\.png.*?\)/gi, '');
+        .replace(/!\[.*?\]\([^)]*(?:chart|gexdex)[^)]*\)/gi, '')
+        .replace(/!\[.*?\]\([^)]*\.(?:png|webp|jpg|jpeg)[^)]*\)/gi, '');
       if (this.currentToolUiEvents.length > 0) {
         cleaned = cleaned.replace(/!\[.*?\]\(.*?\)/gi, '').trim();
       }
-      contentDiv.innerHTML = createMessageElement('assistant', cleaned).querySelector('.markdown-body').innerHTML;
+      contentDiv.innerHTML = createMessageElement('assistant', cleaned, null, this.currentToolUiEvents).querySelector('.markdown-body').innerHTML;
     }
     this.scrollToBottom();
   }

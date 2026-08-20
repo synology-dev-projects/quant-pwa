@@ -6,7 +6,7 @@ from app.tools.registry import register_tool, emit_tool_ui_event
 
 @register_tool(
     name="get_gexdex",
-    description="Fetch proprietary institutional options Gamma Exposure (GEX) and Delta Exposure (DEX) analytics for one or more stock ticker symbols (e.g. AAPL, TSLA, NVDA, SPY, QQQ). Accepts single tickers or comma-separated ticker lists. Returns spot price, net GEX/DEX, zero gamma flip level, key call/put walls, and authenticated chart image URLs.",
+    description="Fetch proprietary institutional options Gamma Exposure (GEX) and Delta Exposure (DEX) analytics for one or more stock ticker symbols (e.g. AAPL, TSLA, NVDA, SPY, QQQ). Accepts single tickers or comma-separated ticker lists. Returns spot price, net GEX/DEX, zero gamma flip level, key call/put walls, and full strike distributions.",
     parameters={
         "type": "object",
         "properties": {

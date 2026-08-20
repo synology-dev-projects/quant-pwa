@@ -82,10 +82,10 @@ export function createMessageElement(role, content, metadata = null, toolUiEvent
     });
   }
 
-  // 2. Strip redundant or unauthenticated chart.png markdown images
+  // 2. Strip redundant or static markdown chart images
   let cleanedContent = (content || '')
-    .replace(/!\[.*?\]\([^)]*chart\.png[^)]*\)/gi, '')
-    .replace(/!\[.*?\]\(.*?\/api\/v1\/gexdex\/chart\.png.*?\)/gi, '');
+    .replace(/!\[.*?\]\([^)]*(?:chart|gexdex)[^)]*\)/gi, '')
+    .replace(/!\[.*?\]\([^)]*\.(?:png|webp|jpg|jpeg)[^)]*\)/gi, '');
   
   if (toolUiEvents && toolUiEvents.length > 0) {
     cleanedContent = cleanedContent.replace(/!\[.*?\]\(.*?\)/gi, '').trim();
