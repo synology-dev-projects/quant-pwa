@@ -331,8 +331,8 @@ export class QuantChart {
     let maxGex = 1;
     let maxDex = 1;
     this.strikesList.forEach(s => {
-      maxGex = Math.max(maxGex, s.call_gex || 0, s.put_gex || 0);
-      maxDex = Math.max(maxDex, s.call_dex || 0, s.put_dex || 0);
+      maxGex = Math.max(maxGex, Math.abs(s.call_gex || 0), Math.abs(s.put_gex || 0));
+      maxDex = Math.max(maxDex, Math.abs(s.call_dex || 0), Math.abs(s.put_dex || 0));
     });
 
     const maxGexScaled = maxGex * 1.15;
@@ -373,7 +373,8 @@ export class QuantChart {
       if (s.exp_gex && Object.keys(s.exp_gex).length > 0) {
         let curLeft = p1_center;
         expirations.forEach((exp, expIdx) => {
-          const segVal = s.exp_gex[exp]?.call || 0;
+          const rawVal = s.exp_gex[exp]?.call || 0;
+          const segVal = Math.abs(rawVal);
           if (segVal > 0) {
             const segW = (segVal / maxGexScaled) * (panelW / 2);
             ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
@@ -381,8 +382,8 @@ export class QuantChart {
             curLeft -= segW;
           }
         });
-      } else if (s.call_gex > 0) {
-        const w = (s.call_gex / maxGexScaled) * (panelW / 2);
+      } else if (Math.abs(s.call_gex || 0) > 0) {
+        const w = (Math.abs(s.call_gex) / maxGexScaled) * (panelW / 2);
         ctx.fillStyle = '#ef233c';
         ctx.fillRect(p1_center - w, y, w, barHeight);
       }
@@ -391,7 +392,8 @@ export class QuantChart {
       if (s.exp_gex && Object.keys(s.exp_gex).length > 0) {
         let curRight = p1_center;
         expirations.forEach((exp, expIdx) => {
-          const segVal = s.exp_gex[exp]?.put || 0;
+          const rawVal = s.exp_gex[exp]?.put || 0;
+          const segVal = Math.abs(rawVal);
           if (segVal > 0) {
             const segW = (segVal / maxGexScaled) * (panelW / 2);
             ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
@@ -399,8 +401,8 @@ export class QuantChart {
             curRight += segW;
           }
         });
-      } else if (s.put_gex > 0) {
-        const w = (s.put_gex / maxGexScaled) * (panelW / 2);
+      } else if (Math.abs(s.put_gex || 0) > 0) {
+        const w = (Math.abs(s.put_gex) / maxGexScaled) * (panelW / 2);
         ctx.fillStyle = '#2a9d8f';
         ctx.fillRect(p1_center, y, w, barHeight);
       }
@@ -412,7 +414,8 @@ export class QuantChart {
       if (s.exp_dex && Object.keys(s.exp_dex).length > 0) {
         let curLeft = p2_center;
         expirations.forEach((exp, expIdx) => {
-          const segVal = s.exp_dex[exp]?.call || 0;
+          const rawVal = s.exp_dex[exp]?.call || 0;
+          const segVal = Math.abs(rawVal);
           if (segVal > 0) {
             const segW = (segVal / maxDexScaled) * (panelW / 2);
             ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
@@ -420,8 +423,8 @@ export class QuantChart {
             curLeft -= segW;
           }
         });
-      } else if (s.call_dex > 0) {
-        const w = (s.call_dex / maxDexScaled) * (panelW / 2);
+      } else if (Math.abs(s.call_dex || 0) > 0) {
+        const w = (Math.abs(s.call_dex) / maxDexScaled) * (panelW / 2);
         ctx.fillStyle = '#f77f00';
         ctx.fillRect(p2_center - w, y, w, barHeight);
       }
@@ -430,7 +433,8 @@ export class QuantChart {
       if (s.exp_dex && Object.keys(s.exp_dex).length > 0) {
         let curRight = p2_center;
         expirations.forEach((exp, expIdx) => {
-          const segVal = s.exp_dex[exp]?.put || 0;
+          const rawVal = s.exp_dex[exp]?.put || 0;
+          const segVal = Math.abs(rawVal);
           if (segVal > 0) {
             const segW = (segVal / maxDexScaled) * (panelW / 2);
             ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
@@ -438,8 +442,8 @@ export class QuantChart {
             curRight += segW;
           }
         });
-      } else if (s.put_dex > 0) {
-        const w = (s.put_dex / maxDexScaled) * (panelW / 2);
+      } else if (Math.abs(s.put_dex || 0) > 0) {
+        const w = (Math.abs(s.put_dex) / maxDexScaled) * (panelW / 2);
         ctx.fillStyle = '#3a86ff';
         ctx.fillRect(p2_center, y, w, barHeight);
       }
