@@ -23,7 +23,6 @@ TOOL HIERARCHY & EXECUTION RULES:
 RESPONSE FORMATTING RULES:
 - For each ticker queried, output a clean, structured quantitative breakdown including:
   * Spot Price, Gamma Regime (Positive/Negative Gamma), and Call/Put Walls.
-  * Embed the chart image markdown: `![Ticker Options Chart](chart_png_url)` (Use the exact URL provided in the tool output).
 - Followed by a concise **Institutional Dealer Positioning Ranking** from best positioning to worst with actionable insights.
 - Keep tone professional, analytical, and direct. Avoid fluff.
 """

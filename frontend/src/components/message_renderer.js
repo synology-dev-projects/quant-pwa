@@ -82,15 +82,18 @@ export function createMessageElement(role, content, metadata = null, toolUiEvent
     });
   }
 
-  // 2. Strip redundant markdown images if client-side Canvas charts are already mounted
-  let cleanedContent = content;
+  // 2. Strip redundant or unauthenticated chart.png markdown images
+  let cleanedContent = (content || '')
+    .replace(/!\[.*?\]\([^)]*chart\.png[^)]*\)/gi, '')
+    .replace(/!\[.*?\]\(.*?\/api\/v1\/gexdex\/chart\.png.*?\)/gi, '');
+  
   if (toolUiEvents && toolUiEvents.length > 0) {
-    cleanedContent = (content || '').replace(/!\[(.*?)Options Chart\]\(.*?\)/gi, '').trim();
+    cleanedContent = cleanedContent.replace(/!\[.*?\]\(.*?\)/gi, '').trim();
   }
 
   const contentDiv = document.createElement('div');
   contentDiv.className = 'markdown-body';
-  contentDiv.innerHTML = badgeHtml + renderMarkdown(cleanedContent);
+  contentDiv.innerHTML = badgeHtml + renderMarkdown(cleanedContent.trim());
 
   bubble.appendChild(contentDiv);
   return bubble;

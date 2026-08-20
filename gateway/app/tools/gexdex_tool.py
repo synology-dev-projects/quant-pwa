@@ -76,23 +76,10 @@ def get_gexdex(
                 # Handle batch response
                 if "batch_data" in data and isinstance(data["batch_data"], dict):
                     for sym, item in data["batch_data"].items():
-                        auth_chart_url = f"{base_url}/api/v1/gexdex/chart.png?ticker={sym}&max_dte={max_dte}&strike_range={strike_range}&format=webp&t={timestamp}{refresh_query}"
-                        item["chart_png_url"] = auth_chart_url
-                        item["markdown_image"] = f"![{sym} Options Chart]({auth_chart_url})"
-                        
                         # Emit Single-Flight Tool UI event for client-side Canvas rendering
                         if "strike_distribution" in item and item["strike_distribution"]:
                             emit_tool_ui_event("get_gexdex", item["strike_distribution"])
-                    
-                    first_sym = list(data["batch_data"].keys())[0]
-                    data["chart_png_url"] = data["batch_data"][first_sym]["chart_png_url"]
-                    data["markdown_image"] = data["batch_data"][first_sym]["markdown_image"]
                 else:
-                    first_ticker = clean_tickers.split(",")[0]
-                    auth_chart_url = f"{base_url}/api/v1/gexdex/chart.png?ticker={first_ticker}&max_dte={max_dte}&strike_range={strike_range}&format=webp&t={timestamp}{refresh_query}"
-                    data["chart_png_url"] = auth_chart_url
-                    data["markdown_image"] = f"![{first_ticker} Options Chart]({auth_chart_url})"
-                    
                     if "strike_distribution" in data and data["strike_distribution"]:
                         emit_tool_ui_event("get_gexdex", data["strike_distribution"])
                 
