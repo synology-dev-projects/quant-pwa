@@ -221,7 +221,7 @@ async def stream_chat_response(
             models_to_try.append(m)
 
     thinking_cfg = None
-    if hasattr(types, "ThinkingConfig"):
+    if hasattr(types, "ThinkingConfig") and budget > 0 and tier_label == "STRATEGIC":
         try:
             thinking_cfg = types.ThinkingConfig(thinking_budget=budget)
         except Exception as e:

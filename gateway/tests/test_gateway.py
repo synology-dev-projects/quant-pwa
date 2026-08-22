@@ -333,11 +333,11 @@ async def test_stream_chat_response_with_thinking_config():
 
         assert len(captured_configs) == 1
         cfg1 = captured_configs[0]
-        assert cfg1.thinking_config is not None
-        assert cfg1.thinking_config.thinking_budget == 0
+        # Fast Tier 3.5-lite has thinking_config disabled to prevent Google API 400 errors
+        assert cfg1.thinking_config is None
 
-        # 2. Complex query -> budget 512
-        messages_complex = [{"role": "user", "content": "Compare SPY and QQQ macro strategy"}]
+        # 2. Complex query -> strategic budget 512
+        messages_complex = [{"role": "user", "content": "Explain the macro strategy for FOMC rates and portfolio correlation"}]
         async for _ in stream_chat_response(messages=messages_complex):
             pass
 
