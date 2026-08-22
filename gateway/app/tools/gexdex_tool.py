@@ -90,7 +90,7 @@ def get_gexdex(
     last_error = None
     for attempt in range(3):
         try:
-            with httpx.Client(timeout=15.0) as client:
+            with httpx.Client(timeout=35.0) as client:
                 response = client.get(url, params=params, headers=headers)
                 
                 if response.status_code == 200:
@@ -128,7 +128,7 @@ def get_gexdex(
         entry = _GEXDEX_MEMORY_CACHE[cache_key]
         stale_age = int(time.time() - entry["timestamp"])
         logging.warning(f"Serving stale GEXDEX cache for {clean_tickers} ({stale_age}s old) due to upstream error: {last_error}")
-        stale_data = entry["data"]
+        stale_data = dict(entry["data"])
         _emit_ui_events_from_payload(stale_data)
         stale_data["_cached_fallback"] = True
         stale_data["_cache_age_seconds"] = stale_age
@@ -215,7 +215,7 @@ def get_strike_distribution(
     
     for attempt in range(3):
         try:
-            with httpx.Client(timeout=15.0) as client:
+            with httpx.Client(timeout=35.0) as client:
                 resp = client.get(url, params=params, headers=headers)
                 if resp.status_code == 200:
                     return resp.json()
