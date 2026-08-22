@@ -32,6 +32,9 @@ quant_pwa_dir = os.path.dirname(gateway_dir)
 quant_system_dir = os.path.dirname(quant_pwa_dir)
 
 candidate_paths = [
+    "/app",
+    "/app/common_lib",
+    "/app/common-lib",
     quant_system_dir,
     os.path.join(quant_system_dir, "common-lib"),
     os.path.join(quant_system_dir, "common_lib"),
