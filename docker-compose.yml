@@ -10,7 +10,7 @@ services:
     environment:
       - APP_PASSCODE=${APP_PASSCODE:-quant-secret-2026}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - DEFAULT_GEMINI_MODEL=${DEFAULT_GEMINI_MODEL:-gemini-3.7-flash}
+      - DEFAULT_GEMINI_MODEL=${DEFAULT_GEMINI_MODEL:-gemini-3.5-flash-lite}
       - GEXDEX_API_URL=${GEXDEX_API_URL:-http://gexdex-api-prod:8000}
       - GEXDEX_API_KEY=${GEXDEX_API_KEY}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
