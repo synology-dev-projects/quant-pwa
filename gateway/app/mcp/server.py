@@ -182,7 +182,7 @@ async def handle_rpc_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
                     "id": req_id,
                     "result": {
                         "content": [
-                            {"type": "text", "text": json.dumps(res, indent=2)}
+                            {"type": "text", "text": res if isinstance(res, str) else json.dumps(res, indent=2)}
                         ],
                         "isError": False
                     }
@@ -265,8 +265,8 @@ async def handle_rpc_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
                         "contents": [
                             {
                                 "uri": uri,
-                                "mimeType": "application/json",
-                                "text": json.dumps(res, indent=2)
+                                "mimeType": "text/plain" if isinstance(res, str) else "application/json",
+                                "text": res if isinstance(res, str) else json.dumps(res, indent=2)
                             }
                         ]
                     }

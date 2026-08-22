@@ -1,7 +1,7 @@
 import time
 import httpx
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union, Tuple
 from app.config import settings
 from app.tools.registry import register_tool, emit_tool_ui_event, record_tool_metric
 
@@ -12,6 +12,167 @@ CACHE_TTL_SECONDS = 60.0
 
 def _get_cache_key(tickers: str, max_dte: int, strike_range: int) -> str:
     return f"{tickers}:{max_dte}:{strike_range}"
+
+
+def _format_dollar_amount(val: Any) -> str:
+    """Formats numeric values into compact dollar strings (e.g. +$1.25B, -$450.00M, +$35.20M, $0.00)."""
+    if val is None:
+        return "$0.00"
+    if isinstance(val, str):
+        if val.startswith("$") or val.startswith("+$") or val.startswith("-$"):
+            return val
+        try:
+            val = float(val)
+        except ValueError:
+            return val
+    try:
+        v = float(val)
+    except (TypeError, ValueError):
+        return str(val)
+
+    if v == 0:
+        return "$0.00"
+
+    sign = "+" if v > 0 else "-"
+    abs_v = abs(v)
+    if abs_v >= 1_000_000_000:
+        return f"{sign}${abs_v / 1_000_000_000:.2f}B"
+    elif abs_v >= 1_000_000:
+        return f"{sign}${abs_v / 1_000_000:.2f}M"
+    elif abs_v >= 1_000:
+        return f"{sign}${abs_v / 1_000:.2f}K"
+    else:
+        return f"{sign}${abs_v:.2f}"
+
+
+def _format_price(val: Any) -> str:
+    """Formats price values to 2 decimal places without leading dollar signs."""
+    if val is None:
+        return "N/A"
+    try:
+        return f"{float(val):.2f}"
+    except (TypeError, ValueError):
+        return str(val).replace("$", "")
+
+
+def _extract_top_gamma_clusters(item: Dict[str, Any]) -> Tuple[str, str]:
+    """Extracts top call and put gamma strikes with formatted exposure values."""
+    strikes = []
+    if isinstance(item.get("strike_distribution"), dict):
+        strikes = item["strike_distribution"].get("strikes", [])
+    elif isinstance(item.get("strikes"), list):
+        strikes = item["strikes"]
+
+    top_call_str = "N/A"
+    top_put_str = "N/A"
+    limit = 3
+
+    if isinstance(strikes, list) and strikes:
+        call_strikes = [s for s in strikes if isinstance(s, dict) and (s.get("call_gex") or 0) > 0]
+        call_strikes.sort(key=lambda s: (s.get("call_gex") or 0), reverse=True)
+        top_calls = call_strikes[:limit]
+
+        if top_calls:
+            top_call_str = ", ".join(
+                f"${_format_price(s.get('strike'))} ({_format_dollar_amount(s.get('call_gex'))})"
+                for s in top_calls
+            )
+
+        put_strikes = [s for s in strikes if isinstance(s, dict) and abs(s.get("put_gex") or 0) > 0]
+        put_strikes.sort(key=lambda s: abs(s.get("put_gex") or 0), reverse=True)
+        top_puts = put_strikes[:limit]
+
+        if top_puts:
+            top_put_str = ", ".join(
+                f"${_format_price(s.get('strike'))} ({_format_dollar_amount(-abs(s.get('put_gex')))})"
+                for s in top_puts
+            )
+
+    # Fallback to key structural walls if strike list was not available
+    if top_call_str == "N/A" and item.get("call_wall") is not None:
+        top_call_str = f"${_format_price(item.get('call_wall'))}"
+    if top_put_str == "N/A" and item.get("put_wall") is not None:
+        top_put_str = f"${_format_price(item.get('put_wall'))}"
+
+    return top_call_str, top_put_str
+
+
+def _format_single_ticker_summary(item: Dict[str, Any]) -> str:
+    """
+    Builds the institutional quantitative microstructure summary string for a single ticker.
+    Format:
+    [QUANTITATIVE MICROSTRUCTURE SUMMARY: {ticker}]
+    • Spot Price: ${spot_price} | Regime: {gamma_regime} (Net GEX: {net_gex_formatted})
+    • Structural Walls: Call Wall ${call_wall} | Put Wall ${put_wall} | Zero GEX Flip: ${zero_gex_level}
+    • Key Gamma Clusters: Calls: {top_call_strikes} | Puts: {top_put_strikes}
+    • Market Metrics: Call/Put Ratio: {call_put_ratio} | Net DEX: {net_dex_formatted} | Pin Risk: {pin_risk_level} (Front-Week Concentration: {front_week_pct}%)
+    """
+    ticker = str(item.get("ticker") or item.get("symbol") or "UNKNOWN").upper()
+    spot_price = _format_price(item.get("spot_price"))
+    gamma_regime = item.get("gamma_regime") or "Neutral"
+    net_gex_formatted = _format_dollar_amount(item.get("net_gex"))
+
+    call_wall = _format_price(item.get("call_wall"))
+    put_wall = _format_price(item.get("put_wall"))
+    zero_gex_level = _format_price(item.get("zero_gex_level"))
+
+    top_call_strikes, top_put_strikes = _extract_top_gamma_clusters(item)
+
+    cp_val = item.get("call_put_ratio")
+    if cp_val is not None:
+        try:
+            call_put_ratio = f"{float(cp_val):.2f}"
+        except (TypeError, ValueError):
+            call_put_ratio = str(cp_val)
+    else:
+        call_put_ratio = "N/A"
+
+    net_dex_formatted = _format_dollar_amount(item.get("net_dex"))
+    pin_risk_level = str(item.get("pin_risk_level") or "LOW").upper()
+
+    fw_val = item.get("front_week_gex_pct") if item.get("front_week_gex_pct") is not None else item.get("front_week_pct")
+    if fw_val is not None:
+        try:
+            front_week_pct = f"{float(fw_val):.1f}"
+        except (TypeError, ValueError):
+            front_week_pct = str(fw_val).replace("%", "")
+    else:
+        front_week_pct = "0.0"
+
+    summary = (
+        f"[QUANTITATIVE MICROSTRUCTURE SUMMARY: {ticker}]\n"
+        f"• Spot Price: ${spot_price} | Regime: {gamma_regime} (Net GEX: {net_gex_formatted})\n"
+        f"• Structural Walls: Call Wall ${call_wall} | Put Wall ${put_wall} | Zero GEX Flip: ${zero_gex_level}\n"
+        f"• Key Gamma Clusters: Calls: {top_call_strikes} | Puts: {top_put_strikes}\n"
+        f"• Market Metrics: Call/Put Ratio: {call_put_ratio} | Net DEX: {net_dex_formatted} | Pin Risk: {pin_risk_level} (Front-Week Concentration: {front_week_pct}%)"
+    )
+    return summary
+
+
+def _format_gexdex_summary(data: Dict[str, Any]) -> str:
+    """Formats full gexdex response payload into clean institutional summaries stripped of massive strike arrays."""
+    if not isinstance(data, dict):
+        return str(data)
+
+    if "error" in data:
+        err_msg = data.get("error", "Unknown error")
+        detail = data.get("detail", "")
+        ticker = data.get("ticker", "")
+        return f"[ERROR: {ticker}] {err_msg} ({detail})" if detail else f"[ERROR: {ticker}] {err_msg}"
+
+    # Handle multi-ticker batch responses
+    if "batch_data" in data and isinstance(data["batch_data"], dict) and data["batch_data"]:
+        ordered_keys = data.get("tickers") if isinstance(data.get("tickers"), list) else list(data["batch_data"].keys())
+        summaries = []
+        for sym in ordered_keys:
+            sym_item = data["batch_data"].get(sym)
+            if isinstance(sym_item, dict):
+                summaries.append(_format_single_ticker_summary(sym_item))
+        if summaries:
+            return "\n\n".join(summaries)
+
+    # Fallback to single-ticker summary
+    return _format_single_ticker_summary(data)
 
 
 @register_tool(
@@ -50,9 +211,10 @@ def get_gexdex(
     strike_range: int = 25,
     force_refresh: bool = False,
     tickers: Optional[str] = None
-) -> Dict[str, Any]:
+) -> Union[str, Dict[str, Any]]:
     """
     Queries gexdex-api assistant-summary endpoint with automatic 3x retries and SWR cache fallback.
+    Emits full strike distribution to client UI event stream while returning compact quantitative summary string to LLM.
     """
     t0 = time.perf_counter()
     raw_input = tickers or ticker
@@ -63,7 +225,7 @@ def get_gexdex(
 
     if not clean_tickers:
         record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=0)
-        return {"error": "No valid ticker provided."}
+        return _format_gexdex_summary({"error": "No valid ticker provided."})
 
     cache_key = _get_cache_key(clean_tickers, max_dte, strike_range)
     now = time.time()
@@ -76,7 +238,7 @@ def get_gexdex(
             # Re-emit UI events for client Canvas charts
             _emit_ui_events_from_payload(cached_data)
             record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="HIT", retry_count=0)
-            return cached_data
+            return _format_gexdex_summary(cached_data)
 
     url = f"{settings.GEXDEX_API_URL.rstrip('/')}/api/v1/gexdex/assistant-summary"
     params = {
@@ -108,18 +270,18 @@ def get_gexdex(
                         "timestamp": time.time()
                     }
                     record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
-                    return data
+                    return _format_gexdex_summary(data)
                 elif response.status_code in (502, 503, 504):
                     last_error = f"HTTP {response.status_code}"
                     time.sleep(0.2 * (2 ** attempt))
                     continue
                 else:
                     record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
-                    return {
+                    return _format_gexdex_summary({
                         "error": f"gexdex-api returned HTTP {response.status_code}",
                         "detail": response.text,
                         "ticker": clean_tickers
-                    }
+                    })
         except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as net_err:
             last_error = str(net_err)
             time.sleep(0.2 * (2 ** attempt))
@@ -138,16 +300,16 @@ def get_gexdex(
         stale_data["_cached_fallback"] = True
         stale_data["_cache_age_seconds"] = stale_age
         record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="HIT", retry_count=3)
-        return stale_data
+        return _format_gexdex_summary(stale_data)
 
     # 4. Graceful Structured Failure Payload
     record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=3)
-    return {
+    return _format_gexdex_summary({
         "error": "Temporary connectivity delay with options data feed.",
         "detail": f"Upstream microservice did not respond after 3 retry attempts ({last_error}).",
         "ticker": clean_tickers,
         "is_temporary": True
-    }
+    })
 
 
 def _clean_image_references(obj: Any) -> Any:

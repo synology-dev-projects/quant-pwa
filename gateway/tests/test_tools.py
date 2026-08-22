@@ -124,6 +124,10 @@ def test_emit_ui_events_from_payload_batch():
 def test_get_gexdex_multi_ticker_timeout():
     from unittest.mock import patch, MagicMock
     from app.tools.gexdex_tool import get_gexdex
+    from app.tools.registry import tool_ui_events_var
+
+    events = []
+    tool_ui_events_var.set(events)
 
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -131,10 +135,10 @@ def test_get_gexdex_multi_ticker_timeout():
         "count": 4,
         "tickers": ["META", "AMZN", "NFLX", "GOOGL"],
         "batch_data": {
-            "META": {"ticker": "META", "spot_price": 500.0},
-            "AMZN": {"ticker": "AMZN", "spot_price": 180.0},
-            "NFLX": {"ticker": "NFLX", "spot_price": 650.0},
-            "GOOGL": {"ticker": "GOOGL", "spot_price": 170.0}
+            "META": {"ticker": "META", "spot_price": 500.0, "gamma_regime": "Positive Gamma", "call_wall": 520.0, "put_wall": 480.0, "zero_gex_level": 495.0, "net_gex": 120000000.0, "net_dex": -50000000.0, "call_put_ratio": 1.5, "pin_risk_level": "LOW", "front_week_gex_pct": 35.0, "strike_distribution": {"ticker": "META", "strikes": [{"strike": 520.0, "call_gex": 50000000.0, "put_gex": -10000000.0}]}},
+            "AMZN": {"ticker": "AMZN", "spot_price": 180.0, "gamma_regime": "Neutral", "call_wall": 185.0, "put_wall": 175.0, "zero_gex_level": 178.0, "net_gex": 45000000.0, "net_dex": 10000000.0, "call_put_ratio": 1.1, "pin_risk_level": "LOW", "front_week_gex_pct": 20.0, "strike_distribution": {"ticker": "AMZN", "strikes": [{"strike": 185.0, "call_gex": 20000000.0, "put_gex": -5000000.0}]}},
+            "NFLX": {"ticker": "NFLX", "spot_price": 650.0, "gamma_regime": "Positive Gamma", "call_wall": 670.0, "put_wall": 630.0, "zero_gex_level": 645.0, "net_gex": 80000000.0, "net_dex": -20000000.0, "call_put_ratio": 1.8, "pin_risk_level": "MODERATE", "front_week_gex_pct": 40.0, "strike_distribution": {"ticker": "NFLX", "strikes": [{"strike": 670.0, "call_gex": 30000000.0, "put_gex": -8000000.0}]}},
+            "GOOGL": {"ticker": "GOOGL", "spot_price": 170.0, "gamma_regime": "Negative Gamma", "call_wall": 175.0, "put_wall": 165.0, "zero_gex_level": 172.0, "net_gex": -30000000.0, "net_dex": -80000000.0, "call_put_ratio": 0.8, "pin_risk_level": "HIGH", "front_week_gex_pct": 55.0, "strike_distribution": {"ticker": "GOOGL", "strikes": [{"strike": 175.0, "call_gex": 10000000.0, "put_gex": -25000000.0}]}}
         }
     }
 
@@ -147,7 +151,153 @@ def test_get_gexdex_multi_ticker_timeout():
         res = get_gexdex(ticker="META,AMZN,NFLX,GOOGL", force_refresh=True)
 
         mock_client_cls.assert_called_with(timeout=35.0)
-        assert res["count"] == 4
-        assert "META" in res["batch_data"]
+        assert isinstance(res, str)
+        assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: META]" in res
+        assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: AMZN]" in res
+        assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: NFLX]" in res
+        assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: GOOGL]" in res
+        assert "strike_distribution" not in res
+        assert len(events) == 4
+        emitted_tickers = [e["payload"]["ticker"] for e in events]
+        assert "META" in emitted_tickers
+        assert "AMZN" in emitted_tickers
+        assert "NFLX" in emitted_tickers
+        assert "GOOGL" in emitted_tickers
+
+
+def test_get_gexdex_single_ticker_summary_formatting():
+    from unittest.mock import patch, MagicMock
+    from app.tools.gexdex_tool import get_gexdex
+    from app.tools.registry import tool_ui_events_var
+
+    events = []
+    tool_ui_events_var.set(events)
+
+    strike_dist = {
+        "ticker": "SPY",
+        "spot_price": 580.0,
+        "strikes": [
+            {"strike": 590.0, "call_gex": 500000000.0, "put_gex": -50000000.0},
+            {"strike": 585.0, "call_gex": 350000000.0, "put_gex": -80000000.0},
+            {"strike": 570.0, "call_gex": 20000000.0, "put_gex": -450000000.0}
+        ]
+    }
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "ticker": "SPY",
+        "spot_price": 580.0,
+        "gamma_regime": "Positive Gamma",
+        "net_gex": 1500000000.0,
+        "net_dex": -800000000.0,
+        "call_wall": 590.0,
+        "put_wall": 570.0,
+        "zero_gex_level": 575.0,
+        "call_put_ratio": 1.55,
+        "pin_risk_level": "LOW",
+        "front_week_gex_pct": 38.5,
+        "strike_distribution": strike_dist
+    }
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        res = get_gexdex(ticker="SPY", force_refresh=True)
+
+        assert isinstance(res, str)
+        assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: SPY]" in res
+        assert "• Spot Price: $580.00 | Regime: Positive Gamma (Net GEX: +$1.50B)" in res
+        assert "• Structural Walls: Call Wall $590.00 | Put Wall $570.00 | Zero GEX Flip: $575.00" in res
+        assert "• Key Gamma Clusters: Calls: $590.00 (+$500.00M), $585.00 (+$350.00M), $570.00 (+$20.00M) | Puts: $570.00 (-$450.00M), $585.00 (-$80.00M), $590.00 (-$50.00M)" in res
+        assert "• Market Metrics: Call/Put Ratio: 1.55 | Net DEX: -$800.00M | Pin Risk: LOW (Front-Week Concentration: 38.5%)" in res
+
+        # Verify massive raw strike arrays are stripped from LLM return value
+        assert "strike_distribution" not in res
+        assert "raw_data" not in res
+        assert "distribution_data" not in res
+
+        # Verify tool_ui_events_var received the full strike distribution for HTML5 Canvas
+        assert len(events) == 1
+        assert events[0]["type"] == "tool_ui"
+        assert events[0]["name"] == "get_gexdex"
+        assert events[0]["payload"]["ticker"] == "SPY"
+        assert len(events[0]["payload"]["strikes"]) == 3
+
+
+def test_get_gexdex_cache_hit_emits_ui_and_returns_summary():
+    from unittest.mock import patch, MagicMock
+    from app.tools.gexdex_tool import get_gexdex, _GEXDEX_MEMORY_CACHE
+    from app.tools.registry import tool_ui_events_var
+
+    events = []
+    tool_ui_events_var.set(events)
+
+    strike_dist = {
+        "ticker": "NVDA",
+        "spot_price": 125.0,
+        "strikes": [{"strike": 130.0, "call_gex": 100000000.0, "put_gex": -20000000.0}]
+    }
+    cached_payload = {
+        "ticker": "NVDA",
+        "spot_price": 125.0,
+        "gamma_regime": "Positive Gamma",
+        "net_gex": 300000000.0,
+        "net_dex": 150000000.0,
+        "call_wall": 130.0,
+        "put_wall": 120.0,
+        "zero_gex_level": 122.0,
+        "call_put_ratio": 1.7,
+        "pin_risk_level": "LOW",
+        "front_week_gex_pct": 25.0,
+        "strike_distribution": strike_dist
+    }
+
+    import time
+    _GEXDEX_MEMORY_CACHE["NVDA:50:25"] = {
+        "data": cached_payload,
+        "timestamp": time.time()
+    }
+
+    res = get_gexdex(ticker="NVDA", force_refresh=False)
+
+    assert isinstance(res, str)
+    assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: NVDA]" in res
+    assert "• Spot Price: $125.00 | Regime: Positive Gamma (Net GEX: +$300.00M)" in res
+    assert "• Structural Walls: Call Wall $130.00 | Put Wall $120.00 | Zero GEX Flip: $122.00" in res
+    assert "strike_distribution" not in res
+
+    # Check that UI event was re-emitted on cache HIT
+    assert len(events) == 1
+    assert events[0]["type"] == "tool_ui"
+    assert events[0]["name"] == "get_gexdex"
+    assert events[0]["payload"]["ticker"] == "NVDA"
+
+
+def test_get_gexdex_fallback_without_strikes():
+    from app.tools.gexdex_tool import _format_single_ticker_summary
+
+    item = {
+        "ticker": "TSLA",
+        "spot_price": 250.0,
+        "gamma_regime": "Neutral",
+        "net_gex": 0.0,
+        "net_dex": -50000000.0,
+        "call_wall": 260.0,
+        "put_wall": 240.0,
+        "zero_gex_level": 248.0,
+        "call_put_ratio": 1.0,
+        "pin_risk_level": "MODERATE",
+        "front_week_gex_pct": 50.0
+    }
+
+    summary = _format_single_ticker_summary(item)
+    assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: TSLA]" in summary
+    assert "• Key Gamma Clusters: Calls: $260.00 | Puts: $240.00" in summary
+    assert "• Market Metrics: Call/Put Ratio: 1.00 | Net DEX: -$50.00M | Pin Risk: MODERATE (Front-Week Concentration: 50.0%)" in summary
+
 
 
