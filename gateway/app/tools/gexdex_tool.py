@@ -1,13 +1,21 @@
 import time
 import httpx
+import asyncio
 import logging
-from typing import Dict, Any, Optional, Union, Tuple
+from datetime import datetime, time as dtime
+import pytz
+from typing import Dict, Any, Optional, Union, Tuple, List
 from app.config import settings
 from app.tools.registry import register_tool, emit_tool_ui_event, record_tool_metric
 
-# 60-Second In-Memory SWR (Stale-While-Revalidate) Cache
+logger = logging.getLogger("quant.gateway")
+NY_TZ = pytz.timezone("America/New_York")
+
+# 5-Minute In-Memory SWR (Stale-While-Revalidate) Cache for Benchmark Options
 _GEXDEX_MEMORY_CACHE: Dict[str, Dict[str, Any]] = {}
-CACHE_TTL_SECONDS = 60.0
+CACHE_TTL_SECONDS = 300.0
+
+BENCHMARK_WARM_TICKERS = ["SPY", "QQQ", "IWM", "NVDA", "AAPL", "TSLA", "META", "AMZN", "GOOGL", "MSFT"]
 
 
 def _get_cache_key(tickers: str, max_dte: int, strike_range: int) -> str:
@@ -401,3 +409,64 @@ def get_strike_distribution(
 
     record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=3)
     return {"error": "Failed to fetch strike distribution after 3 retries.", "ticker": clean_ticker}
+
+
+def is_market_warmer_window(dt: Optional[datetime] = None) -> bool:
+    """Checks if current Eastern Time is within market pre-cache window (Mon-Fri 08:30 - 16:15 ET)."""
+    if dt is None:
+        dt = datetime.now(NY_TZ)
+    elif dt.tzinfo is None:
+        dt = NY_TZ.localize(dt)
+    else:
+        dt = dt.astimezone(NY_TZ)
+
+    weekday = dt.weekday()  # 0 = Mon, 4 = Fri, 5 = Sat, 6 = Sun
+    if weekday > 4:  # Saturday or Sunday
+        return False
+    curr_time = dt.time()
+    return dtime(8, 30) <= curr_time <= dtime(16, 15)
+
+
+async def warm_benchmark_cache(force_refresh: bool = False) -> int:
+    """
+    Calls get_gexdex for individual benchmark tickers in parallel via asyncio.to_thread.
+    Logs '[Cache Warmer] Pre-warmed N benchmark tickers in X ms'.
+    Returns number of tickers successfully warmed.
+    """
+    t0 = time.perf_counter()
+    tasks = [
+        asyncio.to_thread(get_gexdex, ticker=sym, force_refresh=force_refresh)
+        for sym in BENCHMARK_WARM_TICKERS
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    warmed = 0
+    for res in results:
+        if isinstance(res, str) and not res.startswith("[ERROR") and "error" not in res.lower():
+            warmed += 1
+        elif isinstance(res, dict) and "error" not in res:
+            warmed += 1
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    logger.info(f"[Cache Warmer] Pre-warmed {warmed} benchmark tickers in {elapsed_ms:.1f} ms")
+    return warmed
+
+
+async def run_cache_warmer_loop(interval_seconds: int = 180):
+    """
+    Background market hours pre-cache warmer loop.
+    Checks if current Eastern Time is within market window (Mon-Fri 08:30 - 16:15 ET).
+    If yes, runs warm_benchmark_cache(force_refresh=True).
+    Sleeps for interval_seconds using asyncio.sleep().
+    Handles cancellation cleanly on server shutdown.
+    """
+    logger.info(f"🚀 Starting Background Market Hours Pre-Cache Warmer (interval: {interval_seconds}s)")
+    try:
+        while True:
+            try:
+                if is_market_warmer_window():
+                    await warm_benchmark_cache(force_refresh=True)
+            except Exception as e:
+                logger.error(f"[Cache Warmer] Error during warm cycle: {e}")
+            await asyncio.sleep(interval_seconds)
+    except asyncio.CancelledError:
+        logger.info("[Cache Warmer] Background pre-cache warmer stopped gracefully.")

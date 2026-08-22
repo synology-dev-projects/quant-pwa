@@ -300,4 +300,122 @@ def test_get_gexdex_fallback_without_strikes():
     assert "• Market Metrics: Call/Put Ratio: 1.00 | Net DEX: -$50.00M | Pin Risk: MODERATE (Front-Week Concentration: 50.0%)" in summary
 
 
+@pytest.mark.anyio
+async def test_warm_benchmark_cache_and_memory_cache_hit():
+    """Verifies that warm_benchmark_cache() pre-warms all benchmark tickers and subsequent calls result in cache HIT."""
+    from unittest.mock import patch, MagicMock
+    from app.tools.gexdex_tool import (
+        warm_benchmark_cache,
+        get_gexdex,
+        BENCHMARK_WARM_TICKERS,
+        _GEXDEX_MEMORY_CACHE,
+        _get_cache_key
+    )
+    from app.tools.registry import tool_metrics_var
+
+    _GEXDEX_MEMORY_CACHE.clear()
+
+    def mock_get(url, params=None, headers=None):
+        ticker = (params.get("tickers") if params else "SPY") or "SPY"
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "ticker": ticker,
+            "spot_price": 500.0,
+            "gamma_regime": "Positive Gamma",
+            "net_gex": 1000000000.0,
+            "net_dex": -500000000.0,
+            "call_wall": 520.0,
+            "put_wall": 480.0,
+            "zero_gex_level": 495.0,
+            "call_put_ratio": 1.5,
+            "pin_risk_level": "LOW",
+            "front_week_gex_pct": 30.0,
+            "strike_distribution": {
+                "ticker": ticker,
+                "strikes": [{"strike": 500.0, "call_gex": 50000000.0, "put_gex": -20000000.0}]
+            }
+        }
+        return mock_resp
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.side_effect = mock_get
+        mock_client_cls.return_value = mock_client
+
+        warmed_count = await warm_benchmark_cache(force_refresh=True)
+
+        assert warmed_count == len(BENCHMARK_WARM_TICKERS)
+        assert len(BENCHMARK_WARM_TICKERS) == 10
+
+        # Verify all benchmark tickers are populated in _GEXDEX_MEMORY_CACHE
+        for sym in BENCHMARK_WARM_TICKERS:
+            cache_key = _get_cache_key(sym, 50, 25)
+            assert cache_key in _GEXDEX_MEMORY_CACHE
+            assert _GEXDEX_MEMORY_CACHE[cache_key]["data"]["ticker"] == sym
+
+        # Verify that subsequent get_gexdex calls hit the in-memory cache and record cache_status == 'HIT'
+        mock_client.get.reset_mock()
+        metrics = {}
+        tool_metrics_var.set(metrics)
+
+        spy_summary = get_gexdex(ticker="SPY", force_refresh=False)
+        assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: SPY]" in spy_summary
+        mock_client.get.assert_not_called()
+        assert metrics.get("cache_status") == "HIT"
+
+
+def test_is_market_warmer_window():
+    """Verifies that is_market_warmer_window correctly identifies Mon-Fri 08:30 - 16:15 ET."""
+    from app.tools.gexdex_tool import is_market_warmer_window
+    import pytz
+    from datetime import datetime
+
+    ny = pytz.timezone("America/New_York")
+
+    # Tuesday 10:00 AM ET (regular hours) -> True
+    dt_open = ny.localize(datetime(2026, 8, 18, 10, 0, 0))
+    assert is_market_warmer_window(dt_open) is True
+
+    # Tuesday 08:30 AM ET (window start boundary) -> True
+    dt_start = ny.localize(datetime(2026, 8, 18, 8, 30, 0))
+    assert is_market_warmer_window(dt_start) is True
+
+    # Tuesday 16:15 PM ET (window end boundary) -> True
+    dt_end = ny.localize(datetime(2026, 8, 18, 16, 15, 0))
+    assert is_market_warmer_window(dt_end) is True
+
+    # Tuesday 08:29 AM ET (before window) -> False
+    dt_early = ny.localize(datetime(2026, 8, 18, 8, 29, 59))
+    assert is_market_warmer_window(dt_early) is False
+
+    # Tuesday 16:16 PM ET (after window) -> False
+    dt_late = ny.localize(datetime(2026, 8, 18, 16, 16, 0))
+    assert is_market_warmer_window(dt_late) is False
+
+    # Saturday 12:00 PM ET (weekend) -> False
+    dt_weekend = ny.localize(datetime(2026, 8, 22, 12, 0, 0))
+    assert is_market_warmer_window(dt_weekend) is False
+
+    # Sunday 09:00 AM ET (weekend) -> False
+    dt_sunday = ny.localize(datetime(2026, 8, 23, 9, 0, 0))
+    assert is_market_warmer_window(dt_sunday) is False
+
+
+@pytest.mark.anyio
+async def test_run_cache_warmer_loop_cancellation():
+    """Verifies that run_cache_warmer_loop runs and cancels gracefully."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
+    from app.tools.gexdex_tool import run_cache_warmer_loop
+
+    with patch("app.tools.gexdex_tool.warm_benchmark_cache", new_callable=AsyncMock) as mock_warm:
+        task = asyncio.create_task(run_cache_warmer_loop(interval_seconds=100))
+        await asyncio.sleep(0.01)
+        task.cancel()
+        await task
+        assert task.cancelled() or task.done()
+
+
 

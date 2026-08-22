@@ -1,3 +1,4 @@
+import time
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
@@ -175,4 +176,81 @@ def test_chat_stream_api_endpoint_metrics():
         assert '"server_total_ms":' in response.text
         assert '"tok_per_sec":' in response.text
 
+
+def test_models_list_endpoint_structure():
+    """Verifies that /api/models returns updated default model and available models hierarchy."""
+    valid_passcode = settings.APP_PASSCODE
+    response = client.get("/api/models", headers={"Authorization": f"Bearer {valid_passcode}"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["default"] == "gemini-3.6-flash"
+    assert len(data["models"]) == 4
+    model_ids = [m["id"] for m in data["models"]]
+    assert model_ids == [
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-latest",
+        "gemini-3.7-flash"
+    ]
+
+
+def test_create_genai_client_fast_timeout_and_retries(monkeypatch):
+    """Verifies that create_genai_client configures fast timeout (12s) and 1 retry attempt."""
+    from app.core.agent import create_genai_client
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "test-key-12345")
+    
+    with patch("google.genai.Client") as mock_client_cls:
+        client_inst = create_genai_client()
+        assert mock_client_cls.called
+        call_kwargs = mock_client_cls.call_args[1]
+        assert call_kwargs["api_key"] == "test-key-12345"
+        assert "http_options" in call_kwargs
+        http_opts = call_kwargs["http_options"]
+        assert http_opts.timeout == 12000
+        assert http_opts.retry_options.attempts == 1
+
+
+@pytest.mark.anyio
+async def test_stream_chat_response_fast_failover():
+    """Verifies that stream_chat_response fast-failovers to the next model on transient error without delay."""
+    attempt_count = 0
+    created_models = []
+
+    def mock_create(model, config, history):
+        nonlocal attempt_count
+        created_models.append(model)
+        mock_chat = MagicMock()
+        if model == "gemini-3.6-flash":
+            # Simulate 503 UNAVAILABLE transient failure
+            from google.genai.errors import ServerError
+            def fail_send(prompt):
+                raise ServerError(503, {"error": {"code": 503, "message": "Model unavailable / high load"}})
+            mock_chat.send_message.side_effect = fail_send
+        else:
+            # Fallback model succeeds
+            mock_resp = MagicMock()
+            mock_resp.text = "Analysis completed via fallback model."
+            mock_chat.send_message.return_value = mock_resp
+        return mock_chat
+
+    mock_client = MagicMock()
+    mock_client.chats.create.side_effect = mock_create
+
+    with patch("app.core.agent.create_genai_client", return_value=mock_client):
+        messages = [{"role": "user", "content": "Analyze SPY GEX"}]
+        chunks = []
+        t0 = time.perf_counter()
+        async for chunk in stream_chat_response(messages=messages, model_name="gemini-3.6-flash"):
+            chunks.append(chunk)
+        elapsed = time.perf_counter() - t0
+
+    full_output = "".join(chunks)
+    # Failover should happen quickly (< 500ms in local mock)
+    assert elapsed < 0.5
+    # Both primary and secondary models were attempted
+    assert "gemini-3.6-flash" in created_models
+    assert "gemini-3.5-flash-lite" in created_models
+    assert "Model Failover" in full_output
+    assert "Analysis" in full_output
+    assert "fallback" in full_output
 
