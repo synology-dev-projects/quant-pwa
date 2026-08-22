@@ -4,6 +4,8 @@ import { ChatView } from './tabs/chat_view.js';
 import { PromptInput } from './components/prompt_input.js';
 import { Lightbox } from './components/lightbox.js';
 import { LockScreen } from './components/lock_screen.js';
+import { SettingsModal } from './components/settings_modal.js';
+import { DiagnosticsModal } from './components/diagnostics_modal.js';
 
 const AVAILABLE_MODELS = [
   { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash' },
@@ -18,10 +20,14 @@ class App {
     this.lightbox = new Lightbox();
     window.quantLightbox = this.lightbox;
 
+    this.diagnosticsModal = new DiagnosticsModal();
+    window.quantDiagnostics = this.diagnosticsModal;
+
     this.activeAbortController = null;
     this.tabManager = null;
     this.promptInput = null;
     this.lockScreen = null;
+    this.settingsModal = null;
 
     this.init();
   }
@@ -123,67 +129,17 @@ class App {
   }
 
   initSettingsModal() {
-    const settingsModal = document.getElementById('settingsModal');
-    const settingsBtn = document.getElementById('settingsBtn');
-    const closeBtn = document.getElementById('settingsClose');
-    const saveBtn = document.getElementById('settingsSave');
-    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-    const lockAppBtn = document.getElementById('lockAppBtn');
-    const passcodeInput = document.getElementById('passcodeInput');
-    const gatewayUrlInput = document.getElementById('gatewayUrlInput');
-
-    if (!settingsModal) return;
-
-    settingsBtn?.addEventListener('click', () => {
-      passcodeInput.value = '';
-      passcodeInput.placeholder = AppState.getSessionToken() ? '•••••••• (Session Active)' : 'Enter passcode to log in';
-      gatewayUrlInput.value = AppState.getGatewayUrl();
-      settingsModal.classList.add('open');
-    });
-
-    closeBtn?.addEventListener('click', () => {
-      settingsModal.classList.remove('open');
-    });
-
-    saveBtn?.addEventListener('click', async () => {
-      const newGatewayUrl = gatewayUrlInput.value;
-      AppState.setGatewayUrl(newGatewayUrl);
-
-      // If user typed a new password in settings, log in and get fresh session
-      const newPassword = passcodeInput.value?.trim();
-      if (newPassword) {
-        try {
-          const res = await fetch(`${newGatewayUrl}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: newPassword })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            AppState.setSessionToken(data.token, data.expires_at);
-          } else {
-            alert('Invalid passcode. Session was not updated.');
-          }
-        } catch (err) {
-          console.warn('Failed to update session from settings:', err);
+    this.settingsModal = new SettingsModal({
+      onSettingsChanged: (opts) => {
+        if (opts?.gatewayUrl !== undefined) {
+          this.initModelSelector();
         }
-      }
-
-      settingsModal.classList.remove('open');
-      this.initModelSelector();
-    });
-
-    lockAppBtn?.addEventListener('click', () => {
-      AppState.clearSession();
-      settingsModal.classList.remove('open');
-      this.lockScreen.show();
-    });
-
-    clearHistoryBtn?.addEventListener('click', () => {
-      if (confirm('Clear all conversation history?')) {
-        AppState.clearHistory();
+      },
+      onLockApp: () => {
+        this.lockScreen?.show();
+      },
+      onClearHistory: () => {
         this.chatView.loadHistory([]);
-        settingsModal.classList.remove('open');
       }
     });
   }
@@ -202,6 +158,9 @@ class App {
 
     this.activeAbortController = new AbortController();
     this.promptInput.setStreaming(true);
+
+    // Record t_start when prompt is submitted
+    const t_start = performance.now();
 
     // 1. Add user message
     this.chatView.addUserMessage(promptText);
@@ -237,6 +196,9 @@ class App {
 
       // Initialize assistant stream bubble
       this.chatView.startAssistantMessage();
+      if (this.chatView.currentMetrics) {
+        this.chatView.currentMetrics.t_start = t_start;
+      }
 
       // Read SSE stream
       const reader = response.body.getReader();
@@ -248,16 +210,34 @@ class App {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop(); // keep remainder
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop(); // keep remainder
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
+        for (const block of blocks) {
+          if (!block.trim()) continue;
+
+          let eventType = 'message';
+          let dataStr = '';
+
+          const lines = block.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              eventType = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+              dataStr += (dataStr ? '\n' : '') + line.slice(5).trim();
+            }
+          }
+
+          if (dataStr) {
             try {
-              const data = JSON.parse(line.slice(6));
-              this.handleSSEEvent(data);
+              const data = JSON.parse(dataStr);
+              if (eventType === 'metrics' || data.type === 'metrics') {
+                this.chatView.handleMetricsEvent(data);
+              } else {
+                this.handleSSEEvent(data);
+              }
             } catch (e) {
-              console.warn('Failed to parse SSE line', line, e);
+              console.warn('Failed to parse SSE block', block, e);
             }
           }
         }
@@ -287,6 +267,8 @@ class App {
       this.chatView.showToolStatus(data.name, data.args);
     } else if (data.type === 'tool_end') {
       this.chatView.hideToolStatus();
+    } else if (data.type === 'metrics') {
+      this.chatView.handleMetricsEvent(data);
     } else if (data.type === 'error') {
       this.chatView.hideToolStatus();
       this.chatView.showErrorCard(data.message);

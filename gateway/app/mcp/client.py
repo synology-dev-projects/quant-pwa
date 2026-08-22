@@ -19,6 +19,10 @@ from app.config import settings
 logger = logging.getLogger("quant.mcp.client")
 
 
+import time
+from app.tools.registry import record_tool_metric
+
+
 class MCPToolProxy:
     """Wraps an external MCP tool as an async Python callable compatible with Gemini Function Calling."""
     def __init__(self, server_name: str, tool_schema: Dict[str, Any], call_fn: Callable):
@@ -32,7 +36,11 @@ class MCPToolProxy:
 
     async def __call__(self, **kwargs) -> Any:
         logger.info(f"Dispatching tool call to MCP server '{self.server_name}': tool={self.name} args={kwargs}")
-        return await self.call_fn(self.name, kwargs)
+        t0 = time.perf_counter()
+        try:
+            return await self.call_fn(self.name, kwargs)
+        finally:
+            record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0)
 
 
 class MCPClientManager:

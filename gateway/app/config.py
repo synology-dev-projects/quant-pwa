@@ -6,9 +6,9 @@ load_dotenv()
 
 class Settings:
     # Security & Passcode / Session Auth
-    APP_PASSCODE: str = os.getenv("APP_PASSCODE", "quant-secret-2026")
+    APP_PASSCODE: str = os.getenv("APP_PASSCODE", "RichQuantDemo")
     SESSION_EXPIRY_HOURS: int = int(os.getenv("SESSION_EXPIRY_HOURS", "6"))
-    SESSION_SECRET_KEY: str = os.getenv("SESSION_SECRET_KEY", os.getenv("APP_PASSCODE", "quant-secret-2026"))
+    SESSION_SECRET_KEY: str = os.getenv("SESSION_SECRET_KEY", os.getenv("APP_PASSCODE", "RichQuantDemo"))
     
     # Gemini AI Configuration
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
