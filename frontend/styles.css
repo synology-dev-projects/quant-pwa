@@ -1678,10 +1678,38 @@ input:checked + .slider:before {
   color: #34d399;
 }
 
+.switch-group {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 4px 0;
+}
+
+.switch-label-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.switch-label-wrapper .form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0;
+}
+
 .form-sublabel {
   font-size: 11px;
   color: var(--text-muted);
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .switch {
@@ -1690,9 +1718,12 @@ input:checked + .slider:before {
   width: 44px;
   height: 24px;
   flex-shrink: 0;
+  margin: 0;
+  cursor: pointer;
 }
 
 .switch input {
+  position: absolute;
   opacity: 0;
   width: 0;
   height: 0;
