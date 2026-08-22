@@ -227,6 +227,7 @@ def auth_verify(user: str = Depends(verify_app_passcode)):
 
 
 @app.get("/health", summary="Health Check")
+@app.get("/api/health", summary="Health Check API Alias")
 def health_check():
     """Health check endpoint for Docker container orchestration and Synology NAS monitoring."""
     market_meta = get_market_status()
