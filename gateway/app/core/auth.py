@@ -25,9 +25,10 @@ def _get_signing_key() -> bytes:
 def validate_master_password(password: str) -> bool:
     """
     Validates entered password against APP_PASSCODE using constant-time comparison.
+    Enforces fail-closed validation: returns False if APP_PASSCODE is empty or unconfigured.
     """
-    if not settings.APP_PASSCODE:
-        return True
+    if not settings.APP_PASSCODE or not settings.APP_PASSCODE.strip() or not password:
+        return False
     return secrets.compare_digest(password.strip(), settings.APP_PASSCODE.strip())
 
 
