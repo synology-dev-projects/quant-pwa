@@ -120,3 +120,34 @@ def test_emit_ui_events_from_payload_batch():
     assert "AAPL" in emitted_tickers
     assert "TSLA" in emitted_tickers
 
+
+def test_get_gexdex_multi_ticker_timeout():
+    from unittest.mock import patch, MagicMock
+    from app.tools.gexdex_tool import get_gexdex
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "count": 4,
+        "tickers": ["META", "AMZN", "NFLX", "GOOGL"],
+        "batch_data": {
+            "META": {"ticker": "META", "spot_price": 500.0},
+            "AMZN": {"ticker": "AMZN", "spot_price": 180.0},
+            "NFLX": {"ticker": "NFLX", "spot_price": 650.0},
+            "GOOGL": {"ticker": "GOOGL", "spot_price": 170.0}
+        }
+    }
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        res = get_gexdex(ticker="META,AMZN,NFLX,GOOGL", force_refresh=True)
+
+        mock_client_cls.assert_called_with(timeout=35.0)
+        assert res["count"] == 4
+        assert "META" in res["batch_data"]
+
+
