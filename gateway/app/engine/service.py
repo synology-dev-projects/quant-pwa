@@ -828,18 +828,6 @@ class GexDexService:
                     "ticker": clean_ticker_str
                 }
 
-            # Pre-warm chart cache asynchronously in threadpool
-            try:
-                prewarm_chart_cache(
-                    tickers=list(data.keys()),
-                    max_dte=max_dte,
-                    strike_range=strike_range,
-                    format="webp",
-                    force_refresh=force_refresh
-                )
-            except Exception as e:
-                logger.warning(f"Prewarm chart cache error: {e}")
-
             refresh_param = "&force_refresh=true" if force_refresh else ""
             ticker_results: Dict[str, Any] = {}
             ai_contexts: List[str] = []
@@ -886,7 +874,7 @@ class GexDexService:
         return await self.circuit_breaker.call(
             _execute_sync,
             fallback=_fallback,
-            timeout=10.0
+            timeout=25.0
         )
 
     def get_summary_sync(
