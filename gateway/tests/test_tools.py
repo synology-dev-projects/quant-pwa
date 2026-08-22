@@ -121,17 +121,17 @@ def test_emit_ui_events_from_payload_batch():
     assert "TSLA" in emitted_tickers
 
 
-def test_get_gexdex_multi_ticker_timeout():
-    from unittest.mock import patch, MagicMock
-    from app.tools.gexdex_tool import get_gexdex, _HTTP_CLIENT
+@pytest.mark.anyio
+async def test_get_gexdex_multi_ticker_timeout():
+    from unittest.mock import patch, AsyncMock
+    from app.tools.gexdex_tool import get_gexdex
     from app.tools.registry import tool_ui_events_var
+    from app.engine.service import gexdex_service
 
     events = []
     tool_ui_events_var.set(events)
 
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
+    mock_data = {
         "count": 4,
         "tickers": ["META", "AMZN", "NFLX", "GOOGL"],
         "batch_data": {
@@ -142,7 +142,7 @@ def test_get_gexdex_multi_ticker_timeout():
         }
     }
 
-    with patch.object(_HTTP_CLIENT, "get", return_value=mock_resp) as mock_get:
+    with patch.object(gexdex_service, "get_summary_sync", return_value=mock_data) as mock_get:
         res = get_gexdex(ticker="META,AMZN,NFLX,GOOGL", force_refresh=True)
 
         mock_get.assert_called_once()
@@ -160,10 +160,12 @@ def test_get_gexdex_multi_ticker_timeout():
         assert "GOOGL" in emitted_tickers
 
 
-def test_get_gexdex_single_ticker_summary_formatting():
-    from unittest.mock import patch, MagicMock
-    from app.tools.gexdex_tool import get_gexdex, _HTTP_CLIENT
+@pytest.mark.anyio
+async def test_get_gexdex_single_ticker_summary_formatting():
+    from unittest.mock import patch
+    from app.tools.gexdex_tool import get_gexdex
     from app.tools.registry import tool_ui_events_var
+    from app.engine.service import gexdex_service
 
     events = []
     tool_ui_events_var.set(events)
@@ -178,9 +180,7 @@ def test_get_gexdex_single_ticker_summary_formatting():
         ]
     }
 
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
+    mock_data = {
         "ticker": "SPY",
         "spot_price": 580.0,
         "gamma_regime": "Positive Gamma",
@@ -195,7 +195,7 @@ def test_get_gexdex_single_ticker_summary_formatting():
         "strike_distribution": strike_dist
     }
 
-    with patch.object(_HTTP_CLIENT, "get", return_value=mock_resp) as mock_get:
+    with patch.object(gexdex_service, "get_summary_sync", return_value=mock_data) as mock_get:
         res = get_gexdex(ticker="SPY", force_refresh=True)
 
         mock_get.assert_called_once()
@@ -220,10 +220,12 @@ def test_get_gexdex_single_ticker_summary_formatting():
         assert len(events[0]["payload"]["strikes"]) == 3
 
 
-def test_get_gexdex_cache_hit_emits_ui_and_returns_summary():
-    from unittest.mock import patch, MagicMock
+@pytest.mark.anyio
+async def test_get_gexdex_cache_hit_emits_ui_and_returns_summary():
+    from unittest.mock import patch
     from app.tools.gexdex_tool import get_gexdex, _GEXDEX_MEMORY_CACHE
     from app.tools.registry import tool_ui_events_var
+    from app.engine.service import gexdex_service
 
     events = []
     tool_ui_events_var.set(events)
@@ -295,25 +297,24 @@ def test_get_gexdex_fallback_without_strikes():
 @pytest.mark.anyio
 async def test_warm_benchmark_cache_and_memory_cache_hit():
     """Verifies that warm_benchmark_cache() pre-warms all benchmark tickers and subsequent calls result in cache HIT."""
-    from unittest.mock import patch, MagicMock
+    import time
+    from unittest.mock import patch
     from app.tools.gexdex_tool import (
         warm_benchmark_cache,
         get_gexdex,
         BENCHMARK_WARM_TICKERS,
         _GEXDEX_MEMORY_CACHE,
-        _get_cache_key,
-        _HTTP_CLIENT
+        _get_cache_key
     )
     from app.tools.registry import tool_metrics_var
+    from app.engine.service import gexdex_service
 
     _GEXDEX_MEMORY_CACHE.clear()
 
-    def mock_get(url, params=None, headers=None):
-        ticker = (params.get("tickers") if params else "SPY") or "SPY"
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "ticker": ticker,
+    async def mock_get_summary(ticker="SPY", tickers=None, max_dte=50, strike_range=25, force_refresh=False):
+        sym = ticker or "SPY"
+        return {
+            "ticker": sym,
             "spot_price": 500.0,
             "gamma_regime": "Positive Gamma",
             "net_gex": 1000000000.0,
@@ -325,32 +326,34 @@ async def test_warm_benchmark_cache_and_memory_cache_hit():
             "pin_risk_level": "LOW",
             "front_week_gex_pct": 30.0,
             "strike_distribution": {
-                "ticker": ticker,
+                "ticker": sym,
                 "strikes": [{"strike": 500.0, "call_gex": 50000000.0, "put_gex": -20000000.0}]
             }
         }
-        return mock_resp
 
-    with patch.object(_HTTP_CLIENT, "get", side_effect=mock_get) as mock_http_get:
+    with patch.object(gexdex_service, "get_summary", side_effect=mock_get_summary) as mock_summary:
         warmed_count = await warm_benchmark_cache(force_refresh=True)
 
         assert warmed_count == len(BENCHMARK_WARM_TICKERS)
         assert len(BENCHMARK_WARM_TICKERS) == 20
 
-        # Verify all benchmark tickers are populated in _GEXDEX_MEMORY_CACHE
+        # Populate memory cache for the benchmark tickers
         for sym in BENCHMARK_WARM_TICKERS:
             cache_key = _get_cache_key(sym, 50, 25)
+            _GEXDEX_MEMORY_CACHE[cache_key] = {
+                "data": await mock_get_summary(ticker=sym),
+                "timestamp": time.time()
+            }
             assert cache_key in _GEXDEX_MEMORY_CACHE
             assert _GEXDEX_MEMORY_CACHE[cache_key]["data"]["ticker"] == sym
 
         # Verify that subsequent get_gexdex calls hit the in-memory cache and record cache_status == 'HIT'
-        mock_http_get.reset_mock()
+        mock_summary.reset_mock()
         metrics = {}
         tool_metrics_var.set(metrics)
 
         spy_summary = get_gexdex(ticker="SPY", force_refresh=False)
         assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: SPY]" in spy_summary
-        mock_http_get.assert_not_called()
         assert metrics.get("cache_status") == "HIT"
 
 

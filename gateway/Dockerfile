@@ -1,6 +1,7 @@
-﻿FROM python:3.11-slim
+FROM python:3.11-slim
 
 WORKDIR /app
+ENV PYTHONPATH=/app:$PYTHONPATH
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
