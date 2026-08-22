@@ -73,7 +73,7 @@ jobs:
           echo "FRONTEND_PORT=${{ env.FRONTEND_PORT }}" >> "$ENV_FILE"
           echo "APP_PASSCODE=${{ secrets.APP_PASSCODE }}" >> "$ENV_FILE"
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> "$ENV_FILE"
-          echo "DEFAULT_GEMINI_MODEL=gemini-3.7-flash" >> "$ENV_FILE"
+          echo "DEFAULT_GEMINI_MODEL=gemini-3.6-flash" >> "$ENV_FILE"
           echo "GEXDEX_API_URL=http://gexdex-api-prod:8000" >> "$ENV_FILE"
           echo "GEXDEX_API_KEY=${{ secrets.GEXDEX_API_KEY }}" >> "$ENV_FILE"
           echo "PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}" >> "$ENV_FILE"
