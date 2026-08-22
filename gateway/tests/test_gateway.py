@@ -210,7 +210,7 @@ def test_create_genai_client_fast_timeout_and_retries(monkeypatch):
         assert call_kwargs["api_key"] == "test-key-12345"
         assert "http_options" in call_kwargs
         http_opts = call_kwargs["http_options"]
-        assert http_opts.timeout == 12000
+        assert http_opts.timeout == 45.0
         assert http_opts.retry_options.attempts == 1
 
 

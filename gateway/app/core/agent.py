@@ -94,7 +94,7 @@ def create_genai_client() -> genai.Client:
     if not api_key:
         raise ValueError("GEMINI_API_KEY is not set in environment or config.")
     http_opts = types.HttpOptions(
-        timeout=12000,
+        timeout=45.0,
         retry_options=types.HttpRetryOptions(attempts=1)
     )
     return genai.Client(api_key=api_key, http_options=http_opts)
