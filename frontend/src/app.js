@@ -180,7 +180,7 @@ class App {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          messages: messages,
+          messages: messages.slice(-10),
           model: model
         }),
         signal: this.activeAbortController.signal
