@@ -55,14 +55,15 @@ export class ChatView {
   }
 
   startAssistantMessage(metadata = null) {
+    this.hideToolStatus();
     this.currentAssistantContent = '';
     this.currentToolUiEvents = [];
     this.currentAssistantElement = createMessageElement('assistant', '', metadata);
     
-    // Immediately show active querying spinner while awaiting Gemini / Synology NAS
+    // Immediately show active querying spinner while awaiting response
     const pill = document.createElement('div');
     pill.className = 'tool-pill';
-    pill.innerHTML = `<div class="tool-spinner"></div> <span>Querying Synology NAS for quant market data...</span>`;
+    pill.innerHTML = `<div class="tool-spinner"></div> <span>Analyzing options market data...</span>`;
     this.currentAssistantElement.insertBefore(pill, this.currentAssistantElement.firstChild);
 
     this.streamContainer.appendChild(this.currentAssistantElement);
@@ -114,26 +115,59 @@ export class ChatView {
     if (!pill) {
       pill = document.createElement('div');
       pill.className = 'tool-pill';
-      pill.innerHTML = `<div class="tool-spinner"></div> <span>Querying Synology NAS for ${args?.ticker || 'quant data'}...</span>`;
       this.currentAssistantElement.insertBefore(pill, this.currentAssistantElement.firstChild);
     }
+    const tickerText = args?.ticker ? ` for ${args.ticker}` : '';
+    pill.innerHTML = `<div class="tool-spinner"></div> <span>Querying Synology NAS${tickerText}...</span>`;
   }
 
   hideToolStatus() {
-    if (!this.currentAssistantElement) return;
-    const pill = this.currentAssistantElement.querySelector('.tool-pill');
-    if (pill) pill.remove();
+    if (this.currentAssistantElement) {
+      const pill = this.currentAssistantElement.querySelector('.tool-pill');
+      if (pill) pill.remove();
+    }
+    // Also cleanup any orphan pills in the container
+    const allPills = this.streamContainer?.querySelectorAll('.tool-pill');
+    allPills?.forEach(p => p.remove());
+  }
+
+  showErrorCard(errorMessage) {
+    this.hideToolStatus();
+    if (!this.currentAssistantElement) {
+      this.currentAssistantElement = createMessageElement('assistant', '');
+      this.streamContainer.appendChild(this.currentAssistantElement);
+    }
+    
+    const contentDiv = this.currentAssistantElement.querySelector('.markdown-body');
+    if (contentDiv) {
+      contentDiv.innerHTML = `
+        <div class="chat-error-card">
+          <div class="cec-header">
+            <span class="cec-icon">⚠️</span>
+            <span class="cec-title">Connection Notice</span>
+          </div>
+          <div class="cec-desc">${errorMessage}</div>
+        </div>
+      `;
+    }
+    this.currentAssistantContent = `⚠️ ${errorMessage}`;
+    this.scrollToBottom();
   }
 
   finishAssistantMessage() {
     this.hideToolStatus();
+
     if (this.currentAssistantContent || this.currentToolUiEvents.length > 0) {
       this.messages.push({
         role: 'assistant',
         content: this.currentAssistantContent,
         toolUiEvents: [...this.currentToolUiEvents]
       });
+    } else if (this.currentAssistantElement) {
+      // Remove empty placeholder element if nothing arrived
+      this.currentAssistantElement.remove();
     }
+    
     this.currentAssistantElement = null;
     this.currentAssistantContent = '';
     this.currentToolUiEvents = [];

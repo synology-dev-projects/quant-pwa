@@ -1,5 +1,7 @@
 import json
 import httpx
+import asyncio
+import logging
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,10 +24,26 @@ from contextlib import asynccontextmanager
 from app.mcp import mcp_router, mcp_client_manager
 
 
+async def _probe_gexdex_api():
+    """Non-blocking background probe to verify upstream GEXDEX API connectivity on boot."""
+    try:
+        await asyncio.sleep(2.0)
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            resp = await client.get(f"{settings.GEXDEX_API_URL.rstrip('/')}/health")
+            if resp.status_code == 200:
+                logging.info(f"✅ GEXDEX Microservice connected successfully at {settings.GEXDEX_API_URL}")
+            else:
+                logging.warning(f"⚠️ GEXDEX Microservice at {settings.GEXDEX_API_URL} returned HTTP {resp.status_code}")
+    except Exception as e:
+        logging.warning(f"⚠️ GEXDEX Microservice unreachable at {settings.GEXDEX_API_URL} ({e}). Ensure container is running on quant-system-network.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Initialize MCP Client Hub
     await mcp_client_manager.initialize()
+    # Startup: Probe GEXDEX API
+    asyncio.create_task(_probe_gexdex_api())
     yield
     # Shutdown: Close active MCP sessions
     await mcp_client_manager.close()

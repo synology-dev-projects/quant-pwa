@@ -1,7 +1,7 @@
 export class Lightbox {
   constructor() {
-    this.overlay = document.getElementById('lightboxModal');
-    this.image = document.getElementById('lightboxImage');
+    this.overlay = document.getElementById('lightboxOverlay');
+    this.image = document.getElementById('lightboxImg');
     this.closeBtn = document.getElementById('lightboxClose');
     
     this.scale = 1;
