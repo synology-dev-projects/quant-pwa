@@ -24,6 +24,13 @@ from app.core.auth import (
 from contextlib import asynccontextmanager
 from app.mcp import mcp_router, mcp_client_manager
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger("quant.gateway")
+
 
 async def _probe_gexdex_api():
     """Non-blocking background probe to verify upstream GEXDEX API connectivity on boot."""
@@ -32,11 +39,11 @@ async def _probe_gexdex_api():
         async with httpx.AsyncClient(timeout=4.0) as client:
             resp = await client.get(f"{settings.GEXDEX_API_URL.rstrip('/')}/health")
             if resp.status_code == 200:
-                logging.info(f"✅ GEXDEX Microservice connected successfully at {settings.GEXDEX_API_URL}")
+                logger.info(f"✅ GEXDEX Microservice connected successfully at {settings.GEXDEX_API_URL}")
             else:
-                logging.warning(f"⚠️ GEXDEX Microservice at {settings.GEXDEX_API_URL} returned HTTP {resp.status_code}")
+                logger.warning(f"⚠️ GEXDEX Microservice at {settings.GEXDEX_API_URL} returned HTTP {resp.status_code}")
     except Exception as e:
-        logging.warning(f"⚠️ GEXDEX Microservice unreachable at {settings.GEXDEX_API_URL} ({e}). Ensure container is running on quant-system-network.")
+        logger.warning(f"⚠️ GEXDEX Microservice unreachable at {settings.GEXDEX_API_URL} ({e}). Ensure container is running on quant-system-network.")
 
 
 @asynccontextmanager
@@ -56,6 +63,14 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+@app.middleware("http")
+async def trace_id_middleware(request: Request, call_next):
+    trace_id = request.headers.get("X-Trace-ID") or f"tr-{secrets.token_hex(3)}"
+    request.state.trace_id = trace_id
+    response = await call_next(request)
+    response.headers["X-Trace-ID"] = trace_id
+    return response
 
 # Enable CORS for PWA and Cloudflare tunnel origins
 app.add_middleware(
@@ -308,7 +323,7 @@ async def chat_stream(request: Request, body: ChatStreamRequest):
     """
     Streams AI responses with low-latency Server-Sent Events (SSE).
     Monitors request.is_disconnected() to cancel upstream processing if mobile client drops.
-    Enforces fail-closed passcode validation.
+    Enforces fail-closed passcode validation and structured trace correlation.
     """
     if not settings.APP_PASSCODE or not settings.APP_PASSCODE.strip():
         raise HTTPException(
@@ -316,15 +331,24 @@ async def chat_stream(request: Request, body: ChatStreamRequest):
             detail="Server passcode unconfigured."
         )
 
+    trace_id = getattr(request.state, "trace_id", None) or request.headers.get("X-Trace-ID") or f"tr-{secrets.token_hex(3)}"
+    logger.info(f"[{trace_id}] Received chat stream request: model={body.model}, messages_count={len(body.messages)}")
+
     message_dicts = [{"role": m.role, "content": m.content} for m in body.messages]
     
     async def sse_generator():
-        async for chunk in stream_chat_response(
-            messages=message_dicts,
-            model_name=body.model,
-            client_disconnected_fn=request.is_disconnected
-        ):
-            yield chunk
+        try:
+            async for chunk in stream_chat_response(
+                messages=message_dicts,
+                model_name=body.model,
+                client_disconnected_fn=request.is_disconnected,
+                trace_id=trace_id
+            ):
+                yield chunk
+            logger.info(f"[{trace_id}] Chat stream completed successfully.")
+        except Exception as e:
+            logger.error(f"[{trace_id}] Chat stream exception: {str(e)}")
+            raise
 
     return StreamingResponse(
         sse_generator(),
@@ -332,6 +356,7 @@ async def chat_stream(request: Request, body: ChatStreamRequest):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
+            "X-Accel-Buffering": "no",
+            "X-Trace-ID": trace_id
         }
     )

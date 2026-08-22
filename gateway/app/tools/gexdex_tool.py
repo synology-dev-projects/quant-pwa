@@ -3,7 +3,7 @@ import httpx
 import logging
 from typing import Dict, Any, Optional
 from app.config import settings
-from app.tools.registry import register_tool, emit_tool_ui_event
+from app.tools.registry import register_tool, emit_tool_ui_event, record_tool_metric
 
 # 60-Second In-Memory SWR (Stale-While-Revalidate) Cache
 _GEXDEX_MEMORY_CACHE: Dict[str, Dict[str, Any]] = {}
@@ -54,6 +54,7 @@ def get_gexdex(
     """
     Queries gexdex-api assistant-summary endpoint with automatic 3x retries and SWR cache fallback.
     """
+    t0 = time.perf_counter()
     raw_input = tickers or ticker
     if isinstance(raw_input, list):
         clean_tickers = ",".join([t.strip().upper().replace("$", "") for t in raw_input if t.strip()])
@@ -61,6 +62,7 @@ def get_gexdex(
         clean_tickers = ",".join([t.strip().upper().replace("$", "") for t in str(raw_input).split(",") if t.strip()])
 
     if not clean_tickers:
+        record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=0)
         return {"error": "No valid ticker provided."}
 
     cache_key = _get_cache_key(clean_tickers, max_dte, strike_range)
@@ -73,6 +75,7 @@ def get_gexdex(
             cached_data = entry["data"]
             # Re-emit UI events for client Canvas charts
             _emit_ui_events_from_payload(cached_data)
+            record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="HIT", retry_count=0)
             return cached_data
 
     url = f"{settings.GEXDEX_API_URL.rstrip('/')}/api/v1/gexdex/assistant-summary"
@@ -104,12 +107,14 @@ def get_gexdex(
                         "data": data,
                         "timestamp": time.time()
                     }
+                    record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
                     return data
                 elif response.status_code in (502, 503, 504):
                     last_error = f"HTTP {response.status_code}"
                     time.sleep(0.2 * (2 ** attempt))
                     continue
                 else:
+                    record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
                     return {
                         "error": f"gexdex-api returned HTTP {response.status_code}",
                         "detail": response.text,
@@ -132,9 +137,11 @@ def get_gexdex(
         _emit_ui_events_from_payload(stale_data)
         stale_data["_cached_fallback"] = True
         stale_data["_cache_age_seconds"] = stale_age
+        record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="HIT", retry_count=3)
         return stale_data
 
     # 4. Graceful Structured Failure Payload
+    record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=3)
     return {
         "error": "Temporary connectivity delay with options data feed.",
         "detail": f"Upstream microservice did not respond after 3 retry attempts ({last_error}).",
@@ -203,6 +210,7 @@ def get_strike_distribution(
     max_dte: int = 50,
     force_refresh: bool = False
 ) -> Dict[str, Any]:
+    t0 = time.perf_counter()
     clean_ticker = ticker.strip().upper().replace("$", "")
     url = f"{settings.GEXDEX_API_URL.rstrip('/')}/api/v1/gexdex/strikes"
     params = {
@@ -218,13 +226,16 @@ def get_strike_distribution(
             with httpx.Client(timeout=35.0) as client:
                 resp = client.get(url, params=params, headers=headers)
                 if resp.status_code == 200:
+                    record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
                     return resp.json()
                 elif resp.status_code in (502, 503, 504):
                     time.sleep(0.2 * (2 ** attempt))
                     continue
+                record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
                 return {"error": f"gexdex-api returned HTTP {resp.status_code}", "ticker": clean_ticker}
         except Exception:
             time.sleep(0.2 * (2 ** attempt))
             continue
 
+    record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=3)
     return {"error": "Failed to fetch strike distribution after 3 retries.", "ticker": clean_ticker}

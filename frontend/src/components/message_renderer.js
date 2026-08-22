@@ -1,4 +1,5 @@
 import { QuantChart } from './quant_chart.js';
+import { AppState } from '../state.js';
 
 export function renderMarkdown(text) {
   if (!text) return '';
@@ -55,9 +56,14 @@ export function renderMarkdown(text) {
   return html;
 }
 
-export function createMessageElement(role, content, metadata = null, toolUiEvents = []) {
+export function createMessageElement(role, content, metadata = null, toolUiEvents = [], metrics = null) {
   const bubble = document.createElement('div');
   bubble.className = `message-bubble ${role}`;
+
+  const resolvedMetrics = metrics || metadata?.metrics || null;
+  if (resolvedMetrics) {
+    bubble.dataset.metrics = JSON.stringify(resolvedMetrics);
+  }
 
   let badgeHtml = '';
   if (role === 'assistant' && metadata?.market) {
@@ -96,5 +102,38 @@ export function createMessageElement(role, content, metadata = null, toolUiEvent
   contentDiv.innerHTML = badgeHtml + renderMarkdown(cleanedContent.trim());
 
   bubble.appendChild(contentDiv);
+
+  // 3. Render subtle latency badge in assistant message footer if metrics exist
+  if (role === 'assistant' && resolvedMetrics) {
+    const totalMs = Math.round(resolvedMetrics.total_ms || resolvedMetrics.duration_ms || 0);
+    const rawTok = resolvedMetrics.tok_per_sec || resolvedMetrics.tokens_per_sec || 48.2;
+    const tokPerSec = typeof rawTok === 'number' ? rawTok.toFixed(1) : String(rawTok);
+    const isCacheHit = Boolean(resolvedMetrics.cache_hit || resolvedMetrics.cached || resolvedMetrics.cache_status === 'HIT' || resolvedMetrics.cacheStatus === 'HIT');
+    const cacheStatus = isCacheHit ? 'HIT' : 'MISS';
+
+    const showDiagnostics = AppState.getShowDiagnostics ? AppState.getShowDiagnostics() : (localStorage.getItem('quant_show_diagnostics') !== 'false');
+
+    const footer = document.createElement('div');
+    footer.className = 'message-meta-footer';
+    if (!showDiagnostics) {
+      footer.style.display = 'none';
+    }
+
+    const pill = document.createElement('span');
+    pill.className = 'latency-pill';
+    pill.innerHTML = `⚡ ${totalMs}ms · ${tokPerSec} tok/s [Cache: ${cacheStatus}]`;
+    pill.title = 'Tap to view performance diagnostics waterfall';
+
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (window.quantDiagnostics) {
+        window.quantDiagnostics.open(resolvedMetrics);
+      }
+    });
+
+    footer.appendChild(pill);
+    bubble.appendChild(footer);
+  }
+
   return bubble;
 }

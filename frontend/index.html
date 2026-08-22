@@ -69,10 +69,130 @@
           <label for="gatewayUrlInput" class="form-label">Gateway URL</label>
           <input type="text" id="gatewayUrlInput" class="form-input" placeholder="e.g. http://192.168.1.68:8096" />
         </div>
+        <div class="form-group switch-group">
+          <div class="switch-label-wrapper">
+            <label for="diagnosticsToggle" class="form-label">Show Performance Diagnostics</label>
+            <span class="form-sublabel">Display latency badges &amp; waterfall tracing on AI responses</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="diagnosticsToggle" checked />
+            <span class="slider round"></span>
+          </label>
+        </div>
         <div class="settings-actions">
           <button id="lockAppBtn" class="btn btn-warning">Lock App</button>
           <button id="clearHistoryBtn" class="btn btn-secondary">Clear Chat History</button>
           <button id="settingsSave" class="btn btn-primary">Save Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Performance Diagnostics Modal -->
+  <div id="diagnosticsModal" class="modal-overlay diagnostics-overlay">
+    <div class="modal-card diagnostics-modal">
+      <div class="modal-header">
+        <div class="diag-header-title">
+          <span class="diag-icon">⚡</span>
+          <h3 class="modal-title">Performance Diagnostics</h3>
+        </div>
+        <button id="diagnosticsClose" class="modal-close-btn" title="Close">&times;</button>
+      </div>
+      <div class="modal-body diag-body">
+        <!-- Trace ID & Status Badges -->
+        <div class="diag-meta-grid">
+          <div class="diag-meta-card">
+            <span class="diag-meta-label">Trace ID</span>
+            <code id="diagTraceId" class="diag-trace-id">tr_--------</code>
+          </div>
+          <div class="diag-meta-card">
+            <span class="diag-meta-label">Cache Status</span>
+            <div id="diagCachePill" class="cache-status-pill hit">
+              <span id="diagCacheText">🟢 Cache HIT (0ms)</span>
+            </div>
+          </div>
+          <div class="diag-meta-card">
+            <span class="diag-meta-label">Upstream Retries</span>
+            <div id="diagRetryBadge" class="retry-badge optimal">
+              <span id="diagRetryText">🟢 0 Retries (Optimal)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5-Bar Horizontal Waterfall Chart -->
+        <div class="waterfall-section">
+          <div class="waterfall-header">
+            <span class="waterfall-title">Latency Waterfall</span>
+            <span id="diagTotalMs" class="waterfall-total">0 ms</span>
+          </div>
+          <div class="waterfall-container">
+            <!-- Bar 1: Network & SSE Handshake -->
+            <div class="waterfall-row">
+              <div class="waterfall-info">
+                <span class="waterfall-label">🌐 Network &amp; SSE Handshake</span>
+                <span id="wfNetVal" class="waterfall-val">0.0 ms</span>
+              </div>
+              <div class="waterfall-track">
+                <div id="wfNetBar" class="waterfall-bar wf-net" style="width: 0%;"></div>
+              </div>
+            </div>
+            <!-- Bar 2: Gemini Tool Selection (R1) -->
+            <div class="waterfall-row" id="wfDecisionRow">
+              <div class="waterfall-info">
+                <span class="waterfall-label">🧠 Gemini Tool Selection (R1)</span>
+                <span id="wfDecisionVal" class="waterfall-val">0.0 ms</span>
+              </div>
+              <div class="waterfall-track">
+                <div id="wfDecisionBar" class="waterfall-bar wf-decision" style="width: 0%;"></div>
+              </div>
+            </div>
+            <!-- Bar 3: Upstream Tool Execution -->
+            <div class="waterfall-row" id="wfToolRow">
+              <div class="waterfall-info">
+                <span class="waterfall-label">⚙️ Upstream Tool Execution</span>
+                <span id="wfToolVal" class="waterfall-val">0.0 ms</span>
+              </div>
+              <div class="waterfall-track">
+                <div id="wfToolBar" class="waterfall-bar wf-tool" style="width: 0%;"></div>
+              </div>
+            </div>
+            <!-- Bar 4: Gemini Synthesis TTFT (R2) -->
+            <div class="waterfall-row">
+              <div class="waterfall-info">
+                <span class="waterfall-label">⚡ Gemini Synthesis TTFT (R2)</span>
+                <span id="wfSynthesisVal" class="waterfall-val">0.0 ms</span>
+              </div>
+              <div class="waterfall-track">
+                <div id="wfSynthesisBar" class="waterfall-bar wf-synthesis" style="width: 0%;"></div>
+              </div>
+            </div>
+            <!-- Bar 5: HTML5 Canvas Paint -->
+            <div class="waterfall-row">
+              <div class="waterfall-info">
+                <span class="waterfall-label">🎨 HTML5 Canvas Paint</span>
+                <span id="wfPaintVal" class="waterfall-val">0.0 ms</span>
+              </div>
+              <div class="waterfall-track">
+                <div id="wfPaintBar" class="waterfall-bar wf-paint" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Token Speed & Generation Stats -->
+        <div class="diag-footer-grid">
+          <div class="diag-stat-card">
+            <span class="diag-stat-label">Token Speed</span>
+            <span id="diagTokenSpeed" class="diag-stat-val">48.2 tok/s</span>
+          </div>
+          <div class="diag-stat-card">
+            <span class="diag-stat-label">Total Tokens</span>
+            <span id="diagTotalTokens" class="diag-stat-val">--</span>
+          </div>
+          <div class="diag-stat-card">
+            <span class="diag-stat-label">Total Duration</span>
+            <span id="diagStatTotalMs" class="diag-stat-val">-- ms</span>
+          </div>
         </div>
       </div>
     </div>

@@ -4,7 +4,8 @@ const STORAGE_KEYS = {
   MODEL: 'quant_selected_model',
   GATEWAY_URL: 'quant_gateway_url',
   ACTIVE_TAB: 'quant_active_tab',
-  CHAT_HISTORY: 'quant_chat_history'
+  CHAT_HISTORY: 'quant_chat_history',
+  SHOW_DIAGNOSTICS: 'quant_show_diagnostics'
 };
 
 export const AppState = {
@@ -54,8 +55,14 @@ export const AppState = {
   },
 
   getGatewayUrl() {
-    // Defaults to relative URL (works seamlessly via Cloudflare Tunnel or reverse proxy)
-    return localStorage.getItem(STORAGE_KEYS.GATEWAY_URL) || '';
+    const custom = localStorage.getItem(STORAGE_KEYS.GATEWAY_URL);
+    if (custom) return custom.replace(/\/+$/, '');
+    // In local dev without reverse proxy (e.g. port 3000 or 5173), automatically route to gateway on port 8000
+    if (typeof window !== 'undefined' && (window.location.port === '3000' || window.location.port === '5173')) {
+      return `http://${window.location.hostname}:8000`;
+    }
+    // Defaults to relative URL (works seamlessly via Nginx on Synology NAS or Cloudflare Tunnel)
+    return '';
   },
 
   setGatewayUrl(url) {
@@ -68,6 +75,15 @@ export const AppState = {
 
   setActiveTab(tabId) {
     localStorage.setItem(STORAGE_KEYS.ACTIVE_TAB, tabId);
+  },
+
+  getShowDiagnostics() {
+    const val = localStorage.getItem(STORAGE_KEYS.SHOW_DIAGNOSTICS);
+    return val === null ? true : val === 'true';
+  },
+
+  setShowDiagnostics(enabled) {
+    localStorage.setItem(STORAGE_KEYS.SHOW_DIAGNOSTICS, String(enabled));
   },
 
   getHistory() {
