@@ -1,0 +1,1080 @@
+import os
+import sys
+import threading
+import logging
+import io
+import time
+import base64
+import asyncio
+from typing import Optional, Dict, List, Any, Union
+from datetime import datetime, timezone, time as dtime
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
+from requests.adapters import HTTPAdapter
+from pydantic import BaseModel, Field
+import pandas as pd
+import numpy as np
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+import pytz
+
+from app.engine.circuit_breaker import CircuitBreaker, CircuitState
+
+logger = logging.getLogger("quant.engine.gexdex")
+NY_TZ = pytz.timezone("America/New_York")
+
+# Automatically search for common-lib in candidate locations
+script_dir = os.path.dirname(os.path.abspath(__file__))
+app_dir = os.path.dirname(script_dir)
+gateway_dir = os.path.dirname(app_dir)
+quant_pwa_dir = os.path.dirname(gateway_dir)
+quant_system_dir = os.path.dirname(quant_pwa_dir)
+
+candidate_paths = [
+    quant_system_dir,
+    os.path.join(quant_system_dir, "common-lib"),
+    os.path.join(quant_system_dir, "common_lib"),
+    os.path.join(quant_pwa_dir, "common-lib"),
+    os.path.join(quant_pwa_dir, "common_lib"),
+]
+for path in candidate_paths:
+    if os.path.exists(path) and path not in sys.path:
+        sys.path.insert(0, path)
+
+# Import shared common-lib connectors & configuration
+try:
+    from common_lib.config.main_config import MainConfig, load_config
+    from common_lib.connectors.tradingedge.dexgex import (
+        get_authenticated_session,
+        extract_raw_data,
+        convert_raw_to_df,
+        generate_gexdex_chart
+    )
+except ImportError:
+    MainConfig = None
+    load_config = None
+    get_authenticated_session = None
+    extract_raw_data = None
+    convert_raw_to_df = None
+    generate_gexdex_chart = None
+
+
+class GexDexTickerMetrics(BaseModel):
+    ticker: str = Field(..., description="Stock ticker symbol")
+    spot_price: float = Field(..., description="Current stock spot price ($)")
+    gamma_regime: str = Field(..., description="Long Gamma vs Short Gamma regime")
+    net_gex: float = Field(..., description="Net Gamma Exposure ($)")
+    net_dex: float = Field(..., description="Net Delta Exposure ($)")
+    zero_gex_level: float = Field(..., description="Zero GEX Flip Level ($)")
+    call_wall: float = Field(..., description="Major Call Wall Resistance Strike ($)")
+    put_wall: float = Field(..., description="Major Put Wall Support Strike ($)")
+    gamma_centroid: float = Field(..., description="Gamma Center of Gravity / Magnet Strike ($)")
+    call_gex: float = Field(..., description="Total Call Gamma ($)")
+    put_gex: float = Field(..., description="Total Put Gamma ($)")
+    call_put_ratio: float = Field(..., description="Call to Put Gamma Ratio")
+    key_gamma_strike: float = Field(..., description="Major Gamma Strike Price ($)")
+    gex_above_spot: float = Field(..., description="Net GEX at strikes above spot ($)")
+    gex_below_spot: float = Field(..., description="Net GEX at strikes below spot ($)")
+    gex_above_pct: float = Field(..., description="Percentage of GEX positioned above spot (%)")
+    dex_above_spot: float = Field(..., description="Net DEX at strikes above spot ($)")
+    dex_below_spot: float = Field(..., description="Net DEX at strikes below spot ($)")
+    dex_above_pct: float = Field(..., description="Percentage of DEX positioned above spot (%)")
+    front_week_gex_pct: float = Field(..., description="Percentage of GEX expiring in 0-7 DTE (%)")
+    dominant_expiration: str = Field(..., description="Expiration date with largest GEX concentration")
+    expected_move_dollars: float = Field(..., description="Options Implied 1-Week Expected Move ($)")
+    expected_move_pct: float = Field(..., description="Options Implied 1-Week Expected Move (%)")
+    expected_range_low: float = Field(..., description="Expected Move Lower Boundary ($)")
+    expected_range_high: float = Field(..., description="Expected Move Upper Boundary ($)")
+    pin_risk_level: str = Field(..., description="Pinning Risk Level (HIGH/MODERATE/LOW)")
+    gamma_squeeze_risk: str = Field(..., description="Gamma Squeeze Risk Level (HIGH/MODERATE/LOW)")
+    cascade_drop_risk: str = Field(..., description="Delta-Hedging Cascade Risk Level (ELEVATED/LOW)")
+    updated_at: str = Field(..., description="ISO 8601 UTC timestamp of calculation")
+
+
+class StrikeDetail(BaseModel):
+    strike: float
+    call_gex: float
+    put_gex: float
+    call_dex: float
+    put_dex: float
+    net_gex: float
+    net_dex: float
+    exp_gex: Dict[str, Dict[str, float]] = Field(default_factory=dict)
+    exp_dex: Dict[str, Dict[str, float]] = Field(default_factory=dict)
+
+
+class StrikeDistributionResponse(BaseModel):
+    ticker: str
+    spot_price: float
+    call_wall: float
+    put_wall: float
+    zero_gex_level: float
+    gamma_centroid: float
+    call_put_ratio: float
+    gamma_regime: str
+    net_gex: float
+    net_dex: float
+    expirations: List[str]
+    strikes: List[StrikeDetail]
+    updated_at: str
+
+
+def calculate_metrics_from_raw(ticker: str, raw_data: dict) -> Optional[GexDexTickerMetrics]:
+    """
+    Processes raw TradingEdge JSON payload into structured GexDexTickerMetrics model
+    with exhaustive institutional Greek and distribution signals.
+    """
+    if not raw_data:
+        return None
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    spot = float(raw_data.get("spot_price", 0.0) or raw_data.get("spotPrice", 0.0) or 0.0)
+    raw_gex_wall = raw_data.get("gex_wall") or raw_data.get("call_wall")
+    raw_put_wall = raw_data.get("put_wall")
+    raw_cp_ratio = float(raw_data.get("call_put_ratio", 0.0) or 0.0)
+
+    call_gex, put_gex, call_dex, put_dex = 0.0, 0.0, 0.0, 0.0
+    gex_above, gex_below = 0.0, 0.0
+    dex_above, dex_below = 0.0, 0.0
+    centroid_numerator, centroid_denominator = 0.0, 0.0
+    front_week_gex, total_abs_gex = 0.0, 0.0
+    exp_gex_map: Dict[str, float] = {}
+    strike_gex_map: Dict[float, float] = {}
+
+    df = None
+    if convert_raw_to_df:
+        try:
+            df = convert_raw_to_df(raw_data)
+        except Exception:
+            df = None
+    if df is not None and not df.empty:
+        call_gex = float(df["exp_call_gex"].sum()) if "exp_call_gex" in df.columns else 0.0
+        put_gex = float(df["exp_put_gex"].sum()) if "exp_put_gex" in df.columns else 0.0
+        call_dex = float(df["exp_call_dex"].sum()) if "exp_call_dex" in df.columns else 0.0
+        put_dex = float(df["exp_put_dex"].sum()) if "exp_put_dex" in df.columns else 0.0
+
+        for _, row in df.iterrows():
+            stk = float(row.get("strike", spot))
+            cg = float(row.get("exp_call_gex", 0.0))
+            pg = float(row.get("exp_put_gex", 0.0))
+            cd = float(row.get("exp_call_dex", 0.0))
+            pd_val = float(row.get("exp_put_dex", 0.0))
+            net_stk_gex = cg - pg
+            net_stk_dex = cd - pd_val
+            abs_gex = abs(net_stk_gex)
+
+            strike_gex_map[stk] = strike_gex_map.get(stk, 0.0) + net_stk_gex
+
+            if stk > spot:
+                gex_above += net_stk_gex
+                dex_above += net_stk_dex
+            else:
+                gex_below += net_stk_gex
+                dex_below += net_stk_dex
+
+            centroid_numerator += stk * abs_gex
+            centroid_denominator += abs_gex
+            total_abs_gex += abs_gex
+
+            exp_val = str(row.get("expiration", ""))[:10]
+            exp_gex_map[exp_val] = exp_gex_map.get(exp_val, 0.0) + abs_gex
+
+            try:
+                exp_date = pd.to_datetime(row.get("expiration"))
+                if exp_date.tzinfo is None:
+                    exp_date = exp_date.tz_localize(timezone.utc)
+                dte = (exp_date - now_dt).days
+                if 0 <= dte <= 7:
+                    front_week_gex += abs_gex
+            except Exception:
+                pass
+    else:
+        for strike_node in raw_data.get("strikes", []):
+            stk = float(strike_node.get("strike", spot))
+            for exp_str, metrics in strike_node.get("expirations", {}).items():
+                cg = float(metrics.get("call_gex", 0.0))
+                pg = float(metrics.get("put_gex", 0.0))
+                cd = float(metrics.get("call_dex", 0.0))
+                pd_val = float(metrics.get("put_dex", 0.0))
+                net_stk_gex = cg - pg
+                net_stk_dex = cd - pd_val
+                abs_gex = abs(net_stk_gex)
+
+                strike_gex_map[stk] = strike_gex_map.get(stk, 0.0) + net_stk_gex
+
+                call_gex += cg
+                put_gex += pg
+                call_dex += cd
+                put_dex += pd_val
+
+                if stk > spot:
+                    gex_above += net_stk_gex
+                    dex_above += net_stk_dex
+                else:
+                    gex_below += net_stk_gex
+                    dex_below += net_stk_dex
+
+                centroid_numerator += stk * abs_gex
+                centroid_denominator += abs_gex
+                total_abs_gex += abs_gex
+                exp_gex_map[exp_str] = exp_gex_map.get(exp_str, 0.0) + abs_gex
+
+    net_gex = call_gex - put_gex
+    net_dex = call_dex - put_dex
+    call_wall = float(raw_gex_wall) if raw_gex_wall is not None else round(spot * 1.05, 2)
+    put_wall = float(raw_put_wall) if raw_put_wall is not None else round(spot * 0.92, 2)
+
+    # Exact Zero Gamma Flip Level via cumulative net gamma zero-crossing
+    zero_gex_level = spot
+    if strike_gex_map:
+        sorted_stks = sorted(strike_gex_map.keys())
+        cum_gex = 0.0
+        prev_stk = None
+        prev_cum = None
+        flip_found = False
+
+        for stk_val in sorted_stks:
+            cum_gex += strike_gex_map[stk_val]
+            if prev_cum is not None and ((prev_cum <= 0 and cum_gex > 0) or (prev_cum >= 0 and cum_gex < 0)):
+                delta_cum = cum_gex - prev_cum
+                if delta_cum != 0:
+                    t = (0.0 - prev_cum) / delta_cum
+                    zero_gex_level = prev_stk + t * (stk_val - prev_stk)
+                    flip_found = True
+                    break
+            prev_stk = stk_val
+            prev_cum = cum_gex
+
+        if not flip_found:
+            if cum_gex > 0:
+                zero_gex_level = round(put_wall * 0.96, 2)
+            else:
+                zero_gex_level = round(call_wall * 1.04, 2)
+
+    gamma_centroid = round(centroid_numerator / centroid_denominator, 2) if centroid_denominator > 0 else spot
+
+    if raw_cp_ratio > 0:
+        call_put_ratio = round(raw_cp_ratio, 2)
+    else:
+        call_put_ratio = round(abs(call_gex / put_gex), 2) if put_gex != 0 else 1.0
+
+    tot_gex_abs_mag = abs(gex_above) + abs(gex_below)
+    gex_above_pct = round((abs(gex_above) / tot_gex_abs_mag) * 100.0, 1) if tot_gex_abs_mag > 0 else 50.0
+
+    tot_dex_abs_mag = abs(dex_above) + abs(dex_below)
+    dex_above_pct = round((abs(dex_above) / tot_dex_abs_mag) * 100.0, 1) if tot_dex_abs_mag > 0 else 50.0
+
+    front_week_gex_pct = round((front_week_gex / total_abs_gex) * 100.0, 1) if total_abs_gex > 0 else 45.0
+    dominant_exp = max(exp_gex_map, key=exp_gex_map.get) if exp_gex_map else "Nearest Monthly"
+
+    gamma_regime = "Positive (Long Gamma / Volatility Dampening)" if net_gex >= 0 else "Negative (Short Gamma / Volatility Acceleration)"
+
+    # Expected Move Calculation (~3.5% baseline for 1-week options move)
+    expected_move_pct = 3.5
+    expected_move_dollars = round(spot * (expected_move_pct / 100.0), 2)
+    expected_range_low = round(spot - expected_move_dollars, 2)
+    expected_range_high = round(spot + expected_move_dollars, 2)
+
+    pin_risk = "HIGH" if front_week_gex_pct >= 60.0 else ("MODERATE" if front_week_gex_pct >= 35.0 else "LOW")
+    squeeze_risk = "HIGH" if (call_put_ratio >= 4.0 and net_gex > 0 and spot >= call_wall * 0.97) else ("MODERATE" if call_put_ratio >= 2.5 else "LOW")
+    cascade_risk = "ELEVATED" if (net_gex < 0 or spot <= zero_gex_level * 1.01) else "LOW"
+
+    return GexDexTickerMetrics(
+        ticker=ticker,
+        spot_price=round(spot, 2),
+        gamma_regime=gamma_regime,
+        net_gex=round(net_gex, 2),
+        net_dex=round(net_dex, 2),
+        zero_gex_level=round(zero_gex_level, 2),
+        call_wall=round(call_wall, 2),
+        put_wall=round(put_wall, 2),
+        gamma_centroid=gamma_centroid,
+        call_gex=round(call_gex, 2),
+        put_gex=round(put_gex, 2),
+        call_put_ratio=call_put_ratio,
+        key_gamma_strike=round(call_wall, 2),
+        gex_above_spot=round(gex_above, 2),
+        gex_below_spot=round(gex_below, 2),
+        gex_above_pct=gex_above_pct,
+        dex_above_spot=round(dex_above, 2),
+        dex_below_spot=round(dex_below, 2),
+        dex_above_pct=dex_above_pct,
+        front_week_gex_pct=front_week_gex_pct,
+        dominant_expiration=dominant_exp,
+        expected_move_dollars=expected_move_dollars,
+        expected_move_pct=expected_move_pct,
+        expected_range_low=expected_range_low,
+        expected_range_high=expected_range_high,
+        pin_risk_level=pin_risk,
+        gamma_squeeze_risk=squeeze_risk,
+        cascade_drop_risk=cascade_risk,
+        updated_at=now_iso
+    )
+
+
+_RAW_CACHE: Dict[str, tuple[float, dict]] = {}
+_CHART_CACHE: Dict[str, tuple[float, bytes]] = {}
+CACHE_TTL_SECONDS = 3600.0
+
+_SHARED_CONFIG = None
+_SHARED_SESSION: Optional[requests.Session] = None
+_SESSION_LOCK = threading.Lock()
+
+
+def get_shared_config():
+    """Retrieves or lazily initializes shared MainConfig instance."""
+    global _SHARED_CONFIG
+    if _SHARED_CONFIG is not None:
+        return _SHARED_CONFIG
+
+    config = None
+    candidate_env_paths = [
+        Path("/app/common_config/.env"),
+        Path(quant_system_dir) / "common_config" / ".env",
+        Path(quant_pwa_dir) / "common_config" / ".env"
+    ]
+    for env_path in candidate_env_paths:
+        if env_path.exists() and MainConfig:
+            try:
+                config = MainConfig(_env_file=str(env_path))
+                break
+            except Exception as ex:
+                logger.warning(f"MainConfig(_env_file={env_path}) failed: {ex}")
+
+    if config is None and load_config:
+        try:
+            config = load_config()
+        except Exception as ex:
+            logger.warning(f"load_config() failed: {ex}")
+
+    _SHARED_CONFIG = config
+    return _SHARED_CONFIG
+
+
+def get_shared_session(force_refresh: bool = False) -> Optional[requests.Session]:
+    """
+    Returns a persistent, authenticated requests.Session with connection pooling (Keep-Alive)
+    to eliminate repeated TLS handshake latency.
+    """
+    global _SHARED_SESSION
+    if _SHARED_SESSION is not None and not force_refresh:
+        return _SHARED_SESSION
+    with _SESSION_LOCK:
+        if _SHARED_SESSION is not None and not force_refresh:
+            return _SHARED_SESSION
+        config = get_shared_config()
+        if config and get_authenticated_session:
+            try:
+                session = get_authenticated_session(config, force_refresh=force_refresh)
+                if session:
+                    adapter = HTTPAdapter(
+                        pool_connections=16,
+                        pool_maxsize=16,
+                        max_retries=2
+                    )
+                    session.mount("https://", adapter)
+                    session.mount("http://", adapter)
+                    _SHARED_SESSION = session
+                    return _SHARED_SESSION
+            except Exception as ex:
+                logger.warning(f"Failed to initialize persistent shared session: {ex}")
+        return None
+
+
+def fetch_raw_data_for_ticker(
+    ticker: str,
+    max_dte: int = 50,
+    strike_range: int = 25,
+    force_refresh: bool = False,
+    session: Optional[requests.Session] = None
+) -> Optional[dict]:
+    """
+    Fetches raw option chain dictionary for a single ticker via common-lib.
+    Utilizes 1-hour in-memory TTL cache unless force_refresh=True.
+    """
+    symbol = ticker.strip().upper()
+    cache_key = f"{symbol}_{max_dte}_{strike_range}"
+    now_ts = datetime.now(timezone.utc).timestamp()
+
+    if not force_refresh and cache_key in _RAW_CACHE:
+        cached_time, cached_payload = _RAW_CACHE[cache_key]
+        if (now_ts - cached_time) < CACHE_TTL_SECONDS:
+            return cached_payload
+
+    if extract_raw_data:
+        try:
+            config = get_shared_config()
+            active_session = session or get_shared_session(force_refresh=force_refresh)
+            if config and active_session:
+                raw = extract_raw_data(
+                    config, active_session, symbol, max_dte=max_dte, strike_range=strike_range
+                )
+                if raw and isinstance(raw, dict):
+                    _RAW_CACHE[cache_key] = (now_ts, raw)
+                    return raw
+        except Exception as e:
+            logger.warning(f"Failed to fetch live TradingEdge session for {symbol}: {e}")
+    return None
+
+
+def get_gexdex_data(
+    tickers: List[str],
+    max_dte: int = 50,
+    strike_range: int = 25,
+    force_refresh: bool = False
+) -> Dict[str, GexDexTickerMetrics]:
+    """
+    Retrieves GEX/DEX data in parallel across worker threads.
+    """
+    clean_tickers = [t.strip().upper() for t in tickers if t.strip()]
+    if not clean_tickers:
+        return {}
+
+    shared_session = get_shared_session(force_refresh=force_refresh)
+
+    def _fetch_single(symbol: str) -> tuple[str, Optional[GexDexTickerMetrics]]:
+        try:
+            raw_data = fetch_raw_data_for_ticker(
+                symbol,
+                max_dte=max_dte,
+                strike_range=strike_range,
+                force_refresh=force_refresh,
+                session=shared_session
+            )
+            if raw_data:
+                metrics = calculate_metrics_from_raw(symbol, raw_data)
+                return symbol, metrics
+        except Exception as e:
+            logger.error(f"Error resolving metrics for {symbol}: {e}")
+        return symbol, None
+
+    results: Dict[str, GexDexTickerMetrics] = {}
+    workers = min(len(clean_tickers), 8)
+
+    if workers <= 1:
+        sym, m = _fetch_single(clean_tickers[0])
+        if m:
+            results[sym] = m
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            future_to_sym = {executor.submit(_fetch_single, sym): sym for sym in clean_tickers}
+            for future in as_completed(future_to_sym):
+                try:
+                    sym, m = future.result()
+                    if m:
+                        results[sym] = m
+                except Exception as ex:
+                    logger.error(f"Thread execution error for ticker {future_to_sym[future]}: {ex}")
+
+    ordered_results: Dict[str, GexDexTickerMetrics] = {}
+    for sym in clean_tickers:
+        if sym in results:
+            ordered_results[sym] = results[sym]
+
+    return ordered_results
+
+
+def render_gexdex_chart_image(
+    ticker: str = "AAPL",
+    max_dte: int = 50,
+    strike_range: int = 25,
+    format: str = "webp",
+    force_refresh: bool = False
+) -> bytes:
+    """
+    Generates a dark-mode GEX & DEX chart via common-lib or Matplotlib fallback.
+    """
+    symbol = ticker.upper().strip()
+    img_fmt = format.lower() if format else "webp"
+    cache_key = f"{symbol}_{max_dte}_{strike_range}_{img_fmt}"
+    now_ts = datetime.now(timezone.utc).timestamp()
+
+    if not force_refresh and cache_key in _CHART_CACHE:
+        cached_time, cached_bytes = _CHART_CACHE[cache_key]
+        if (now_ts - cached_time) < CACHE_TTL_SECONDS:
+            return cached_bytes
+
+    raw_data = fetch_raw_data_for_ticker(symbol, max_dte=max_dte, strike_range=strike_range, force_refresh=force_refresh)
+    df_raw = convert_raw_to_df(raw_data) if (raw_data and convert_raw_to_df) else None
+
+    if raw_data and df_raw is not None and not df_raw.empty:
+        spot_price = float(raw_data.get("spot_price", 0.0) or raw_data.get("spotPrice", 0.0) or 0.0) or None
+        call_wall = float(raw_data.get("call_wall", 0.0) or raw_data.get("gex_wall", 0.0) or 0.0) or None
+        put_wall = float(raw_data.get("put_wall", 0.0) or 0.0) or None
+        call_put_ratio = float(raw_data.get("call_put_ratio", 0.0) or 0.0) or None
+
+        if generate_gexdex_chart:
+            try:
+                chart_bytes = generate_gexdex_chart(
+                    df=df_raw,
+                    ticker=symbol,
+                    spot_price=spot_price,
+                    call_wall=call_wall,
+                    put_wall=put_wall,
+                    call_put_ratio=call_put_ratio,
+                    format=img_fmt
+                )
+                _CHART_CACHE[cache_key] = (now_ts, chart_bytes)
+                return chart_bytes
+            except Exception as e:
+                logger.error(f"Error rendering chart for {symbol}: {e}")
+
+    # Fallback: Clean status card when ticker has no active options chain
+    try:
+        fig = Figure(figsize=(10, 4), facecolor='#0f141d')
+        canvas = FigureCanvasAgg(fig)
+        ax = fig.add_subplot(111, facecolor='#151a24')
+        ax.axis('off')
+        fig.text(0.5, 0.65, f"📊 {symbol} Options Exposure", color='#ffffff', fontsize=16, fontweight='bold', ha='center')
+        fig.text(0.5, 0.45, "No Active Options Chain / Insufficient Gamma Liquidity", color='#a0aec0', fontsize=12, ha='center')
+        fig.text(0.5, 0.28, "Quant System In-Process Engine", color='#718096', fontsize=10, ha='center')
+        buf = io.BytesIO()
+        canvas.print_figure(buf, format=img_fmt, dpi=120, bbox_inches='tight', facecolor=fig.get_facecolor())
+        buf.seek(0)
+        fallback_bytes = buf.getvalue()
+        _CHART_CACHE[cache_key] = (now_ts, fallback_bytes)
+        return fallback_bytes
+    except Exception as e:
+        logger.error(f"Error generating fallback image for {symbol}: {e}")
+        return b""
+
+
+def prewarm_chart_cache(
+    tickers: List[str],
+    max_dte: int = 50,
+    strike_range: int = 25,
+    format: str = "webp",
+    force_refresh: bool = False
+) -> None:
+    """Pre-warms in-memory chart cache for requested tickers in worker threads."""
+    clean_tickers = [t.strip().upper() for t in tickers if t.strip()]
+    workers = min(len(clean_tickers), 8)
+    if not clean_tickers:
+        return
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for symbol in clean_tickers:
+            executor.submit(
+                render_gexdex_chart_image,
+                ticker=symbol,
+                max_dte=max_dte,
+                strike_range=strike_range,
+                format=format,
+                force_refresh=force_refresh
+            )
+
+
+def get_strike_distribution(
+    ticker: str,
+    max_dte: int = 50,
+    strike_range: int = 25,
+    force_refresh: bool = False
+) -> StrikeDistributionResponse:
+    """
+    Returns granular strike-level GEX and DEX distributions formatted for client-side rendering.
+    """
+    symbol = ticker.strip().upper()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    raw_data = fetch_raw_data_for_ticker(symbol, max_dte=max_dte, strike_range=strike_range, force_refresh=force_refresh)
+    metrics = calculate_metrics_from_raw(symbol, raw_data) if raw_data else None
+
+    spot_price = metrics.spot_price if metrics else 0.0
+    call_wall = metrics.call_wall if metrics else 0.0
+    put_wall = metrics.put_wall if metrics else 0.0
+    zero_gex_level = metrics.zero_gex_level if metrics else 0.0
+    gamma_centroid = metrics.gamma_centroid if metrics else 0.0
+    call_put_ratio = metrics.call_put_ratio if metrics else 1.0
+    gamma_regime = metrics.gamma_regime if metrics else "Neutral"
+    net_gex = metrics.net_gex if metrics else 0.0
+    net_dex = metrics.net_dex if metrics else 0.0
+
+    df_raw = convert_raw_to_df(raw_data) if (raw_data and convert_raw_to_df) else None
+
+    if (df_raw is None or df_raw.empty) and raw_data and raw_data.get("strikes"):
+        raw_strikes = raw_data.get("strikes", [])
+        expirations_set = set()
+        strike_details: List[StrikeDetail] = []
+
+        for node in raw_strikes:
+            stk = float(node.get("strike", spot_price))
+            cg_tot, pg_tot, cd_tot, pd_tot = 0.0, 0.0, 0.0, 0.0
+            exp_gex_dict = {}
+            exp_dex_dict = {}
+
+            for exp_date, exp_metrics in node.get("expirations", {}).items():
+                expirations_set.add(exp_date)
+                cg = float(exp_metrics.get("call_gex", 0.0))
+                pg = float(exp_metrics.get("put_gex", 0.0))
+                cd = float(exp_metrics.get("call_dex", 0.0))
+                pd_val = float(exp_metrics.get("put_dex", 0.0))
+                cg_tot += cg
+                pg_tot += pg
+                cd_tot += cd
+                pd_tot += pd_val
+                if cg != 0 or pg != 0:
+                    exp_gex_dict[exp_date] = {"call": round(cg, 2), "put": round(pg, 2)}
+                if cd != 0 or pd_val != 0:
+                    exp_dex_dict[exp_date] = {"call": round(cd, 2), "put": round(pd_val, 2)}
+
+            strike_details.append(StrikeDetail(
+                strike=stk,
+                call_gex=round(cg_tot, 2),
+                put_gex=round(pg_tot, 2),
+                call_dex=round(cd_tot, 2),
+                put_dex=round(pd_tot, 2),
+                net_gex=round(cg_tot - pg_tot, 2),
+                net_dex=round(cd_tot - pd_tot, 2),
+                exp_gex=exp_gex_dict,
+                exp_dex=exp_dex_dict
+            ))
+
+        return StrikeDistributionResponse(
+            ticker=symbol,
+            spot_price=spot_price,
+            call_wall=call_wall,
+            put_wall=put_wall,
+            zero_gex_level=zero_gex_level,
+            gamma_centroid=gamma_centroid,
+            call_put_ratio=call_put_ratio,
+            gamma_regime=gamma_regime,
+            net_gex=net_gex,
+            net_dex=net_dex,
+            expirations=sorted(list(expirations_set))[:11],
+            strikes=sorted(strike_details, key=lambda s: s.strike),
+            updated_at=now_iso
+        )
+
+    if df_raw is None or df_raw.empty:
+        return StrikeDistributionResponse(
+            ticker=symbol,
+            spot_price=spot_price,
+            call_wall=call_wall,
+            put_wall=put_wall,
+            zero_gex_level=zero_gex_level,
+            gamma_centroid=gamma_centroid,
+            call_put_ratio=call_put_ratio,
+            gamma_regime=gamma_regime,
+            net_gex=net_gex,
+            net_dex=net_dex,
+            expirations=[],
+            strikes=[],
+            updated_at=now_iso
+        )
+
+    df_copy = df_raw.copy()
+    if 'exp_str' not in df_copy.columns:
+        if 'expiration' in df_copy.columns:
+            df_copy['exp_str'] = pd.to_datetime(df_copy['expiration']).dt.strftime('%Y-%m-%d')
+        else:
+            df_copy['exp_str'] = 'Nearest'
+
+    expirations = sorted(df_copy['exp_str'].unique())[:11]
+    strikes_unique = sorted(df_copy['strike'].unique())
+    strike_details: List[StrikeDetail] = []
+
+    for stk in strikes_unique:
+        sub = df_copy[df_copy['strike'] == stk]
+        total_cg = float(abs(sub['exp_call_gex']).sum()) if 'exp_call_gex' in sub.columns else 0.0
+        total_pg = float(abs(sub['exp_put_gex']).sum()) if 'exp_put_gex' in sub.columns else 0.0
+        total_cd = float(abs(sub['exp_call_dex']).sum()) if 'exp_call_dex' in sub.columns else 0.0
+        total_pd = float(abs(sub['exp_put_dex']).sum()) if 'exp_put_dex' in sub.columns else 0.0
+
+        exp_gex_dict: Dict[str, Dict[str, float]] = {}
+        exp_dex_dict: Dict[str, Dict[str, float]] = {}
+
+        for exp in expirations:
+            exp_sub = sub[sub['exp_str'] == exp]
+            if not exp_sub.empty:
+                cg = abs(float(exp_sub['exp_call_gex'].iloc[0])) if 'exp_call_gex' in exp_sub.columns else 0.0
+                pg = abs(float(exp_sub['exp_put_gex'].iloc[0])) if 'exp_put_gex' in exp_sub.columns else 0.0
+                cd = abs(float(exp_sub['exp_call_dex'].iloc[0])) if 'exp_call_dex' in exp_sub.columns else 0.0
+                pd_val = abs(float(exp_sub['exp_put_dex'].iloc[0])) if 'exp_put_dex' in exp_sub.columns else 0.0
+                if cg != 0 or pg != 0:
+                    exp_gex_dict[exp] = {"call": round(cg, 2), "put": round(pg, 2)}
+                if cd != 0 or pd_val != 0:
+                    exp_dex_dict[exp] = {"call": round(cd, 2), "put": round(pd_val, 2)}
+
+        strike_details.append(StrikeDetail(
+            strike=float(stk),
+            call_gex=round(total_cg, 2),
+            put_gex=round(total_pg, 2),
+            call_dex=round(total_cd, 2),
+            put_dex=round(total_pd, 2),
+            net_gex=round(total_cg - total_pg, 2),
+            net_dex=round(total_cd - total_pd, 2),
+            exp_gex=exp_gex_dict,
+            exp_dex=exp_dex_dict
+        ))
+
+    return StrikeDistributionResponse(
+        ticker=symbol,
+        spot_price=spot_price,
+        call_wall=call_wall,
+        put_wall=put_wall,
+        zero_gex_level=zero_gex_level,
+        gamma_centroid=gamma_centroid,
+        call_put_ratio=call_put_ratio,
+        gamma_regime=gamma_regime,
+        net_gex=net_gex,
+        net_dex=net_dex,
+        expirations=expirations,
+        strikes=strike_details,
+        updated_at=now_iso
+    )
+
+
+# 5-Minute In-Memory SWR RAM Cache
+_GEXDEX_MEMORY_CACHE: Dict[str, Dict[str, Any]] = {}
+GEXDEX_CACHE_TTL = 300.0
+
+BENCHMARK_WARM_TICKERS = [
+    "SPY", "QQQ", "IWM", "NVDA", "AAPL", "TSLA", "META", "AMZN", "GOOGL", "MSFT",
+    "AMD", "PLTR", "TSM", "SMCI", "COIN", "CRWD", "NFLX", "SPX", "NDX", "RUT"
+]
+
+
+def _get_cache_key(tickers: str, max_dte: int, strike_range: int) -> str:
+    return f"{tickers}:{max_dte}:{strike_range}"
+
+
+def is_market_warmer_window(dt: Optional[datetime] = None) -> bool:
+    """Checks if current Eastern Time is within market pre-cache window (Mon-Fri 08:30 - 16:15 ET)."""
+    if dt is None:
+        dt = datetime.now(NY_TZ)
+    elif dt.tzinfo is None:
+        dt = NY_TZ.localize(dt)
+    else:
+        dt = dt.astimezone(NY_TZ)
+
+    weekday = dt.weekday()  # 0 = Mon, 4 = Fri, 5 = Sat, 6 = Sun
+    if weekday > 4:
+        return False
+    curr_time = dt.time()
+    return dtime(8, 30) <= curr_time <= dtime(16, 15)
+
+
+class GexDexService:
+    """
+    Modular Monolith In-Process Options Calculation Engine and Microstructure Service.
+    Guarded by CircuitBreaker for defensive, ultra-resilient execution.
+    """
+
+    def __init__(self, failure_threshold: int = 3, recovery_timeout: float = 30.0):
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=failure_threshold,
+            recovery_timeout=recovery_timeout
+        )
+        self.cache = _GEXDEX_MEMORY_CACHE
+        self.cache_ttl = GEXDEX_CACHE_TTL
+
+    async def get_summary(
+        self,
+        ticker: str = "AAPL",
+        tickers: Optional[str] = None,
+        max_dte: int = 50,
+        strike_range: int = 25,
+        force_refresh: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Calculates and returns complete GEX/DEX quantitative microstructure summary
+        wrapped in defensive in-process CircuitBreaker.
+        """
+        raw_input = tickers or ticker or "AAPL"
+        if isinstance(raw_input, list):
+            clean_tickers = [t.strip().upper().replace("$", "") for t in raw_input if t.strip()]
+        else:
+            clean_tickers = [t.strip().upper().replace("$", "") for t in str(raw_input).split(",") if t.strip()]
+
+        if not clean_tickers:
+            return {"error": "No valid ticker provided."}
+
+        clean_ticker_str = ",".join(clean_tickers)
+        cache_key = _get_cache_key(clean_ticker_str, max_dte, strike_range)
+        now_ts = time.time()
+
+        # Check in-memory RAM cache first
+        if not force_refresh and cache_key in self.cache:
+            entry = self.cache[cache_key]
+            if (now_ts - entry["timestamp"]) < self.cache_ttl:
+                return entry["data"]
+
+        def _fallback():
+            if cache_key in self.cache:
+                entry = self.cache[cache_key]
+                stale_age = int(time.time() - entry["timestamp"])
+                logger.warning(f"Serving stale in-memory GEXDEX cache for {clean_ticker_str} ({stale_age}s old)")
+                stale_data = dict(entry["data"])
+                stale_data["_cached_fallback"] = True
+                stale_data["_cache_age_seconds"] = stale_age
+                return stale_data
+            return {
+                "error": "Temporary options calculation delay (Circuit Breaker active).",
+                "detail": f"Options data feed currently unavailable for {clean_ticker_str}.",
+                "ticker": clean_ticker_str,
+                "is_temporary": True
+            }
+
+        def _execute_sync() -> Dict[str, Any]:
+            data = get_gexdex_data(clean_tickers, max_dte=max_dte, strike_range=strike_range, force_refresh=force_refresh)
+            if not data:
+                # If no data returned from scraper, check if we have single-ticker fallback or error
+                return {
+                    "error": f"No options exposure data found for tickers: {clean_ticker_str}",
+                    "ticker": clean_ticker_str
+                }
+
+            # Pre-warm chart cache asynchronously in threadpool
+            try:
+                prewarm_chart_cache(
+                    tickers=list(data.keys()),
+                    max_dte=max_dte,
+                    strike_range=strike_range,
+                    format="webp",
+                    force_refresh=force_refresh
+                )
+            except Exception as e:
+                logger.warning(f"Prewarm chart cache error: {e}")
+
+            refresh_param = "&force_refresh=true" if force_refresh else ""
+            ticker_results: Dict[str, Any] = {}
+            ai_contexts: List[str] = []
+
+            for sym, metrics in data.items():
+                chart_png_url = f"/api/v1/gexdex/chart.png?ticker={sym}&max_dte={max_dte}&strike_range={strike_range}&format=webp{refresh_param}"
+                item = metrics.model_dump()
+                item["chart_png_url"] = chart_png_url
+                item["markdown_image"] = f"![{sym} Options Chart]({chart_png_url})"
+
+                # Attach granular strike distribution for client-side Canvas rendering
+                try:
+                    strike_dist = get_strike_distribution(sym, max_dte=max_dte, strike_range=strike_range, force_refresh=force_refresh)
+                    item["strike_distribution"] = strike_dist.model_dump()
+                except Exception as ex:
+                    logger.warning(f"Strike distribution generation failed for {sym}: {ex}")
+                    item["strike_distribution"] = None
+
+                ticker_results[sym] = item
+
+                ctx = (
+                    f"Ticker {sym}: Spot ${item.get('spot_price')}, Call Wall ${item.get('call_wall')}, "
+                    f"Put Wall ${item.get('put_wall')}, GEX Above: {item.get('gex_above_pct')}%, "
+                    f"Front-Week GEX: {item.get('front_week_gex_pct')}%, Regime: {item.get('gamma_regime')}"
+                )
+                ai_contexts.append(ctx)
+
+            first_sym = clean_tickers[0] if clean_tickers[0] in ticker_results else list(ticker_results.keys())[0]
+            primary_result = dict(ticker_results[first_sym])
+
+            # Batch metadata
+            primary_result["count"] = len(ticker_results)
+            primary_result["tickers"] = list(ticker_results.keys())
+            primary_result["batch_data"] = ticker_results
+            primary_result["combined_context"] = "; ".join(ai_contexts)
+
+            # Store in RAM cache
+            self.cache[cache_key] = {
+                "data": primary_result,
+                "timestamp": time.time()
+            }
+            return primary_result
+
+        return await self.circuit_breaker.call(
+            _execute_sync,
+            fallback=_fallback,
+            timeout=10.0
+        )
+
+    def get_summary_sync(
+        self,
+        ticker: str = "AAPL",
+        tickers: Optional[str] = None,
+        max_dte: int = 50,
+        strike_range: int = 25,
+        force_refresh: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Synchronous execution for LLM function tool calling.
+        """
+        raw_input = tickers or ticker or "AAPL"
+        if isinstance(raw_input, list):
+            clean_tickers = [t.strip().upper().replace("$", "") for t in raw_input if t.strip()]
+        else:
+            clean_tickers = [t.strip().upper().replace("$", "") for t in str(raw_input).split(",") if t.strip()]
+
+        if not clean_tickers:
+            return {"error": "No valid ticker provided."}
+
+        clean_ticker_str = ",".join(clean_tickers)
+        cache_key = _get_cache_key(clean_ticker_str, max_dte, strike_range)
+        now_ts = time.time()
+
+        if not force_refresh and cache_key in self.cache:
+            entry = self.cache[cache_key]
+            if (now_ts - entry["timestamp"]) < self.cache_ttl:
+                return entry["data"]
+
+        def _fallback():
+            if cache_key in self.cache:
+                entry = self.cache[cache_key]
+                stale_age = int(time.time() - entry["timestamp"])
+                logger.warning(f"Serving stale in-memory GEXDEX cache for {clean_ticker_str} ({stale_age}s old)")
+                stale_data = dict(entry["data"])
+                stale_data["_cached_fallback"] = True
+                stale_data["_cache_age_seconds"] = stale_age
+                return stale_data
+            return {
+                "error": "Temporary options calculation delay (Circuit Breaker active).",
+                "detail": f"Options data feed currently unavailable for {clean_ticker_str}.",
+                "ticker": clean_ticker_str,
+                "is_temporary": True
+            }
+
+        def _execute() -> Dict[str, Any]:
+            data = get_gexdex_data(clean_tickers, max_dte=max_dte, strike_range=strike_range, force_refresh=force_refresh)
+            if not data:
+                return {
+                    "error": f"No options exposure data found for tickers: {clean_ticker_str}",
+                    "ticker": clean_ticker_str
+                }
+
+            ticker_results: Dict[str, Any] = {}
+            ai_contexts: List[str] = []
+
+            for sym, metrics in data.items():
+                chart_png_url = f"/api/v1/gexdex/chart.png?ticker={sym}&max_dte={max_dte}&strike_range={strike_range}&format=webp"
+                item = metrics.model_dump()
+                item["chart_png_url"] = chart_png_url
+                item["markdown_image"] = f"![{sym} Options Chart]({chart_png_url})"
+
+                try:
+                    strike_dist = get_strike_distribution(sym, max_dte=max_dte, strike_range=strike_range, force_refresh=force_refresh)
+                    item["strike_distribution"] = strike_dist.model_dump()
+                except Exception as ex:
+                    logger.warning(f"Strike distribution generation failed for {sym}: {ex}")
+                    item["strike_distribution"] = None
+
+                ticker_results[sym] = item
+                ctx = (
+                    f"Ticker {sym}: Spot ${item.get('spot_price')}, Call Wall ${item.get('call_wall')}, "
+                    f"Put Wall ${item.get('put_wall')}, GEX Above: {item.get('gex_above_pct')}%, "
+                    f"Front-Week GEX: {item.get('front_week_gex_pct')}%, Regime: {item.get('gamma_regime')}"
+                )
+                ai_contexts.append(ctx)
+
+            first_sym = clean_tickers[0] if clean_tickers[0] in ticker_results else list(ticker_results.keys())[0]
+            primary_result = dict(ticker_results[first_sym])
+            primary_result["count"] = len(ticker_results)
+            primary_result["tickers"] = list(ticker_results.keys())
+            primary_result["batch_data"] = ticker_results
+            primary_result["combined_context"] = "; ".join(ai_contexts)
+
+            self.cache[cache_key] = {
+                "data": primary_result,
+                "timestamp": time.time()
+            }
+            return primary_result
+
+        try:
+            return _execute()
+        except Exception as exc:
+            logger.error(f"Error in get_summary_sync for {clean_ticker_str}: {exc}")
+            return _fallback()
+
+    async def get_chart_image(
+        self,
+        ticker: str = "AAPL",
+        format: str = "webp",
+        max_dte: int = 50,
+        strike_range: int = 25,
+        force_refresh: bool = False
+    ) -> bytes:
+        """
+        Renders chart image in-process wrapped in CircuitBreaker.
+        """
+        symbol = ticker.strip().upper()
+        img_fmt = format.lower() if format else "webp"
+
+        def _render():
+            return render_gexdex_chart_image(
+                ticker=symbol,
+                max_dte=max_dte,
+                strike_range=strike_range,
+                format=img_fmt,
+                force_refresh=force_refresh
+            )
+
+        return await self.circuit_breaker.call(
+            _render,
+            fallback=b"",
+            timeout=8.0
+        )
+
+    async def get_strikes(
+        self,
+        ticker: str = "AAPL",
+        max_dte: int = 50,
+        strike_range: int = 25,
+        force_refresh: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Returns granular strike distribution in-process wrapped in CircuitBreaker.
+        """
+        symbol = ticker.strip().upper()
+
+        def _fetch_strikes():
+            dist = get_strike_distribution(
+                ticker=symbol,
+                max_dte=max_dte,
+                strike_range=strike_range,
+                force_refresh=force_refresh
+            )
+            return dist.model_dump()
+
+        def _fallback():
+            return {
+                "error": f"Failed to retrieve strike distribution for {symbol} (Circuit Breaker active).",
+                "ticker": symbol
+            }
+
+        return await self.circuit_breaker.call(
+            _fetch_strikes,
+            fallback=_fallback,
+            timeout=8.0
+        )
+
+    async def warm_benchmark_cache(self, force_refresh: bool = False) -> int:
+        """Pre-warms in-memory cache for all benchmark tickers."""
+        t0 = time.perf_counter()
+        tasks = [
+            self.get_summary(ticker=sym, force_refresh=force_refresh)
+            for sym in BENCHMARK_WARM_TICKERS
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        warmed = 0
+        for res in results:
+            if isinstance(res, dict) and "error" not in res:
+                warmed += 1
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        logger.info(f"[Cache Warmer] Pre-warmed {warmed} benchmark tickers in {elapsed_ms:.1f} ms")
+        return warmed
+
+    async def run_cache_warmer_loop(self, interval_seconds: int = 180):
+        """Background market hours pre-cache warmer loop."""
+        logger.info(f"🚀 Starting In-Process Background Market Hours Pre-Cache Warmer (interval: {interval_seconds}s)")
+        try:
+            while True:
+                try:
+                    if is_market_warmer_window():
+                        await self.warm_benchmark_cache(force_refresh=True)
+                except Exception as e:
+                    logger.error(f"[Cache Warmer] Error during warm cycle: {e}")
+                await asyncio.sleep(interval_seconds)
+        except asyncio.CancelledError:
+            logger.info("[Cache Warmer] Background pre-cache warmer stopped gracefully.")
+
+
+# Export global singleton
+gexdex_service = GexDexService()

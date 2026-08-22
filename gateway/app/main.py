@@ -24,6 +24,7 @@ from app.core.auth import (
 from contextlib import asynccontextmanager
 from app.mcp import mcp_router, mcp_client_manager
 from app.tools.gexdex_tool import run_cache_warmer_loop
+from app.engine.service import gexdex_service
 
 import collections
 from collections import deque
@@ -51,27 +52,11 @@ logger.addHandler(_rb_handler)
 logging.getLogger().addHandler(_rb_handler)
 
 
-async def _probe_gexdex_api():
-    """Non-blocking background probe to verify upstream GEXDEX API connectivity on boot."""
-    try:
-        await asyncio.sleep(2.0)
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            resp = await client.get(f"{settings.GEXDEX_API_URL.rstrip('/')}/health")
-            if resp.status_code == 200:
-                logger.info(f"✅ GEXDEX Microservice connected successfully at {settings.GEXDEX_API_URL}")
-            else:
-                logger.warning(f"⚠️ GEXDEX Microservice at {settings.GEXDEX_API_URL} returned HTTP {resp.status_code}")
-    except Exception as e:
-        logger.warning(f"⚠️ GEXDEX Microservice unreachable at {settings.GEXDEX_API_URL} ({e}). Ensure container is running on quant-system-network.")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Initialize MCP Client Hub
     await mcp_client_manager.initialize()
-    # Startup: Probe GEXDEX API
-    asyncio.create_task(_probe_gexdex_api())
-    # Startup: Background Market Hours Pre-Cache Warmer
+    # Startup: Background Market Hours Pre-Cache Warmer (In-Process Engine)
     warmer_task = asyncio.create_task(run_cache_warmer_loop())
     yield
     # Shutdown: Cancel pre-cache warmer gracefully
@@ -261,8 +246,35 @@ def list_models():
     }
 
 
-@app.get("/api/v1/gexdex/chart.png", summary="Proxy GEX/DEX Chart WebP/PNG")
-def proxy_chart_png(
+@app.get("/api/v1/gexdex/assistant-summary", summary="Get Options Exposure Summary for AI Assistants")
+async def get_gexdex_assistant_summary(
+    tickers: Optional[str] = Query(None, description="Single ticker or comma-separated list (e.g. AAPL,INTC,SPY)"),
+    ticker: Optional[str] = Query(None, description="Legacy single ticker parameter"),
+    max_dte: int = Query(50, description="Maximum days to expiration (default: 50)"),
+    strike_range: int = Query(25, description="Strike range above/below spot price (default: 25)"),
+    force_refresh: bool = Query(False, description="Bypass cache and force live data fetch")
+):
+    """
+    In-process GEX/DEX options calculation engine summary route.
+    Fetches real-time GEX/DEX options exposure metrics for single or multiple tickers.
+    """
+    raw_param = tickers or ticker or "AAPL"
+    result = await gexdex_service.get_summary(
+        ticker=raw_param,
+        max_dte=max_dte,
+        strike_range=strike_range,
+        force_refresh=force_refresh
+    )
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No options exposure data found for tickers: {raw_param}"
+        )
+    return result
+
+
+@app.get("/api/v1/gexdex/chart.png", summary="GEX/DEX Chart WebP/PNG")
+async def get_chart_png(
     ticker: str = Query("AAPL"),
     max_dte: int = Query(50),
     strike_range: int = Query(25),
@@ -272,72 +284,50 @@ def proxy_chart_png(
     api_key: Optional[str] = None
 ):
     """
-    Proxies chart image requests directly to the internal gexdex-api microservice.
+    Generates GEX/DEX chart image directly in-process via GexDexService.
     Enforces WebP compression (~35KB), strict Cache-Control headers, and force_refresh support.
     """
     clean_ticker = ticker.strip().upper()
-    url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/chart.png"
-    params = {
-        "ticker": clean_ticker,
-        "max_dte": max_dte,
-        "strike_range": strike_range,
-        "format": format,
-        "force_refresh": str(force_refresh).lower()
-    }
-    headers = {
-        "X-API-Key": settings.GEXDEX_API_KEY
-    }
+    img_fmt = format.lower() if format else "webp"
+    img_bytes = await gexdex_service.get_chart_image(
+        ticker=clean_ticker,
+        format=img_fmt,
+        max_dte=max_dte,
+        strike_range=strike_range,
+        force_refresh=force_refresh
+    )
+    media_type = "image/webp" if img_fmt == "webp" else "image/png"
     cache_headers = {
         "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
         "Pragma": "no-cache",
         "Expires": "0"
     }
-    try:
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.get(url, params=params, headers=headers)
-            media_type = "image/webp" if format.lower() == "webp" else "image/png"
-            return Response(
-                content=resp.content,
-                media_type=media_type,
-                status_code=resp.status_code,
-                headers=cache_headers
-            )
-    except Exception as e:
-        return Response(content=b"", media_type="image/png", status_code=502, headers=cache_headers)
+    return Response(
+        content=img_bytes,
+        media_type=media_type,
+        status_code=200 if img_bytes else 502,
+        headers=cache_headers
+    )
 
 
-@app.get("/api/v1/gexdex/strikes", summary="Proxy GEX/DEX Strike Distribution JSON", dependencies=[Depends(verify_app_passcode)])
-def proxy_strikes(
+@app.get("/api/v1/gexdex/strikes", summary="GEX/DEX Strike Distribution JSON", dependencies=[Depends(verify_app_passcode)])
+async def get_strikes_json(
     ticker: str = Query("AAPL"),
     max_dte: int = Query(50),
     strike_range: int = Query(25),
     force_refresh: bool = Query(False)
 ):
     """
-    Proxies strike distribution JSON directly to gexdex-api.
+    Retrieves granular strike distribution JSON directly in-process.
     Used for on-demand chart rehydration and standalone queries.
     """
     clean_ticker = ticker.strip().upper()
-    url = f"{settings.GEXDEX_API_URL}/api/v1/gexdex/strikes"
-    params = {
-        "ticker": clean_ticker,
-        "max_dte": max_dte,
-        "strike_range": strike_range,
-        "force_refresh": str(force_refresh).lower()
-    }
-    headers = {
-        "X-API-Key": settings.GEXDEX_API_KEY
-    }
-    try:
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.get(url, params=params, headers=headers)
-            return Response(
-                content=resp.content,
-                media_type="application/json",
-                status_code=resp.status_code
-            )
-    except Exception as e:
-        return {"error": f"Failed to reach gexdex-api: {str(e)}", "ticker": clean_ticker}
+    return await gexdex_service.get_strikes(
+        ticker=clean_ticker,
+        max_dte=max_dte,
+        strike_range=strike_range,
+        force_refresh=force_refresh
+    )
 
 
 @app.post("/api/chat/stream", summary="Stream Chat Response", dependencies=[Depends(verify_app_passcode)])
