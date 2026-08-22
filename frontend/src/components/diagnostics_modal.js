@@ -4,6 +4,8 @@ export class DiagnosticsModal {
     this.closeBtn = document.getElementById('diagnosticsClose');
     this.traceIdEl = document.getElementById('diagTraceId');
     this.copyTraceBtn = document.getElementById('diagCopyTraceBtn');
+    this.tierBadge = document.getElementById('diagTierBadge');
+    this.tierText = document.getElementById('diagTierText');
     this.cachePill = document.getElementById('diagCachePill');
     this.cacheText = document.getElementById('diagCacheText');
     this.retryBadge = document.getElementById('diagRetryBadge');
@@ -63,7 +65,7 @@ export class DiagnosticsModal {
       <div class="modal-card diagnostics-modal">
         <div class="modal-header">
           <div class="diag-header-title">
-            <span class="diag-icon">⚡</span>
+            <span class="status-dot dot-live"></span>
             <h3 class="modal-title">Performance Diagnostics</h3>
           </div>
           <button id="diagnosticsClose" class="modal-close-btn" title="Close">&times;</button>
@@ -75,15 +77,21 @@ export class DiagnosticsModal {
               <code id="diagTraceId" class="diag-trace-id">tr_--------</code>
             </div>
             <div class="diag-meta-card">
+              <span class="diag-meta-label">Execution Tier</span>
+              <div id="diagTierBadge" class="tier-meta-badge fast">
+                <span id="diagTierText"><span class="status-dot dot-fast"></span> FAST WORKER (3.5-LITE)</span>
+              </div>
+            </div>
+            <div class="diag-meta-card">
               <span class="diag-meta-label">Cache Status</span>
               <div id="diagCachePill" class="cache-status-pill hit">
-                <span id="diagCacheText">🟢 Cache HIT (0ms)</span>
+                <span id="diagCacheText"><span class="status-dot dot-live"></span> HIT · 0.0ms</span>
               </div>
             </div>
             <div class="diag-meta-card">
               <span class="diag-meta-label">Upstream Retries</span>
-              <div id="diagRetryBadge" class="retry-badge">
-                <span id="diagRetryText">🟢 0 Retries (Optimal)</span>
+              <div id="diagRetryBadge" class="retry-badge optimal">
+                <span id="diagRetryText"><span class="status-dot dot-live"></span> 0 RETRIES (OPTIMAL)</span>
               </div>
             </div>
           </div>
@@ -96,7 +104,7 @@ export class DiagnosticsModal {
             <div class="waterfall-container">
               <div class="waterfall-row">
                 <div class="waterfall-info">
-                  <span class="waterfall-label">🌐 Network &amp; SSE Handshake</span>
+                  <span class="waterfall-label">01  NET  Network &amp; SSE Handshake</span>
                   <span id="wfNetVal" class="waterfall-val">0.0 ms</span>
                 </div>
                 <div class="waterfall-track">
@@ -105,7 +113,7 @@ export class DiagnosticsModal {
               </div>
               <div class="waterfall-row" id="wfDecisionRow">
                 <div class="waterfall-info">
-                  <span class="waterfall-label">🧠 Gemini Tool Selection (R1)</span>
+                  <span class="waterfall-label">02  INTENT  Gemini Tool Selection (R1)</span>
                   <span id="wfDecisionVal" class="waterfall-val">0.0 ms</span>
                 </div>
                 <div class="waterfall-track">
@@ -114,7 +122,7 @@ export class DiagnosticsModal {
               </div>
               <div class="waterfall-row" id="wfToolRow">
                 <div class="waterfall-info">
-                  <span class="waterfall-label">⚙️ Upstream Tool Execution</span>
+                  <span class="waterfall-label">03  DATA  Upstream Microservice (GEX/DEX)</span>
                   <span id="wfToolVal" class="waterfall-val">0.0 ms</span>
                 </div>
                 <div class="waterfall-track">
@@ -123,7 +131,7 @@ export class DiagnosticsModal {
               </div>
               <div class="waterfall-row">
                 <div class="waterfall-info">
-                  <span class="waterfall-label">⚡ Gemini Synthesis TTFT (R2)</span>
+                  <span class="waterfall-label">04  SYNTH  Gemini Synthesis TTFT (R2)</span>
                   <span id="wfSynthesisVal" class="waterfall-val">0.0 ms</span>
                 </div>
                 <div class="waterfall-track">
@@ -132,7 +140,7 @@ export class DiagnosticsModal {
               </div>
               <div class="waterfall-row">
                 <div class="waterfall-info">
-                  <span class="waterfall-label">🎨 HTML5 Canvas Paint</span>
+                  <span class="waterfall-label">05  RENDER  Client Canvas Paint</span>
                   <span id="wfPaintVal" class="waterfall-val">0.0 ms</span>
                 </div>
                 <div class="waterfall-track">
@@ -165,6 +173,8 @@ export class DiagnosticsModal {
     this.closeBtn = div.querySelector('#diagnosticsClose');
     this.traceIdEl = div.querySelector('#diagTraceId');
     this.copyTraceBtn = div.querySelector('#diagCopyTraceBtn');
+    this.tierBadge = div.querySelector('#diagTierBadge');
+    this.tierText = div.querySelector('#diagTierText');
     this.cachePill = div.querySelector('#diagCachePill');
     this.cacheText = div.querySelector('#diagCacheText');
     this.retryBadge = div.querySelector('#diagRetryBadge');
@@ -205,7 +215,21 @@ export class DiagnosticsModal {
       this.traceIdEl.title = traceId;
     }
 
-    // 2. Cache Status Pill
+    // 2. Execution Tier Badge
+    const tier = metrics.tier_used || metrics.tier || '';
+    const model = metrics.model_used || metrics.model || '';
+    const isStrategic = tier === 'strategic' || (typeof model === 'string' && model.includes('3.7'));
+    if (this.tierText && this.tierBadge) {
+      if (isStrategic) {
+        this.tierBadge.className = 'tier-meta-badge strategic';
+        this.tierText.innerHTML = '<span class="status-dot dot-strategic"></span> STRATEGIC SYNTHESIS (3.7-FLASH)';
+      } else {
+        this.tierBadge.className = 'tier-meta-badge fast';
+        this.tierText.innerHTML = '<span class="status-dot dot-fast"></span> FAST WORKER (3.5-LITE)';
+      }
+    }
+
+    // 3. Cache Status Pill
     const isCacheHit = Boolean(metrics.cache_hit || metrics.cached || metrics.cache_status === 'HIT' || metrics.cacheStatus === 'HIT');
     const cacheAge = metrics.cache_age || metrics.cache_age_seconds || 0;
     const cacheMs = metrics.cache_ms ?? (isCacheHit ? 0 : Math.round(metrics.upstream_tool_ms || metrics.tool_ms || 0));
@@ -213,26 +237,26 @@ export class DiagnosticsModal {
     if (this.cacheText && this.cachePill) {
       if (isCacheHit) {
         this.cachePill.className = 'cache-status-pill hit';
-        this.cacheText.textContent = `🟢 HIT (${cacheMs}ms)`;
+        const formattedMs = typeof cacheMs === 'number' ? cacheMs.toFixed(1) : '0.0';
+        this.cacheText.innerHTML = `<span class="status-dot dot-live"></span> HIT · ${formattedMs}ms`;
       } else if (metrics._cached_fallback) {
         this.cachePill.className = 'cache-status-pill stale';
-        this.cacheText.textContent = `🟠 Stale (${cacheAge}s)`;
+        this.cacheText.innerHTML = `<span class="status-dot dot-stale"></span> STALE · ${cacheAge}s`;
       } else {
         this.cachePill.className = 'cache-status-pill miss';
-        const toolDurationSec = ((metrics.upstream_tool_ms || metrics.tool_ms || 2400) / 1000).toFixed(1);
-        this.cacheText.textContent = `🟡 Cold (${toolDurationSec}s)`;
+        this.cacheText.innerHTML = `<span class="status-dot dot-miss"></span> MISS · COLD FETCH`;
       }
     }
 
-    // 3. Upstream Retries
+    // 4. Upstream Retries
     const retries = metrics.retries ?? metrics.upstream_retries ?? metrics.retry_attempts ?? 0;
     if (this.retryText && this.retryBadge) {
       if (retries === 0) {
         this.retryBadge.className = 'retry-badge optimal';
-        this.retryText.textContent = '🟢 0 Retries (Optimal)';
+        this.retryText.innerHTML = '<span class="status-dot dot-live"></span> 0 RETRIES (OPTIMAL)';
       } else {
         this.retryBadge.className = 'retry-badge warned';
-        this.retryText.textContent = `⚠️ ${retries} Retried`;
+        this.retryText.innerHTML = `<span class="status-dot dot-warn"></span> ${retries} RETRIED`;
       }
     }
 

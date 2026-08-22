@@ -47,7 +47,7 @@ export const AppState = {
   },
 
   getModel() {
-    return localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-3.6-flash';
+    return localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-3.5-flash-lite';
   },
 
   setModel(modelId) {

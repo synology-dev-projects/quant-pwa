@@ -15,7 +15,16 @@ NY_TZ = pytz.timezone("America/New_York")
 _GEXDEX_MEMORY_CACHE: Dict[str, Dict[str, Any]] = {}
 CACHE_TTL_SECONDS = 300.0
 
-BENCHMARK_WARM_TICKERS = ["SPY", "QQQ", "IWM", "NVDA", "AAPL", "TSLA", "META", "AMZN", "GOOGL", "MSFT"]
+BENCHMARK_WARM_TICKERS = [
+    "SPY", "QQQ", "IWM", "NVDA", "AAPL", "TSLA", "META", "AMZN", "GOOGL", "MSFT",
+    "AMD", "PLTR", "TSM", "SMCI", "COIN", "CRWD", "NFLX", "SPX", "NDX", "RUT"
+]
+
+_HTTP_CLIENT = httpx.Client(
+    http2=True,
+    limits=httpx.Limits(max_keepalive_connections=16, max_connections=32, keepalive_expiry=60.0),
+    timeout=35.0
+)
 
 
 def _get_cache_key(tickers: str, max_dte: int, strike_range: int) -> str:
@@ -263,33 +272,32 @@ def get_gexdex(
     last_error = None
     for attempt in range(3):
         try:
-            with httpx.Client(timeout=35.0) as client:
-                response = client.get(url, params=params, headers=headers)
+            response = _HTTP_CLIENT.get(url, params=params, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    
-                    # Clean and emit UI events
-                    _emit_ui_events_from_payload(data)
-                    
-                    # Store in SWR memory cache
-                    _GEXDEX_MEMORY_CACHE[cache_key] = {
-                        "data": data,
-                        "timestamp": time.time()
-                    }
-                    record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
-                    return _format_gexdex_summary(data)
-                elif response.status_code in (502, 503, 504):
-                    last_error = f"HTTP {response.status_code}"
-                    time.sleep(0.2 * (2 ** attempt))
-                    continue
-                else:
-                    record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
-                    return _format_gexdex_summary({
-                        "error": f"gexdex-api returned HTTP {response.status_code}",
-                        "detail": response.text,
-                        "ticker": clean_tickers
-                    })
+                # Clean and emit UI events
+                _emit_ui_events_from_payload(data)
+                
+                # Store in SWR memory cache
+                _GEXDEX_MEMORY_CACHE[cache_key] = {
+                    "data": data,
+                    "timestamp": time.time()
+                }
+                record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
+                return _format_gexdex_summary(data)
+            elif response.status_code in (502, 503, 504):
+                last_error = f"HTTP {response.status_code}"
+                time.sleep(0.2 * (2 ** attempt))
+                continue
+            else:
+                record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
+                return _format_gexdex_summary({
+                    "error": f"gexdex-api returned HTTP {response.status_code}",
+                    "detail": response.text,
+                    "ticker": clean_tickers
+                })
         except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as net_err:
             last_error = str(net_err)
             time.sleep(0.2 * (2 ** attempt))
@@ -393,16 +401,15 @@ def get_strike_distribution(
     
     for attempt in range(3):
         try:
-            with httpx.Client(timeout=35.0) as client:
-                resp = client.get(url, params=params, headers=headers)
-                if resp.status_code == 200:
-                    record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
-                    return resp.json()
-                elif resp.status_code in (502, 503, 504):
-                    time.sleep(0.2 * (2 ** attempt))
-                    continue
+            resp = _HTTP_CLIENT.get(url, params=params, headers=headers)
+            if resp.status_code == 200:
                 record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
-                return {"error": f"gexdex-api returned HTTP {resp.status_code}", "ticker": clean_ticker}
+                return resp.json()
+            elif resp.status_code in (502, 503, 504):
+                time.sleep(0.2 * (2 ** attempt))
+                continue
+            record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=attempt)
+            return {"error": f"gexdex-api returned HTTP {resp.status_code}", "ticker": clean_ticker}
         except Exception:
             time.sleep(0.2 * (2 ** attempt))
             continue

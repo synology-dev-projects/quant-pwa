@@ -40,7 +40,7 @@ export class ChatView {
   renderWelcomeMessage() {
     const welcome = createMessageElement(
       'assistant',
-      `### Welcome to Quant AI ⚡\n\nI am your institutional options and quantitative market intelligence assistant. I connect directly to your Synology NAS \`gexdex-api\` to provide real-time **Gamma Exposure (GEX)**, **Delta Exposure (DEX)**, **Put/Call Walls**, and **Gamma Flip** analysis.\n\n*Tap any quick chip below or ask about any ticker to get started.*`
+      `### Welcome to Quant AI\n\nI am your institutional options and quantitative market intelligence assistant. I connect directly to your Synology NAS \`gexdex-api\` to provide real-time **Gamma Exposure (GEX)**, **Delta Exposure (DEX)**, **Put/Call Walls**, and **Gamma Flip** analysis.\n\n*Tap any quick chip below or ask about any ticker to get started.*`
     );
     this.streamContainer.appendChild(welcome);
   }
@@ -121,6 +121,10 @@ export class ChatView {
     else if (metricsData.retry_attempts !== undefined) this.currentMetrics.retries = metricsData.retry_attempts;
 
     if (metricsData._cached_fallback !== undefined) this.currentMetrics._cached_fallback = metricsData._cached_fallback;
+    if (metricsData.tier_used !== undefined) this.currentMetrics.tier_used = metricsData.tier_used;
+    if (metricsData.tier !== undefined) this.currentMetrics.tier_used = metricsData.tier;
+    if (metricsData.model_used !== undefined) this.currentMetrics.model_used = metricsData.model_used;
+    if (metricsData.model !== undefined) this.currentMetrics.model_used = metricsData.model;
     if (metricsData.tokens !== undefined) this.currentMetrics.tokens = metricsData.tokens;
     if (metricsData.token_count !== undefined) this.currentMetrics.tokens = metricsData.token_count;
     if (metricsData.tok_per_sec !== undefined) this.currentMetrics.tok_per_sec = metricsData.tok_per_sec;
@@ -221,14 +225,20 @@ export class ChatView {
       contentDiv.innerHTML = `
         <div class="chat-error-card">
           <div class="cec-header">
-            <span class="cec-icon">⚠️</span>
+            <span class="cec-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </span>
             <span class="cec-title">Connection Notice</span>
           </div>
           <div class="cec-desc">${errorMessage}</div>
         </div>
       `;
     }
-    this.currentAssistantContent = `⚠️ ${errorMessage}`;
+    this.currentAssistantContent = errorMessage;
     this.scrollToBottom();
   }
 
@@ -274,8 +284,15 @@ export class ChatView {
           const cacheStatus = isCacheHit ? 'HIT' : 'MISS';
           const tokSpeedFormatted = typeof this.currentMetrics.tok_per_sec === 'number' ? this.currentMetrics.tok_per_sec.toFixed(1) : String(this.currentMetrics.tok_per_sec || '48.2');
 
+          const tier = this.currentMetrics.tier_used || this.currentMetrics.tier || '';
+          const model = this.currentMetrics.model_used || this.currentMetrics.model || AppState.getModel() || '';
+          const isStrategic = tier === 'strategic' || (typeof model === 'string' && model.includes('3.7'));
+          const tierBadge = isStrategic
+            ? `<span class="inst-tag inst-tag-strategic"><span class="status-dot dot-strategic"></span>STRATEGIC · 3.7-FLASH</span>`
+            : `<span class="inst-tag inst-tag-fast"><span class="status-dot dot-fast"></span>FAST · 3.5-LITE</span>`;
+
           const finalMetrics = { ...this.currentMetrics };
-          footer.innerHTML = `<span class="latency-pill" title="Tap to view performance diagnostics waterfall">⚡ ${totalMs}ms · ${tokSpeedFormatted} tok/s [Cache: ${cacheStatus}]</span>`;
+          footer.innerHTML = `<span class="latency-pill" title="Tap to view performance diagnostics waterfall">${tierBadge} <span class="inst-stats">${totalMs}ms · ${tokSpeedFormatted} tok/s</span> <span class="inst-cache">[CACHE: ${cacheStatus}]</span></span>`;
           
           const pill = footer.querySelector('.latency-pill');
           pill?.addEventListener('click', (e) => {

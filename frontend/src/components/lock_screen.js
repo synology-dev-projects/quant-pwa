@@ -168,7 +168,7 @@ export class LockScreen {
   }
 
   startAutoRetry(password) {
-    this.showBootNotice('⏳ Gateway is waking up... Auto-verifying in a moment');
+    this.showBootNotice('Gateway is waking up... Auto-verifying in a moment');
     this.setLoading(true);
 
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -206,7 +206,7 @@ export class LockScreen {
 
       if (attempts < maxAttempts) {
         const remainingSec = Math.max(2, (maxAttempts - attempts) * 2);
-        this.showBootNotice(`⏳ Gateway is initializing (${remainingSec}s)... Auto-verifying`);
+        this.showBootNotice(`Gateway is initializing (${remainingSec}s)... Auto-verifying`);
         this.retryTimer = setTimeout(retry, 2000);
       } else {
         this.showError('Gateway connection timed out. Please tap Unlock to retry.');
