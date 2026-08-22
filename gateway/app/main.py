@@ -23,6 +23,7 @@ from app.core.auth import (
 
 from contextlib import asynccontextmanager
 from app.mcp import mcp_router, mcp_client_manager
+from app.tools.gexdex_tool import run_cache_warmer_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,7 +53,15 @@ async def lifespan(app: FastAPI):
     await mcp_client_manager.initialize()
     # Startup: Probe GEXDEX API
     asyncio.create_task(_probe_gexdex_api())
+    # Startup: Background Market Hours Pre-Cache Warmer
+    warmer_task = asyncio.create_task(run_cache_warmer_loop())
     yield
+    # Shutdown: Cancel pre-cache warmer gracefully
+    warmer_task.cancel()
+    try:
+        await warmer_task
+    except asyncio.CancelledError:
+        pass
     # Shutdown: Close active MCP sessions
     await mcp_client_manager.close()
 
@@ -229,13 +238,8 @@ def health_check():
 def list_models():
     """Returns available Gemini models for the PWA header dropdown."""
     return {
-        "default": "gemini-3.5-flash",
-        "models": [
-            {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash", "badge": "Fast + Zero Congestion (Default)"},
-            {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash", "badge": "High Accuracy Preview"},
-            {"id": "gemini-3-flash-preview", "name": "Gemini 3 Flash Preview", "badge": "Ultra Low Latency"},
-            {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite", "badge": "Cost Efficient"}
-        ]
+        "default": settings.DEFAULT_GEMINI_MODEL,
+        "models": settings.AVAILABLE_MODELS
     }
 
 

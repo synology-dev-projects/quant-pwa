@@ -7,6 +7,7 @@ import logging
 from typing import AsyncGenerator, List, Dict, Any, Optional
 from google import genai
 from google.genai import types
+from google.genai import errors
 
 from app.config import settings
 from app.core.temporal import generate_temporal_system_prompt, get_market_status
@@ -38,7 +39,14 @@ def create_genai_client() -> genai.Client:
     api_key = settings.GEMINI_API_KEY
     if not api_key:
         raise ValueError("GEMINI_API_KEY is not set in environment or config.")
-    return genai.Client(api_key=api_key)
+    http_opts = types.HttpOptions(
+        timeout=12000,
+        retry_options=types.HttpRetryOptions(attempts=1)
+    )
+    return genai.Client(api_key=api_key, http_options=http_opts)
+
+
+_get_genai_client = create_genai_client
 
 
 async def stream_chat_response(
@@ -134,7 +142,14 @@ async def stream_chat_response(
     )
 
     models_to_try = [selected_model]
-    for backup in ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite"]:
+    # Model Candidate Routing Hierarchy (Fallback on transient 429/503)
+    fallback_hierarchy = [
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-latest",
+        "gemini-3.7-flash"
+    ]
+    for backup in fallback_hierarchy:
         if backup not in models_to_try:
             models_to_try.append(backup)
 
@@ -157,10 +172,14 @@ async def stream_chat_response(
             response = await asyncio.to_thread(chat.send_message, active_prompt)
             if response:
                 active_model_used = attempt_model
+                last_error = None
                 break
-        except Exception as err:
+        except (errors.APIError, Exception) as err:
             err_str = str(err)
             last_error = err
+            logger.warning(
+                f"[{trace_id}] Model {attempt_model} failed with transient error: {err_str}. Fast failover to next candidate."
+            )
             
             # Robust AFC Fallback: If tool execution threw an exception, retry with direct synthesis
             try:
@@ -176,15 +195,13 @@ async def stream_chat_response(
                 response = await asyncio.to_thread(chat_fb.send_message, active_prompt)
                 if response:
                     active_model_used = attempt_model
+                    last_error = None
                     break
-            except Exception:
-                pass
+            except Exception as fb_err:
+                logger.warning(f"[{trace_id}] Model {attempt_model} AFC direct synthesis fallback error: {fb_err}")
 
-            if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                await asyncio.sleep(0.3)
-                continue
-            else:
-                break
+            # Fast failover to next candidate model (< 500ms without sleeping)
+            continue
 
     if not response and last_error:
         err_msg = json.dumps({"type": "error", "message": f"Streaming Error: {str(last_error)}"})
