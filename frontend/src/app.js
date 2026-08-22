@@ -194,10 +194,14 @@ class App {
         throw new Error(`Gateway returned HTTP ${response.status}`);
       }
 
+      const t_handshake = performance.now();
+      const network_ms = Math.max(1, Math.round(t_handshake - t_start));
+
       // Initialize assistant stream bubble
       this.chatView.startAssistantMessage();
       if (this.chatView.currentMetrics) {
         this.chatView.currentMetrics.t_start = t_start;
+        this.chatView.currentMetrics.network_ms = network_ms;
       }
 
       // Read SSE stream

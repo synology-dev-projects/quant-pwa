@@ -261,22 +261,17 @@ export class DiagnosticsModal {
     }
 
     // 4. Waterfall Segments (ms)
-    let netMs = metrics.network_ms || metrics.network_handshake_ms || 0;
+    let netMs = metrics.network_ms || metrics.network_handshake_ms || metrics.network_rtt_ms || 15.0;
     let decisionMs = metrics.tool_decision_ms || 0;
     let toolMs = metrics.upstream_tool_ms || metrics.tool_ms || 0;
     let synthesisMs = metrics.synthesis_ttft_ms || metrics.model_ttft_ms || metrics.gemini_ttft_ms || metrics.ttft_ms || 0;
     let paintMs = metrics.canvas_paint_ms || metrics.canvas_render_ms || 0;
     let totalMs = metrics.total_ms || metrics.duration_ms || (netMs + decisionMs + toolMs + synthesisMs + paintMs);
 
-    // If netMs wasn't explicitly recorded, estimate from remainder
-    const subTotalKnown = decisionMs + toolMs + synthesisMs + paintMs;
-    if (!netMs && totalMs > subTotalKnown) {
-      netMs = Math.max(1, Math.round(totalMs - subTotalKnown));
-    }
+    const sumSegments = netMs + decisionMs + toolMs + synthesisMs + paintMs;
+    const maxMs = Math.max(totalMs, sumSegments, 1);
 
-    const maxMs = Math.max(totalMs, netMs + decisionMs + toolMs + synthesisMs + paintMs, 1);
-
-    const netPct = Math.min(100, Math.max(3, Math.round((netMs / maxMs) * 100)));
+    const netPct = Math.min(100, Math.max(decisionMs > 0 || toolMs > 0 ? 3 : 5, Math.round((netMs / maxMs) * 100)));
     const decisionPct = Math.min(100, Math.max(decisionMs > 0 ? 3 : 0, Math.round((decisionMs / maxMs) * 100)));
     const toolPct = Math.min(100, Math.max(toolMs > 0 ? 3 : 0, Math.round((toolMs / maxMs) * 100)));
     const synthesisPct = Math.min(100, Math.max(synthesisMs > 0 ? 3 : 0, Math.round((synthesisMs / maxMs) * 100)));
