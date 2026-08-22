@@ -74,7 +74,14 @@ export class QuantChart {
           <div style="color:#00f5d4">Call Wall: <strong>$${callWall.toFixed(2)}</strong></div>
           <div style="color:#ff006e">Put Wall: <strong>$${putWall.toFixed(2)}</strong></div>
         </div>
-        <button class="expand-btn" title="Expand Fullscreen">🔍</button>
+        <button class="expand-btn" title="Expand Fullscreen">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+        </button>
       </div>
     `;
 
@@ -145,7 +152,7 @@ export class QuantChart {
   renderFallback() {
     this.container.innerHTML = `
       <div class="quant-chart-card empty">
-        <div class="chart-ticker-badge">📊 ${this.data?.ticker || 'Options'} Exposure</div>
+        <div class="chart-ticker-badge">${this.data?.ticker || 'OPTIONS'} EXPOSURE</div>
         <p>No active options chain liquidity available for this ticker.</p>
       </div>
     `;
@@ -222,7 +229,7 @@ export class QuantChart {
           const color = PALETTE[idx % PALETTE.length];
           expRowsHtml += `
             <div class="tt-exp-row">
-              <span style="color:${color}">■ ${exp}:</span>
+              <span style="color:${color}"><span class="legend-dot" style="display:inline-block;width:6px;height:6px;background:${color};border-radius:2px;margin-right:4px;vertical-align:middle;"></span>${exp}:</span>
               <span>C: $${this.formatCurrency(gexInfo.call)} / P: $${this.formatCurrency(gexInfo.put)}</span>
             </div>
           `;

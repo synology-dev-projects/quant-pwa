@@ -90,6 +90,10 @@ async def test_stream_chat_response_emits_metrics_event():
 
     metrics_data = json.loads(lines[1][6:])
     assert metrics_data["trace_id"] == "tr-abc123"
+    assert "tier_used" in metrics_data
+    assert metrics_data["tier_used"] in ["fast", "strategic"]
+    assert "model_used" in metrics_data
+    assert isinstance(metrics_data["model_used"], str)
     assert isinstance(metrics_data["tool_decision_ms"], (int, float))
     assert metrics_data["tool_decision_ms"] >= 0.0
     assert isinstance(metrics_data["tool_ms"], (int, float))
@@ -183,14 +187,14 @@ def test_models_list_endpoint_structure():
     response = client.get("/api/models", headers={"Authorization": f"Bearer {valid_passcode}"})
     assert response.status_code == 200
     data = response.json()
-    assert data["default"] == "gemini-3.6-flash"
+    assert data["default"] == "gemini-3.5-flash-lite"
     assert len(data["models"]) == 4
     model_ids = [m["id"] for m in data["models"]]
     assert model_ids == [
-        "gemini-3.6-flash",
         "gemini-3.5-flash-lite",
-        "gemini-flash-latest",
-        "gemini-3.7-flash"
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-flash-latest"
     ]
 
 
@@ -206,7 +210,7 @@ def test_create_genai_client_fast_timeout_and_retries(monkeypatch):
         assert call_kwargs["api_key"] == "test-key-12345"
         assert "http_options" in call_kwargs
         http_opts = call_kwargs["http_options"]
-        assert http_opts.timeout == 12000
+        assert http_opts.timeout == 60000
         assert http_opts.retry_options.attempts == 1
 
 
@@ -250,7 +254,158 @@ async def test_stream_chat_response_fast_failover():
     # Both primary and secondary models were attempted
     assert "gemini-3.6-flash" in created_models
     assert "gemini-3.5-flash-lite" in created_models
-    assert "Model Failover" in full_output
+    assert "ROUTING NOTICE" in full_output
     assert "Analysis" in full_output
     assert "fallback" in full_output
+
+
+from app.core.agent import detect_query_thinking_budget, SYSTEM_INSTRUCTION_BASE
+from google.genai import types
+
+
+def test_system_instruction_compressed():
+    """Verifies that SYSTEM_INSTRUCTION_BASE is compressed, token-dense, and preserves NO_IMAGE_SYNTAX."""
+    assert "You are Quant AI, an institutional Options & Quantitative Market Strategist." in SYSTEM_INSTRUCTION_BASE
+    assert "get_gexdex" in SYSTEM_INSTRUCTION_BASE
+    assert "STRICT COMPLETENESS" in SYSTEM_INSTRUCTION_BASE
+    # Check concise token-dense length (< 1500 chars / ~300 tokens)
+    assert len(SYSTEM_INSTRUCTION_BASE) < 1500
+
+
+def test_detect_query_thinking_budget_single_ticker():
+    """Verifies that fast, direct single-ticker queries return a 0 thinking budget."""
+    assert detect_query_thinking_budget("SPY") == 0
+    assert detect_query_thinking_budget("What is the SPY gamma?") == 0
+    assert detect_query_thinking_budget("AAPL options") == 0
+    assert detect_query_thinking_budget("TSLA strike breakdown") == 0
+    assert detect_query_thinking_budget("NVDA call put wall") == 0
+    assert detect_query_thinking_budget("") == 0
+    assert detect_query_thinking_budget(None) == 0
+
+
+def test_detect_query_thinking_budget_complex_and_multi_ticker():
+    """Verifies that complex, macro, multi-ticker, or strategy queries allocate 512 thinking budget."""
+    # Cross-synthesis keywords
+    assert detect_query_thinking_budget("Compare SPY and QQQ") == 512
+    assert detect_query_thinking_budget("What is the FOMC risk?") == 512
+    assert detect_query_thinking_budget("CPI inflation update") == 512
+    assert detect_query_thinking_budget("Fed interest rate impact") == 512
+    assert detect_query_thinking_budget("Cross-asset correlation") == 512
+    assert detect_query_thinking_budget("Options portfolio strategy") == 512
+    assert detect_query_thinking_budget("Key levels for NVDA") == 512
+    assert detect_query_thinking_budget("Macro market regime") == 512
+    assert detect_query_thinking_budget("What are the rates today?") == 512
+
+    # Comma-separated multi-ticker queries
+    assert detect_query_thinking_budget("SPY, AAPL, NVDA") == 512
+    assert detect_query_thinking_budget("SPY,QQQ") == 512
+    assert detect_query_thinking_budget("BLDP,AAOI,ADEA") == 512
+
+    # History-based synthesis detection
+    history_dict = [{"role": "user", "content": "What is the macro strategy?"}]
+    assert detect_query_thinking_budget("SPY", history=history_dict) == 512
+
+    history_content = [types.Content(role="user", parts=[types.Part.from_text(text="FOMC risk analysis")])]
+    assert detect_query_thinking_budget("SPY", history=history_content) == 512
+
+
+@pytest.mark.anyio
+async def test_stream_chat_response_with_thinking_config():
+    """Verifies that stream_chat_response configures thinking_budget dynamically in GenerateContentConfig."""
+    captured_configs = []
+
+    def mock_create(model, config, history):
+        captured_configs.append(config)
+        mock_chat = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.text = "Analysis complete."
+        mock_chat.send_message.return_value = mock_resp
+        return mock_chat
+
+    mock_client = MagicMock()
+    mock_client.chats.create.side_effect = mock_create
+
+    with patch("app.core.agent.create_genai_client", return_value=mock_client):
+        # 1. Simple query -> budget 0
+        messages_simple = [{"role": "user", "content": "What is the SPY gamma?"}]
+        async for _ in stream_chat_response(messages=messages_simple):
+            pass
+
+        assert len(captured_configs) == 1
+        cfg1 = captured_configs[0]
+        # Fast Tier 3.5-lite has thinking_config disabled to prevent Google API 400 errors
+        assert cfg1.thinking_config is None
+
+        # 2. Complex query -> strategic budget 512
+        messages_complex = [{"role": "user", "content": "Explain the macro strategy for FOMC rates and portfolio correlation"}]
+        async for _ in stream_chat_response(messages=messages_complex):
+            pass
+
+        assert len(captured_configs) == 2
+        cfg2 = captured_configs[1]
+        assert cfg2.thinking_config is not None
+        assert cfg2.thinking_config.thinking_budget == 512
+
+
+from app.core.agent import evaluate_synthesis_tier
+
+
+def test_evaluate_synthesis_tier_single_ticker():
+    """Single ticker queries route to FAST tier with TIER1_FAST_WORKER_MODEL and budget 0."""
+    tier, model, budget = evaluate_synthesis_tier("SPY")
+    assert tier == "FAST"
+    assert model == settings.TIER1_FAST_WORKER_MODEL
+    assert budget == 0
+
+    tier, model, budget = evaluate_synthesis_tier("What is the AAPL gamma?")
+    assert tier == "FAST"
+    assert model == settings.TIER1_FAST_WORKER_MODEL
+    assert budget == 0
+
+    tier, model, budget = evaluate_synthesis_tier("")
+    assert tier == "FAST"
+    assert model == settings.TIER1_FAST_WORKER_MODEL
+    assert budget == 0
+
+
+def test_evaluate_synthesis_tier_multi_tool():
+    """When tools_called_count >= 2, routes to STRATEGIC tier with TIER2_STRATEGIC_MODEL and budget 512."""
+    tier, model, budget = evaluate_synthesis_tier("SPY", tools_called_count=2)
+    assert tier == "STRATEGIC"
+    assert model == settings.TIER2_STRATEGIC_MODEL
+    assert budget == 512
+
+    tier, model, budget = evaluate_synthesis_tier("SPY", tools_called_count=3)
+    assert tier == "STRATEGIC"
+    assert model == settings.TIER2_STRATEGIC_MODEL
+    assert budget == 512
+
+
+def test_evaluate_synthesis_tier_keywords():
+    """When prompt or history contains cross-synthesis keywords or multi-ticker comparisons, routes to STRATEGIC tier."""
+    # Keyword in prompt
+    tier, model, budget = evaluate_synthesis_tier("FOMC rate decision impact on market")
+    assert tier == "STRATEGIC"
+    assert model == settings.TIER2_STRATEGIC_MODEL
+    assert budget == 512
+
+    tier, model, budget = evaluate_synthesis_tier("Compare options flow")
+    assert tier == "STRATEGIC"
+    assert model == settings.TIER2_STRATEGIC_MODEL
+    assert budget == 512
+
+    # Multi-ticker comma separated
+    tier, model, budget = evaluate_synthesis_tier("SPY, QQQ")
+    assert tier == "STRATEGIC"
+    assert model == settings.TIER2_STRATEGIC_MODEL
+    assert budget == 512
+
+    # Keyword in history
+    history = [{"role": "user", "content": "Let's review macro risk factors."}]
+    tier, model, budget = evaluate_synthesis_tier("What about SPY?", history=history)
+    assert tier == "STRATEGIC"
+    assert model == settings.TIER2_STRATEGIC_MODEL
+    assert budget == 512
+
+
 

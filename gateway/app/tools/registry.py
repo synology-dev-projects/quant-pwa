@@ -30,6 +30,7 @@ def record_tool_metric(
     """
     metrics = tool_metrics_var.get()
     if metrics is not None:
+        metrics["tools_called_count"] = metrics.get("tools_called_count", 0) + 1
         now = time.perf_counter()
         if latency_ms is not None:
             lat = float(latency_ms)

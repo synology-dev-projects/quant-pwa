@@ -8,10 +8,10 @@ import { SettingsModal } from './components/settings_modal.js';
 import { DiagnosticsModal } from './components/diagnostics_modal.js';
 
 const AVAILABLE_MODELS = [
-  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview' },
+  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite' },
   { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash' },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' }
+  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
+  { id: 'gemini-flash-latest', name: 'Gemini Flash Latest' }
 ];
 
 class App {
@@ -115,10 +115,10 @@ class App {
       `<option value="${m.id}" ${m.id === currentModel ? 'selected' : ''}>${m.name}</option>`
     ).join('');
 
-    // If current model is not in list, default to gemini-3-flash-preview
+    // If current model is not in list, default to gemini-3.5-flash-lite
     if (!models.some(m => m.id === currentModel)) {
-      AppState.setModel('gemini-3-flash-preview');
-      modelSelect.value = 'gemini-3-flash-preview';
+      AppState.setModel('gemini-3.5-flash-lite');
+      modelSelect.value = 'gemini-3.5-flash-lite';
     } else {
       modelSelect.value = currentModel;
     }
@@ -180,7 +180,7 @@ class App {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          messages: messages,
+          messages: messages.slice(-10),
           model: model
         }),
         signal: this.activeAbortController.signal
@@ -194,10 +194,14 @@ class App {
         throw new Error(`Gateway returned HTTP ${response.status}`);
       }
 
+      const t_handshake = performance.now();
+      const network_ms = Math.max(1, Math.round(t_handshake - t_start));
+
       // Initialize assistant stream bubble
       this.chatView.startAssistantMessage();
       if (this.chatView.currentMetrics) {
         this.chatView.currentMetrics.t_start = t_start;
+        this.chatView.currentMetrics.network_ms = network_ms;
       }
 
       // Read SSE stream

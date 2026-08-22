@@ -123,7 +123,7 @@ def test_emit_ui_events_from_payload_batch():
 
 def test_get_gexdex_multi_ticker_timeout():
     from unittest.mock import patch, MagicMock
-    from app.tools.gexdex_tool import get_gexdex
+    from app.tools.gexdex_tool import get_gexdex, _HTTP_CLIENT
     from app.tools.registry import tool_ui_events_var
 
     events = []
@@ -142,15 +142,10 @@ def test_get_gexdex_multi_ticker_timeout():
         }
     }
 
-    with patch("httpx.Client") as mock_client_cls:
-        mock_client = MagicMock()
-        mock_client.__enter__.return_value = mock_client
-        mock_client.get.return_value = mock_resp
-        mock_client_cls.return_value = mock_client
-
+    with patch.object(_HTTP_CLIENT, "get", return_value=mock_resp) as mock_get:
         res = get_gexdex(ticker="META,AMZN,NFLX,GOOGL", force_refresh=True)
 
-        mock_client_cls.assert_called_with(timeout=35.0)
+        mock_get.assert_called_once()
         assert isinstance(res, str)
         assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: META]" in res
         assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: AMZN]" in res
@@ -167,7 +162,7 @@ def test_get_gexdex_multi_ticker_timeout():
 
 def test_get_gexdex_single_ticker_summary_formatting():
     from unittest.mock import patch, MagicMock
-    from app.tools.gexdex_tool import get_gexdex
+    from app.tools.gexdex_tool import get_gexdex, _HTTP_CLIENT
     from app.tools.registry import tool_ui_events_var
 
     events = []
@@ -200,13 +195,10 @@ def test_get_gexdex_single_ticker_summary_formatting():
         "strike_distribution": strike_dist
     }
 
-    with patch("httpx.Client") as mock_client_cls:
-        mock_client = MagicMock()
-        mock_client.__enter__.return_value = mock_client
-        mock_client.get.return_value = mock_resp
-        mock_client_cls.return_value = mock_client
-
+    with patch.object(_HTTP_CLIENT, "get", return_value=mock_resp) as mock_get:
         res = get_gexdex(ticker="SPY", force_refresh=True)
+
+        mock_get.assert_called_once()
 
         assert isinstance(res, str)
         assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: SPY]" in res
@@ -309,7 +301,8 @@ async def test_warm_benchmark_cache_and_memory_cache_hit():
         get_gexdex,
         BENCHMARK_WARM_TICKERS,
         _GEXDEX_MEMORY_CACHE,
-        _get_cache_key
+        _get_cache_key,
+        _HTTP_CLIENT
     )
     from app.tools.registry import tool_metrics_var
 
@@ -338,16 +331,11 @@ async def test_warm_benchmark_cache_and_memory_cache_hit():
         }
         return mock_resp
 
-    with patch("httpx.Client") as mock_client_cls:
-        mock_client = MagicMock()
-        mock_client.__enter__.return_value = mock_client
-        mock_client.get.side_effect = mock_get
-        mock_client_cls.return_value = mock_client
-
+    with patch.object(_HTTP_CLIENT, "get", side_effect=mock_get) as mock_http_get:
         warmed_count = await warm_benchmark_cache(force_refresh=True)
 
         assert warmed_count == len(BENCHMARK_WARM_TICKERS)
-        assert len(BENCHMARK_WARM_TICKERS) == 10
+        assert len(BENCHMARK_WARM_TICKERS) == 20
 
         # Verify all benchmark tickers are populated in _GEXDEX_MEMORY_CACHE
         for sym in BENCHMARK_WARM_TICKERS:
@@ -356,13 +344,13 @@ async def test_warm_benchmark_cache_and_memory_cache_hit():
             assert _GEXDEX_MEMORY_CACHE[cache_key]["data"]["ticker"] == sym
 
         # Verify that subsequent get_gexdex calls hit the in-memory cache and record cache_status == 'HIT'
-        mock_client.get.reset_mock()
+        mock_http_get.reset_mock()
         metrics = {}
         tool_metrics_var.set(metrics)
 
         spy_summary = get_gexdex(ticker="SPY", force_refresh=False)
         assert "[QUANTITATIVE MICROSTRUCTURE SUMMARY: SPY]" in spy_summary
-        mock_client.get.assert_not_called()
+        mock_http_get.assert_not_called()
         assert metrics.get("cache_status") == "HIT"
 
 

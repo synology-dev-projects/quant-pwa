@@ -2,7 +2,7 @@ const DEFAULT_TOOLS = [
   {
     name: 'get_gexdex',
     display: '/gex SPY',
-    icon: '⚡',
+    icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`,
     title: 'Institutional GEX & DEX',
     description: 'Calculates institutional Gamma & Delta Exposure, Call/Put Walls, and Zero Gamma Flip points.',
     promptTemplate: '/gex SPY',
@@ -16,7 +16,7 @@ const DEFAULT_TOOLS = [
   {
     name: 'get_strike_distribution',
     display: '/strikes NVDA',
-    icon: '📊',
+    icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`,
     title: 'Strike Distribution Matrix',
     description: 'Fetches granular strike-by-strike GEX/DEX distribution with multi-expiration breakdowns for interactive charts.',
     promptTemplate: '/strikes NVDA',
@@ -29,7 +29,7 @@ const DEFAULT_TOOLS = [
   {
     name: 'get_market_status',
     display: '/market',
-    icon: '🕒',
+    icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
     title: 'Market Session Clock',
     description: 'Returns real-time US Equities market session status (pre-market, regular, after-hours, holiday).',
     promptTemplate: '/market',
@@ -39,7 +39,7 @@ const DEFAULT_TOOLS = [
   {
     name: 'macro_schedule',
     display: '/macro',
-    icon: '🌐',
+    icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`,
     title: 'Macroeconomic Catalysts',
     description: 'Queries key economic releases, CPI, FOMC rate decisions, and volatility catalysts this week.',
     promptTemplate: '/macro',
@@ -315,16 +315,16 @@ export class PromptInput {
 
   processMcpTools(mcpTools) {
     const iconMap = {
-      'get_gexdex': { icon: '⚡', display: '/gex SPY', example: '/gex NVDA' },
-      'get_strike_distribution': { icon: '📊', display: '/strikes NVDA', example: '/strikes TSLA' },
-      'get_market_status': { icon: '🕒', display: '/market', example: '/market' }
+      'get_gexdex': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`, display: '/gex SPY', example: '/gex NVDA' },
+      'get_strike_distribution': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`, display: '/strikes NVDA', example: '/strikes TSLA' },
+      'get_market_status': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`, display: '/market', example: '/market' }
     };
 
     const syncedTools = [];
 
     mcpTools.forEach((tool) => {
       const meta = iconMap[tool.name] || {
-        icon: '🔌',
+        icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`,
         display: `/${tool.name.replace(/^get_/, '')}`,
         example: `/${tool.name.replace(/^get_/, '')}`
       };
@@ -355,7 +355,7 @@ export class PromptInput {
       syncedTools.push({
         name: 'macro_schedule',
         display: '/macro',
-        icon: '🌐',
+        icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`,
         title: 'Macro Catalysts',
         description: 'Queries key economic releases, CPI, FOMC rate decisions, and volatility catalysts this week.',
         promptTemplate: '/macro',

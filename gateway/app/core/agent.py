@@ -4,7 +4,7 @@ import uuid
 import time
 import asyncio
 import logging
-from typing import AsyncGenerator, List, Dict, Any, Optional
+from typing import AsyncGenerator, List, Dict, Any, Optional, Tuple
 from google import genai
 from google.genai import types
 from google.genai import errors
@@ -18,21 +18,75 @@ from app.tools.gexdex_tool import get_gexdex
 
 logger = logging.getLogger("quant.gateway.agent")
 
-SYSTEM_INSTRUCTION_BASE = """You are Quant AI, an elite institutional Options & Quantitative Market Strategist built for active traders.
-You operate with precision, conciseness, and deep understanding of options market structure (GEX, DEX, Gamma Regimes, Call/Put Walls, Zero Gamma Flips).
+SYSTEM_INSTRUCTION_BASE = """You are Quant AI, an institutional Options & Quantitative Market Strategist.
+Operate with analytical precision, clarity, and deep understanding of options microstructure (GEX, DEX, Gamma Regimes, Call/Put Walls, Zero Gamma Flips).
 
-TOOL HIERARCHY & EXECUTION RULES:
-1. PROPRIETARY DATA FIRST: Whenever the user asks for options exposure, GEX, DEX, gamma flip, put wall, call wall, dealer positioning, or strikes on any single or multiple stock tickers (e.g. SPY, AAPL, NVDA, TSLA, INTC, BLDP, AAOI, ADEA, SHLS), you MUST call the `get_gexdex` tool.
-2. MULTI-TICKER QUERIES: Pass comma-separated ticker lists (e.g. `ticker="BLDP,AAOI,ADEA,INTC,SHLS"`) to `get_gexdex` in a single tool call.
-3. MACRO & GENERAL MARKET: When the user asks about macro conditions, CPI, FOMC, calendar, or general catalysts, synthesize quantitative macroeconomic insights directly.
-
-RESPONSE FORMATTING RULES:
-- For each ticker queried, output a clean, structured quantitative breakdown including:
-  * Spot Price, Gamma Regime (Positive/Negative Gamma), and Call/Put Walls.
-- Followed by a concise **Institutional Dealer Positioning Ranking** from best positioning to worst with actionable insights.
-- Do NOT output markdown image syntax (such as ![...](...)) or image URLs. The client PWA automatically mounts native interactive HTML5 Canvas charts directly from data.
-- Keep tone professional, analytical, and direct. Avoid fluff.
+EXECUTION RULES:
+1. PROPRIETARY DATA: Call `get_gexdex` for options exposure. When querying multiple tickers (e.g. FANG, cohorts), ALWAYS pass them as a single comma-separated batch string in ONE tool call: `get_gexdex(ticker="META,AAPL,AMZN,NFLX,GOOGL")`. Do NOT call `get_gexdex` sequentially one-by-one.
+2. MACRO & STRATEGY: Synthesize macroeconomic insights (FOMC, CPI, rates, cross-asset correlation) directly.
+3. FORMATTING: Output structured quantitative breakdowns followed by actionable dealer positioning rankings.
+4. NO_IMAGE_SYNTAX: Never emit markdown image syntax (![...] or .png URLs). Charts are rendered natively via client HTML5 Canvas.
+5. STRICT COMPLETENESS: You MUST output an explicit breakdown row for EVERY requested ticker with zero exceptions. Never drop or truncate any requested symbol. If data for a ticker is unavailable or errored, output its row explicitly as `• TICKER: [Options Data Unavailable / Delisted]` and provide the full quantitative breakdown for all remaining tickers.
 """
+
+CROSS_SYNTHESIS_KEYWORDS = {
+    "macro", "fomc", "cpi", "fed", "rates", "compare",
+    "strategy", "risk", "levels", "correlation", "portfolio",
+    "treasury", "yield", "vix", "inflation", "jobs", "payrolls"
+}
+
+
+def evaluate_synthesis_tier(
+    prompt: Optional[str] = "",
+    history: Optional[List[Any]] = None,
+    tools_called_count: int = 0
+) -> Tuple[str, str, int]:
+    """
+    Dynamically evaluate whether a query requires Tier 1 (Fast Worker) or Tier 2 (Strategic Thinking).
+    Returns (tier_label, target_model, thinking_budget).
+    - Tier 2 ('STRATEGIC'): tools_called_count >= 2, macro/cross-synthesis keywords, or multi-ticker comparison.
+    - Tier 1 ('FAST'): single ticker lookups or direct queries without deep synthesis keywords.
+    """
+    if tools_called_count >= 2:
+        return ("STRATEGIC", settings.TIER2_STRATEGIC_MODEL, 512)
+
+    texts = []
+    if prompt:
+        texts.append(str(prompt))
+    if history:
+        for item in history:
+            if isinstance(item, str):
+                texts.append(item)
+            elif isinstance(item, dict):
+                content = item.get("content", "")
+                if isinstance(content, str):
+                    texts.append(content)
+            elif hasattr(item, "parts") and item.parts:
+                for part in item.parts:
+                    if hasattr(part, "text") and part.text:
+                        texts.append(part.text)
+            elif hasattr(item, "text") and item.text:
+                texts.append(item.text)
+
+    combined_text = " ".join(texts).lower()
+
+    for kw in CROSS_SYNTHESIS_KEYWORDS:
+        if re.search(rf"\b{re.escape(kw)}\b", combined_text):
+            return ("STRATEGIC", settings.TIER2_STRATEGIC_MODEL, 512)
+
+    if re.search(r"\b[a-z]{1,5}(?:[\.\/][a-z])?\s*,\s*[a-z]{1,5}(?:[\.\/][a-z])?\b", combined_text):
+        return ("STRATEGIC", settings.TIER2_STRATEGIC_MODEL, 512)
+
+    return ("FAST", settings.TIER1_FAST_WORKER_MODEL, 0)
+
+
+def detect_query_thinking_budget(prompt: str, history: Optional[List[Any]] = None) -> int:
+    """
+    Dynamically determine thinking budget based on query complexity.
+    Returns 512 for multi-source/macro/cross-ticker synthesis and 0 for fast single-ticker lookups.
+    """
+    _, _, budget = evaluate_synthesis_tier(prompt=prompt, history=history, tools_called_count=0)
+    return budget
 
 
 def create_genai_client() -> genai.Client:
@@ -40,7 +94,7 @@ def create_genai_client() -> genai.Client:
     if not api_key:
         raise ValueError("GEMINI_API_KEY is not set in environment or config.")
     http_opts = types.HttpOptions(
-        timeout=12000,
+        timeout=60000,
         retry_options=types.HttpRetryOptions(attempts=1)
     )
     return genai.Client(api_key=api_key, http_options=http_opts)
@@ -57,7 +111,6 @@ async def stream_chat_response(
 ) -> AsyncGenerator[str, None]:
     t_req_start = time.perf_counter()
     trace_id = trace_id or f"tr-{uuid.uuid4().hex[:6]}"
-    selected_model = model_name or settings.DEFAULT_GEMINI_MODEL
     market_meta = get_market_status()
     temporal_prompt = generate_temporal_system_prompt()
     full_system_instruction = f"{SYSTEM_INSTRUCTION_BASE}\n\n{temporal_prompt}"
@@ -68,6 +121,7 @@ async def stream_chat_response(
         "tool_latency_ms": 0.0,
         "cache_status": "MISS",
         "retry_count": 0,
+        "tools_called_count": 0,
         "first_tool_start": None,
         "last_tool_end": None
     })
@@ -84,6 +138,8 @@ async def stream_chat_response(
         server_ms = (time.perf_counter() - t_req_start) * 1000.0
         metrics_payload = json.dumps({
             "trace_id": trace_id,
+            "tier_used": "fast",
+            "model_used": model_name or settings.DEFAULT_GEMINI_MODEL,
             "tool_decision_ms": 0.0,
             "tool_ms": 0.0,
             "cache_status": "MISS",
@@ -103,6 +159,8 @@ async def stream_chat_response(
         server_ms = (time.perf_counter() - t_req_start) * 1000.0
         metrics_payload = json.dumps({
             "trace_id": trace_id,
+            "tier_used": "fast",
+            "model_used": model_name or settings.DEFAULT_GEMINI_MODEL,
             "tool_decision_ms": 0.0,
             "tool_ms": 0.0,
             "cache_status": "MISS",
@@ -135,26 +193,51 @@ async def stream_chat_response(
     from app.mcp.client import mcp_client_manager
     callable_tools = list(registry.get_callable_map().values()) + mcp_client_manager.get_all_tools()
 
+    # Dynamic Split-Model Tier Routing Evaluation
+    tier_label, target_model, budget = evaluate_synthesis_tier(
+        prompt=active_prompt,
+        history=history_contents,
+        tools_called_count=0
+    )
+
+    if model_name:
+        target_model = model_name
+        if model_name == settings.TIER2_STRATEGIC_MODEL:
+            tier_label = "STRATEGIC"
+            budget = 512
+
+    # Model Candidate Routing Hierarchy
+    if tier_label == "STRATEGIC":
+        raw_hierarchy = [target_model, settings.TIER2_FALLBACK_MODEL, settings.TIER1_FAST_WORKER_MODEL]
+    else:
+        if model_name:
+            raw_hierarchy = [target_model, settings.TIER1_FAST_WORKER_MODEL, settings.TIER2_FALLBACK_MODEL]
+        else:
+            raw_hierarchy = [settings.TIER1_FAST_WORKER_MODEL, settings.TIER2_FALLBACK_MODEL]
+
+    models_to_try = []
+    for m in raw_hierarchy:
+        if m and m not in models_to_try:
+            models_to_try.append(m)
+
+    thinking_cfg = None
+    if hasattr(types, "ThinkingConfig") and budget > 0 and tier_label == "STRATEGIC":
+        try:
+            thinking_cfg = types.ThinkingConfig(thinking_budget=budget)
+        except Exception as e:
+            logger.warning(f"[{trace_id}] ThinkingConfig initialization failed: {e}")
+            thinking_cfg = None
+
     config = types.GenerateContentConfig(
         system_instruction=full_system_instruction,
         temperature=0.2,
         tools=callable_tools,
+        thinking_config=thinking_cfg,
     )
 
-    models_to_try = [selected_model]
-    # Model Candidate Routing Hierarchy (Fallback on transient 429/503)
-    fallback_hierarchy = [
-        "gemini-3.6-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-flash-latest",
-        "gemini-3.7-flash"
-    ]
-    for backup in fallback_hierarchy:
-        if backup not in models_to_try:
-            models_to_try.append(backup)
-
     response = None
-    active_model_used = selected_model
+    active_model_used = models_to_try[0] if models_to_try else (model_name or settings.DEFAULT_GEMINI_MODEL)
+    intended_model = active_model_used
     last_error = None
     prompt_submit_time = time.perf_counter()
 
@@ -181,7 +264,28 @@ async def stream_chat_response(
                 f"[{trace_id}] Model {attempt_model} failed with transient error: {err_str}. Fast failover to next candidate."
             )
             
-            # Robust AFC Fallback: If tool execution threw an exception, retry with direct synthesis
+            # 1. Fallback: If thinking_config was active, retry without thinking_config
+            if thinking_cfg is not None:
+                try:
+                    no_think_config = types.GenerateContentConfig(
+                        system_instruction=full_system_instruction,
+                        temperature=0.2,
+                        tools=callable_tools,
+                    )
+                    chat_nth = client.chats.create(
+                        model=attempt_model,
+                        config=no_think_config,
+                        history=history_contents
+                    )
+                    response = await asyncio.to_thread(chat_nth.send_message, active_prompt)
+                    if response:
+                        active_model_used = attempt_model
+                        last_error = None
+                        break
+                except Exception as nth_err:
+                    logger.warning(f"[{trace_id}] Model {attempt_model} without thinking_config fallback error: {nth_err}")
+
+            # 2. Robust AFC Fallback: If tool execution threw an exception, retry with direct synthesis
             try:
                 fallback_config = types.GenerateContentConfig(
                     system_instruction=full_system_instruction,
@@ -203,10 +307,14 @@ async def stream_chat_response(
             # Fast failover to next candidate model (< 500ms without sleeping)
             continue
 
+    metrics_dict = tool_metrics_var.get() or {}
+    tools_called = metrics_dict.get("tools_called_count", 0)
+    if tools_called >= 2:
+        tier_label = "STRATEGIC"
+
     if not response and last_error:
         err_msg = json.dumps({"type": "error", "message": f"Streaming Error: {str(last_error)}"})
         yield f"data: {err_msg}\n\n"
-        metrics_dict = tool_metrics_var.get() or {}
         tool_ms = max(0.0, float(metrics_dict.get("tool_latency_ms", 0.0)))
         cache_status = metrics_dict.get("cache_status", "MISS")
         retries = max(0, int(metrics_dict.get("retry_count", 0)))
@@ -215,6 +323,8 @@ async def stream_chat_response(
         server_ms = (time.perf_counter() - t_req_start) * 1000.0
         metrics_payload = json.dumps({
             "trace_id": trace_id,
+            "tier_used": tier_label.lower(),
+            "model_used": active_model_used,
             "tool_decision_ms": round(tool_decision_ms, 1),
             "tool_ms": round(tool_ms, 1),
             "cache_status": cache_status,
@@ -237,8 +347,8 @@ async def stream_chat_response(
         yield f"data: {json.dumps(ui_event)}\n\n"
 
     # If failover occurred, notify user
-    if active_model_used != selected_model:
-        failover_badge = f"> ℹ️ **Model Failover:** `{selected_model}` was experiencing temporary Google Cloud demand limits. Routed to **`{active_model_used}`**.\n\n"
+    if active_model_used != intended_model:
+        failover_badge = f"> **[ROUTING NOTICE]** `{intended_model}` experienced cloud capacity constraints. Dispatched via **`{active_model_used}`**.\n\n"
         badge_payload = json.dumps({"type": "token", "content": failover_badge})
         yield f"data: {badge_payload}\n\n"
 
@@ -262,7 +372,6 @@ async def stream_chat_response(
         stream_end_time = time.perf_counter()
 
     # Latency tracking: Tool Decision (Round 1), Synthesis TTFT (Round 2), and Total LLM TTFT
-    metrics_dict = tool_metrics_var.get() or {}
     tool_ms = max(0.0, float(metrics_dict.get("tool_latency_ms", 0.0)))
     cache_status = metrics_dict.get("cache_status", "MISS")
     retries = max(0, int(metrics_dict.get("retry_count", 0)))
@@ -300,7 +409,7 @@ async def stream_chat_response(
     server_ms = max(0.0, (time.perf_counter() - t_req_start) * 1000.0)
 
     logger.info(
-        f"[{trace_id}] Stream metrics: tool_decision_ms={round(tool_decision_ms, 1)}, tool_ms={round(tool_ms, 1)}, "
+        f"[{trace_id}] Stream metrics: tier={tier_label.lower()}, model={active_model_used}, tool_decision_ms={round(tool_decision_ms, 1)}, tool_ms={round(tool_ms, 1)}, "
         f"cache={cache_status}, retries={retries}, synthesis_ttft_ms={round(synthesis_ttft_ms, 1)}, "
         f"llm_ttft_ms={round(total_ttft_ms, 1)}, tokens={token_count}, tok_per_sec={round(tok_per_sec, 1)}, "
         f"server_total_ms={round(server_ms, 1)}"
@@ -309,6 +418,8 @@ async def stream_chat_response(
     # Final metrics SSE frame
     metrics_payload = json.dumps({
         "trace_id": trace_id,
+        "tier_used": tier_label.lower(),
+        "model_used": active_model_used,
         "tool_decision_ms": round(tool_decision_ms, 1),
         "tool_ms": round(tool_ms, 1),
         "cache_status": cache_status,

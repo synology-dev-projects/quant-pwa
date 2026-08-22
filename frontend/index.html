@@ -29,10 +29,10 @@
       </div>
       <div class="header-controls">
         <select id="modelSelect" class="model-select">
-          <option value="gemini-3.5-flash" selected>Gemini 3.5 Flash</option>
+          <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite</option>
           <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
-          <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
-          <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+          <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+          <option value="gemini-flash-latest">Gemini Flash Latest</option>
         </select>
         <button id="settingsBtn" class="icon-btn" title="Settings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -93,7 +93,7 @@
     <div class="modal-card diagnostics-modal">
       <div class="modal-header">
         <div class="diag-header-title">
-          <span class="diag-icon">⚡</span>
+          <span class="status-dot dot-live"></span>
           <h3 class="modal-title">Performance Diagnostics</h3>
         </div>
         <button id="diagnosticsClose" class="modal-close-btn" title="Close">&times;</button>
@@ -106,15 +106,21 @@
             <code id="diagTraceId" class="diag-trace-id">tr_--------</code>
           </div>
           <div class="diag-meta-card">
+            <span class="diag-meta-label">Execution Tier</span>
+            <div id="diagTierBadge" class="tier-meta-badge fast">
+              <span id="diagTierText"><span class="status-dot dot-fast"></span> FAST WORKER (3.5-LITE)</span>
+            </div>
+          </div>
+          <div class="diag-meta-card">
             <span class="diag-meta-label">Cache Status</span>
             <div id="diagCachePill" class="cache-status-pill hit">
-              <span id="diagCacheText">🟢 Cache HIT (0ms)</span>
+              <span id="diagCacheText"><span class="status-dot dot-live"></span> HIT · 0.0ms</span>
             </div>
           </div>
           <div class="diag-meta-card">
             <span class="diag-meta-label">Upstream Retries</span>
             <div id="diagRetryBadge" class="retry-badge optimal">
-              <span id="diagRetryText">🟢 0 Retries (Optimal)</span>
+              <span id="diagRetryText"><span class="status-dot dot-live"></span> 0 RETRIES (OPTIMAL)</span>
             </div>
           </div>
         </div>
@@ -129,7 +135,7 @@
             <!-- Bar 1: Network & SSE Handshake -->
             <div class="waterfall-row">
               <div class="waterfall-info">
-                <span class="waterfall-label">🌐 Network &amp; SSE Handshake</span>
+                <span class="waterfall-label">01  NET  Network &amp; SSE Handshake</span>
                 <span id="wfNetVal" class="waterfall-val">0.0 ms</span>
               </div>
               <div class="waterfall-track">
@@ -139,7 +145,7 @@
             <!-- Bar 2: Gemini Tool Selection (R1) -->
             <div class="waterfall-row" id="wfDecisionRow">
               <div class="waterfall-info">
-                <span class="waterfall-label">🧠 Gemini Tool Selection (R1)</span>
+                <span class="waterfall-label">02  INTENT  Gemini Tool Selection (R1)</span>
                 <span id="wfDecisionVal" class="waterfall-val">0.0 ms</span>
               </div>
               <div class="waterfall-track">
@@ -149,7 +155,7 @@
             <!-- Bar 3: Upstream Tool Execution -->
             <div class="waterfall-row" id="wfToolRow">
               <div class="waterfall-info">
-                <span class="waterfall-label">⚙️ Upstream Tool Execution</span>
+                <span class="waterfall-label">03  DATA  Upstream Microservice (GEX/DEX)</span>
                 <span id="wfToolVal" class="waterfall-val">0.0 ms</span>
               </div>
               <div class="waterfall-track">
@@ -159,7 +165,7 @@
             <!-- Bar 4: Gemini Synthesis TTFT (R2) -->
             <div class="waterfall-row">
               <div class="waterfall-info">
-                <span class="waterfall-label">⚡ Gemini Synthesis TTFT (R2)</span>
+                <span class="waterfall-label">04  SYNTH  Gemini Synthesis TTFT (R2)</span>
                 <span id="wfSynthesisVal" class="waterfall-val">0.0 ms</span>
               </div>
               <div class="waterfall-track">
@@ -169,7 +175,7 @@
             <!-- Bar 5: HTML5 Canvas Paint -->
             <div class="waterfall-row">
               <div class="waterfall-info">
-                <span class="waterfall-label">🎨 HTML5 Canvas Paint</span>
+                <span class="waterfall-label">05  RENDER  Client Canvas Paint</span>
                 <span id="wfPaintVal" class="waterfall-val">0.0 ms</span>
               </div>
               <div class="waterfall-track">

@@ -26,8 +26,8 @@ export function renderMarkdown(text) {
       <div class="chart-card fallback" onclick="window.quantLightbox && window.quantLightbox.open('${url}', '${alt}')">
         <img class="chart-img" src="${url}" alt="${alt}" loading="lazy" />
         <div class="chart-hint">
-          <span>📊 ${alt || 'Options Exposure Chart'}</span>
-          <span>🔍 Tap to expand</span>
+          <span>${alt || 'OPTIONS EXPOSURE CHART'}</span>
+          <span>EXPAND</span>
         </div>
       </div>
     `;
@@ -111,6 +111,13 @@ export function createMessageElement(role, content, metadata = null, toolUiEvent
     const isCacheHit = Boolean(resolvedMetrics.cache_hit || resolvedMetrics.cached || resolvedMetrics.cache_status === 'HIT' || resolvedMetrics.cacheStatus === 'HIT');
     const cacheStatus = isCacheHit ? 'HIT' : 'MISS';
 
+    const tier = resolvedMetrics.tier_used || resolvedMetrics.tier || '';
+    const model = resolvedMetrics.model_used || resolvedMetrics.model || '';
+    const isStrategic = tier === 'strategic' || (typeof model === 'string' && model.includes('3.7'));
+    const tierBadge = isStrategic
+      ? `<span class="inst-tag inst-tag-strategic"><span class="status-dot dot-strategic"></span>STRATEGIC · 3.7-FLASH</span>`
+      : `<span class="inst-tag inst-tag-fast"><span class="status-dot dot-fast"></span>FAST · 3.5-LITE</span>`;
+
     const showDiagnostics = AppState.getShowDiagnostics ? AppState.getShowDiagnostics() : (localStorage.getItem('quant_show_diagnostics') !== 'false');
 
     const footer = document.createElement('div');
@@ -121,7 +128,7 @@ export function createMessageElement(role, content, metadata = null, toolUiEvent
 
     const pill = document.createElement('span');
     pill.className = 'latency-pill';
-    pill.innerHTML = `⚡ ${totalMs}ms · ${tokPerSec} tok/s [Cache: ${cacheStatus}]`;
+    pill.innerHTML = `${tierBadge} <span class="inst-stats">${totalMs}ms · ${tokPerSec} tok/s</span> <span class="inst-cache">[CACHE: ${cacheStatus}]</span>`;
     pill.title = 'Tap to view performance diagnostics waterfall';
 
     pill.addEventListener('click', (e) => {

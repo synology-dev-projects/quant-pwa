@@ -25,12 +25,30 @@ from contextlib import asynccontextmanager
 from app.mcp import mcp_router, mcp_client_manager
 from app.tools.gexdex_tool import run_cache_warmer_loop
 
+import collections
+from collections import deque
+
+_RECENT_LOG_BUFFER = deque(maxlen=200)
+
+class _RingBufferHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            _RECENT_LOG_BUFFER.append(msg)
+        except Exception:
+            pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 logger = logging.getLogger("quant.gateway")
+_rb_handler = _RingBufferHandler()
+_rb_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+logger.addHandler(_rb_handler)
+# Also capture root logger for full framework events
+logging.getLogger().addHandler(_rb_handler)
 
 
 async def _probe_gexdex_api():
@@ -364,3 +382,10 @@ async def chat_stream(request: Request, body: ChatStreamRequest):
             "X-Trace-ID": trace_id
         }
     )
+
+
+@app.get("/api/diagnostics/logs", summary="Get Recent Server Logs", dependencies=[Depends(verify_app_passcode)])
+async def get_recent_logs(limit: int = Query(default=100, ge=1, le=200)):
+    """Returns recent in-memory server log lines for debugging and trace analysis."""
+    logs = list(_RECENT_LOG_BUFFER)
+    return {"total": len(logs), "logs": logs[-limit:]}
