@@ -143,24 +143,44 @@ def get_gexdex(
     }
 
 
+def _clean_image_references(obj: Any) -> Any:
+    """Recursively removes chart.png, markdown image fields, and image URLs from dictionaries and lists."""
+    if isinstance(obj, dict):
+        image_keys = {
+            "markdown_image", "chart_png_url", "chart_url", "image_url",
+            "image", "chart_png", "chart_image", "chart_webp_url"
+        }
+        for k in list(obj.keys()):
+            val = obj[k]
+            if k.lower() in image_keys or (isinstance(val, str) and ("chart.png" in val or "![chart]" in val or "![options" in val.lower())):
+                obj.pop(k, None)
+            else:
+                _clean_image_references(val)
+    elif isinstance(obj, list):
+        for item in obj:
+            _clean_image_references(item)
+    return obj
+
+
 def _emit_ui_events_from_payload(data: Dict[str, Any]) -> None:
-    """Helper to emit Canvas chart events and strip static image markdown."""
+    """
+    Emits strike distribution UI events for client-side HTML5 Canvas rendering
+    and completely strips any server /chart.png or markdown image references.
+    """
     if not isinstance(data, dict):
         return
 
+    # Strip image references recursively across the payload
+    _clean_image_references(data)
+
+    # Emit tool UI events for batch or single payload
     if "batch_data" in data and isinstance(data["batch_data"], dict):
         for sym, item in data["batch_data"].items():
             if isinstance(item, dict) and "strike_distribution" in item and item["strike_distribution"]:
                 emit_tool_ui_event("get_gexdex", item["strike_distribution"])
-            if isinstance(item, dict):
-                item.pop("markdown_image", None)
-                item.pop("chart_png_url", None)
     else:
         if "strike_distribution" in data and data["strike_distribution"]:
             emit_tool_ui_event("get_gexdex", data["strike_distribution"])
-
-    data.pop("markdown_image", None)
-    data.pop("chart_png_url", None)
 
 
 @register_tool(

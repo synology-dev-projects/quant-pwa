@@ -2,6 +2,7 @@ import json
 import httpx
 import asyncio
 import logging
+import secrets
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -74,9 +75,13 @@ def verify_app_passcode(authorization: Optional[str] = Header(None)) -> str:
     Validates Authorization Bearer token header.
     Accepts valid HMAC-SHA256 session tokens (within 6h expiration)
     or direct APP_PASSCODE matching (fallback).
+    Enforces fail-closed passcode validation.
     """
-    if not settings.APP_PASSCODE:
-        return "open"
+    if not settings.APP_PASSCODE or not settings.APP_PASSCODE.strip():
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server passcode unconfigured.",
+        )
         
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -92,8 +97,8 @@ def verify_app_passcode(authorization: Optional[str] = Header(None)) -> str:
     if session_payload is not None:
         return session_payload.get("sub", "quant-user")
 
-    # 2. Check direct master password match (fallback for scripts / tooling)
-    if validate_master_password(token):
+    # 2. Check direct master password match using constant-time comparison (fallback for scripts / tooling)
+    if secrets.compare_digest(token, settings.APP_PASSCODE.strip()) or validate_master_password(token):
         return "quant-master"
         
     raise HTTPException(
@@ -119,7 +124,7 @@ class ChatStreamRequest(BaseModel):
 def auth_status():
     """Returns authentication gate requirements and session lifetime."""
     return {
-        "auth_required": bool(settings.APP_PASSCODE),
+        "auth_required": bool(settings.APP_PASSCODE and settings.APP_PASSCODE.strip()),
         "session_expiry_hours": settings.SESSION_EXPIRY_HOURS
     }
 
@@ -130,6 +135,11 @@ async def auth_login(req: LoginRequest, request: Request):
     Validates master password and generates a signed 6-hour HMAC-SHA256 session token.
     Enforces IP-based rate limiting (5 attempts per 5 minutes) and 15-minute brute-force lockout.
     """
+    if not settings.APP_PASSCODE or not settings.APP_PASSCODE.strip():
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server passcode unconfigured."
+        )
     # Extract client IP (handling reverse proxies & Cloudflare headers)
     client_ip = (
         request.headers.get("cf-connecting-ip")
@@ -298,7 +308,14 @@ async def chat_stream(request: Request, body: ChatStreamRequest):
     """
     Streams AI responses with low-latency Server-Sent Events (SSE).
     Monitors request.is_disconnected() to cancel upstream processing if mobile client drops.
+    Enforces fail-closed passcode validation.
     """
+    if not settings.APP_PASSCODE or not settings.APP_PASSCODE.strip():
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server passcode unconfigured."
+        )
+
     message_dicts = [{"role": m.role, "content": m.content} for m in body.messages]
     
     async def sse_generator():
