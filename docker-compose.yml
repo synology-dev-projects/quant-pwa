@@ -1,4 +1,4 @@
-﻿version: '3.8'
+version: '3.8'
 
 services:
   quant-db:
@@ -6,7 +6,7 @@ services:
     container_name: quant-db-${CONTAINER_PREFIX:-prod}
     restart: unless-stopped
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5435}:5432"
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-quant_db}
       - POSTGRES_USER=${POSTGRES_USER:-quant_admin}

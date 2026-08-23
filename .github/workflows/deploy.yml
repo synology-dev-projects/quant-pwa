@@ -95,7 +95,7 @@ jobs:
         run: |
           cd "${{ env.DEPLOY_DIR }}"
           echo "🐳 Force-removing any conflicting containers for prefix ${{ env.CONTAINER_PREFIX }}..."
-          docker rm -f quant-gateway-${{ env.CONTAINER_PREFIX }} quant-frontend-${{ env.CONTAINER_PREFIX }} quant-cloudflared-${{ env.CONTAINER_PREFIX }} 2>/dev/null || true
+          docker rm -f quant-db-${{ env.CONTAINER_PREFIX }} quant-gateway-${{ env.CONTAINER_PREFIX }} quant-frontend-${{ env.CONTAINER_PREFIX }} quant-cloudflared-${{ env.CONTAINER_PREFIX }} 2>/dev/null || true
           
           echo "🐳 Launching Docker Compose stack (${{ env.COMPOSE_PROJECT_NAME }})..."
           docker compose down --remove-orphans || true
@@ -129,7 +129,7 @@ jobs:
         if: github.ref_name == 'master'
         run: |
           echo "🧹 Tearing down old develop containers to free Synology NAS compute..."
-          docker rm -f quant-gateway-dev quant-frontend-dev quant-cloudflared-dev 2>/dev/null || true
+          docker rm -f quant-db-dev quant-gateway-dev quant-frontend-dev quant-cloudflared-dev 2>/dev/null || true
           DEV_DIR="/volume2/homes/rachardv/git-repos/develop/quant-pwa"
           if [ -d "$DEV_DIR" ]; then
             cd "$DEV_DIR"
