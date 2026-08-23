@@ -4,6 +4,13 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime, date
 import pandas as pd
 
+import sys
+from pathlib import Path
+
+pipeline_dir = Path(__file__).resolve().parents[3] / "unusual-option-flow-pipeline"
+if pipeline_dir.exists() and str(pipeline_dir) not in sys.path:
+    sys.path.insert(0, str(pipeline_dir))
+
 import common_lib.config.main_config
 import common_lib.connectors.oracle
 
@@ -142,10 +149,10 @@ def test_get_unusual_flow_tool_execution(mock_load_config, mock_get_flow):
     assert "SWEEP CALL" in res
     assert "⚠️" in res
 
-    # Verify mock call parameters
+    # Verify mock call parameters uses batch symbols list
     mock_get_flow.assert_called_once_with(
         config=mock_config,
-        symbol="TSLA",
+        symbols=["TSLA"],
         lookback_days=15,
         min_premium=100000.0
     )
@@ -180,7 +187,7 @@ def test_get_unusual_flow_caching(mock_load_config, mock_get_flow):
     assert mock_get_flow.call_count == 1
     assert "AMD" in res1
 
-    # Second call: cache hit, should NOT call DB again
+    # Second call: cache hit, should NOT call DB again (0ms latency, zero DB queries)
     res2 = get_unusual_flow(ticker="AMD", lookback_days=30)
     assert mock_get_flow.call_count == 1
     assert res1 == res2
@@ -197,37 +204,128 @@ def test_get_unusual_flow_batch_tickers(mock_load_config, mock_get_flow):
     mock_config = MagicMock()
     mock_load_config.return_value = mock_config
 
-    def side_effect(config, symbol, lookback_days, min_premium):
-        if symbol == "AAPL":
-            return pd.DataFrame([{
-                "FLOW_ID": "a1",
-                "TRADE_DATE": "2026-08-20",
-                "SYMBOL": "AAPL",
-                "ORDER_TYPE": "BUY_CALL",
-                "STRIKE_PRICE": 230.0,
-                "STRIKE_OTM_PCT": 2.0,
-                "EXPIRATION_DATE": "2026-09-18",
-                "OPEN_INTEREST": 8000,
-                "IS_UNUSUAL_OI": 0,
-                "PREMIUM": 8_000_000.0,
-                "NET_SCORE": 1.0,
-                "CREATED_AT": datetime.now()
-            }])
-        return pd.DataFrame()
-
-    mock_get_flow.side_effect = side_effect
+    # Return multi-ticker DataFrame in a single flight
+    mock_df = pd.DataFrame([
+        {
+            "FLOW_ID": "a1",
+            "TRADE_DATE": "2026-08-20",
+            "SYMBOL": "AAPL",
+            "ORDER_TYPE": "BUY_CALL",
+            "STRIKE_PRICE": 230.0,
+            "STRIKE_OTM_PCT": 2.0,
+            "EXPIRATION_DATE": "2026-09-18",
+            "OPEN_INTEREST": 8000,
+            "IS_UNUSUAL_OI": 0,
+            "PREMIUM": 8_000_000.0,
+            "NET_SCORE": 1.0,
+            "CREATED_AT": datetime.now()
+        }
+    ])
+    mock_get_flow.return_value = mock_df
 
     res = get_unusual_flow(ticker="AAPL, MSFT", lookback_days=30)
+    # Verify exact single query with both symbols
+    assert mock_get_flow.call_count == 1
+    mock_get_flow.assert_called_once_with(
+        config=mock_config,
+        symbols=["AAPL", "MSFT"],
+        lookback_days=30,
+        min_premium=0.0
+    )
     assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: AAPL (Last 30 Days)]" in res
     assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: MSFT] No unusual institutional options flow recorded in the past 30 days." in res
 
 
-def test_get_unusual_flow_fault_isolation():
+@patch("common_lib.connectors.oracle.get_unusual_flow")
+@patch("common_lib.config.main_config.load_config")
+def test_get_unusual_flow_partial_cache_hit(mock_load_config, mock_get_flow):
+    mock_config = MagicMock()
+    mock_load_config.return_value = mock_config
+
+    # First warm the cache for AAPL
+    mock_get_flow.return_value = pd.DataFrame([{
+        "FLOW_ID": "a1",
+        "TRADE_DATE": "2026-08-20",
+        "SYMBOL": "AAPL",
+        "ORDER_TYPE": "BUY_CALL",
+        "STRIKE_PRICE": 230.0,
+        "STRIKE_OTM_PCT": 2.0,
+        "EXPIRATION_DATE": "2026-09-18",
+        "OPEN_INTEREST": 8000,
+        "IS_UNUSUAL_OI": 0,
+        "PREMIUM": 8_000_000.0,
+        "NET_SCORE": 1.0,
+        "CREATED_AT": datetime.now()
+    }])
+    get_unusual_flow(ticker="AAPL", lookback_days=30)
+    assert mock_get_flow.call_count == 1
+
+    # Now query AAPL and NVDA: only NVDA should be queried
+    mock_get_flow.reset_mock()
+    mock_get_flow.return_value = pd.DataFrame([{
+        "FLOW_ID": "n1",
+        "TRADE_DATE": "2026-08-20",
+        "SYMBOL": "NVDA",
+        "ORDER_TYPE": "BUY_CALL",
+        "STRIKE_PRICE": 130.0,
+        "STRIKE_OTM_PCT": 4.0,
+        "EXPIRATION_DATE": "2026-09-18",
+        "OPEN_INTEREST": 15000,
+        "IS_UNUSUAL_OI": 1,
+        "PREMIUM": 12_000_000.0,
+        "NET_SCORE": 2.0,
+        "CREATED_AT": datetime.now()
+    }])
+
+    res = get_unusual_flow(ticker="AAPL, NVDA", lookback_days=30)
+    assert mock_get_flow.call_count == 1
+    mock_get_flow.assert_called_once_with(
+        config=mock_config,
+        symbols=["NVDA"],
+        lookback_days=30,
+        min_premium=0.0
+    )
+    assert "AAPL" in res
+    assert "NVDA" in res
+
+
+@patch("src.extract.extract_flow_for_symbol")
+@patch("common_lib.connectors.oracle.get_unusual_flow")
+@patch("common_lib.config.main_config.load_config")
+def test_get_unusual_flow_live_fallback(mock_load_config, mock_get_flow, mock_extract):
+    mock_config = MagicMock()
+    mock_load_config.return_value = mock_config
+    mock_get_flow.return_value = pd.DataFrame()  # Empty Oracle DB response
+
+    mock_extract.return_value = [
+        {
+            "trade_date": "2026-08-22",
+            "order_type": "Buy Call",
+            "symbol": "META",
+            "strike": "600.00 (5 %)",
+            "exp": "2026-10-16",
+            "oi": "3500 ⚠️",
+            "is_unusual_oi": 1,
+            "premium": "4.5M",
+            "net_score": 1.5
+        }
+    ]
+
+    res = get_unusual_flow(ticker="META", lookback_days=30)
+    assert mock_get_flow.call_count == 1
+    assert mock_extract.call_count == 1
+    assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: META (Last 30 Days)]" in res
+    assert "$4.50M" in res
+    assert "BUY CALL" in res
+
+
+@patch("src.extract.extract_flow_for_symbol", side_effect=Exception("Network error"))
+@patch("common_lib.connectors.oracle.get_unusual_flow", side_effect=Exception("Database connection timeout"))
+def test_get_unusual_flow_fault_isolation(mock_oracle, mock_extract):
     # Calling with empty or invalid ticker does not throw
     res = get_unusual_flow(ticker="")
     assert "No valid ticker provided" in res
 
-    # Even if DB connection fails, returns graceful response
-    with patch("common_lib.connectors.oracle.get_unusual_flow", side_effect=Exception("Database connection timeout")):
-        res_fail = get_unusual_flow(ticker="AMZN", lookback_days=7)
-        assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: AMZN] No unusual institutional options flow recorded in the past 7 days." in res_fail
+    # Even if DB connection and live fallback fail, returns graceful fallback response without raising
+    res_fail = get_unusual_flow(ticker="AMZN", lookback_days=7)
+    assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: AMZN] No unusual institutional options flow recorded in the past 7 days." in res_fail

@@ -1,4 +1,4 @@
-﻿import time
+import time
 import logging
 from datetime import datetime, date
 from typing import Dict, Any, Optional, Tuple, List, Union
@@ -166,55 +166,97 @@ def get_unusual_flow(
 ) -> str:
     """
     Queries institutional unusual options flow from Oracle DB via common_lib.
-    Guarded by SWR in-memory cache (300s TTL) and fault isolation.
+    Executes multi-ticker batch queries in a single flight.
+    Guarded by SWR in-memory cache (300s TTL), live scrape fallback, and fault isolation.
     """
     t0 = time.perf_counter()
-    clean_tickers = [t.strip().upper().replace("$", "") for t in str(ticker).split(",") if t.strip()]
+    raw_tickers = [t.strip().upper().replace("$", "") for t in str(ticker).split(",") if t.strip()]
+    
+    # Deduplicate while preserving order
+    seen = set()
+    clean_tickers = []
+    for t in raw_tickers:
+        if t not in seen:
+            seen.add(t)
+            clean_tickers.append(t)
 
     if not clean_tickers:
         record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=0)
         return "[INSTITUTIONAL UNUSUAL OPTIONS FLOW] No valid ticker provided."
 
-    summaries = []
-    cache_hit_all = True
+    cached_summaries: Dict[str, str] = {}
+    missing_tickers: List[str] = []
+    now = time.time()
 
     for sym in clean_tickers:
         cache_key = f"{sym}:{lookback_days}:{min_premium}"
-        now = time.time()
-
         if not force_refresh and cache_key in _FLOW_MEMORY_CACHE:
             ts, cached_summary = _FLOW_MEMORY_CACHE[cache_key]
             if now - ts < CACHE_TTL_SECONDS:
-                summaries.append(cached_summary)
+                cached_summaries[sym] = cached_summary
                 continue
+        missing_tickers.append(sym)
 
-        cache_hit_all = False
-
-        # Query Oracle DB safely
+    if missing_tickers:
+        df_all = pd.DataFrame()
+        config = None
         try:
             from common_lib.config.main_config import load_config
             from common_lib.connectors.oracle import get_unusual_flow as oracle_get_flow
 
             config = load_config()
-            df = oracle_get_flow(
+            df_all = oracle_get_flow(
                 config=config,
-                symbol=sym,
+                symbols=missing_tickers,
                 lookback_days=lookback_days,
                 min_premium=min_premium
             )
         except Exception as ex:
-            logger.warning(f"Failed to query Oracle DB for {sym} unusual flow: {ex}")
-            df = pd.DataFrame()
+            logger.warning(f"Failed to query Oracle DB for batch unusual flow ({missing_tickers}): {ex}")
+            df_all = pd.DataFrame()
 
-        sym_summary = _format_single_flow_summary(sym, df, lookback_days)
-        _store_flow_cache(cache_key, sym_summary)
-        summaries.append(sym_summary)
+        for sym in missing_tickers:
+            cache_key = f"{sym}:{lookback_days}:{min_premium}"
+            if not df_all.empty and "SYMBOL" in df_all.columns:
+                df_sym = df_all[df_all["SYMBOL"].str.upper() == sym]
+            else:
+                df_sym = pd.DataFrame()
 
-    cache_status = "HIT" if cache_hit_all else "MISS"
+            if df_sym.empty:
+                # Optionally attempt an in-process live scrape fallback via extract_flow_for_symbol
+                try:
+                    import sys
+                    from pathlib import Path
+                    pipeline_dir = Path(__file__).resolve().parents[3] / "unusual-option-flow-pipeline"
+                    if pipeline_dir.exists() and str(pipeline_dir) not in sys.path:
+                        sys.path.insert(0, str(pipeline_dir))
+
+                    from src.extract import extract_flow_for_symbol
+                    from src.transform import transform_flow_records
+
+                    if config is None:
+                        from common_lib.config.main_config import load_config
+                        config = load_config()
+
+                    live_records = extract_flow_for_symbol(config=config, symbol=sym)
+                    if live_records:
+                        df_live = transform_flow_records(live_records)
+                        if not df_live.empty:
+                            df_live.columns = df_live.columns.str.upper()
+                            df_sym = df_live
+                except Exception as fallback_err:
+                    logger.debug(f"Live flow fallback attempt for {sym} skipped or failed: {fallback_err}")
+
+            sym_summary = _format_single_flow_summary(sym, df_sym, lookback_days)
+            _store_flow_cache(cache_key, sym_summary)
+            cached_summaries[sym] = sym_summary
+
+    cache_status = "HIT" if not missing_tickers else "MISS"
     record_tool_metric(
         latency_ms=(time.perf_counter() - t0) * 1000.0,
         cache_status=cache_status,
         retry_count=0
     )
 
+    summaries = [cached_summaries[sym] for sym in clean_tickers if sym in cached_summaries]
     return "\n\n".join(summaries)
