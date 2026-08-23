@@ -1,0 +1,42 @@
+﻿name: Administrative Decommission Oracle Database
+
+on:
+  workflow_dispatch:
+
+jobs:
+  decommission:
+    name: Decommission Oracle Database Container
+    runs-on: self-hosted
+
+    steps:
+      - name: Inspect Running Oracle Containers
+        run: |
+          echo "🔍 Scanning for Oracle containers on Synology NAS..."
+          docker ps -a | grep -iE 'oracle' || echo "No Oracle containers found."
+
+      - name: Stop and Remove Oracle Containers
+        run: |
+          echo "🛑 Stopping and removing Oracle containers..."
+          ORACLE_CONTAINERS=$(docker ps -a --filter "name=oracle" --format "{{.ID}}")
+          if [ -n "$ORACLE_CONTAINERS" ]; then
+            echo "Removing container IDs: $ORACLE_CONTAINERS"
+            docker rm -f $ORACLE_CONTAINERS
+            echo "✅ Oracle containers successfully removed."
+          else
+            echo "ℹ️ No Oracle containers found matching name 'oracle'."
+          fi
+
+      - name: Prune Unused Oracle Images
+        run: |
+          echo "🧹 Cleaning up Oracle images..."
+          ORACLE_IMAGES=$(docker images --filter "reference=*oracle*" --format "{{.ID}}")
+          if [ -n "$ORACLE_IMAGES" ]; then
+            echo "Removing image IDs: $ORACLE_IMAGES"
+            docker rmi -f $ORACLE_IMAGES || true
+          fi
+          docker image prune -f || true
+
+      - name: Active Docker Fleet Status
+        run: |
+          echo "📊 Current active containers on Synology NAS:"
+          docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
