@@ -1,0 +1,220 @@
+﻿import time
+import logging
+from datetime import datetime, date
+from typing import Dict, Any, Optional, Tuple, List, Union
+import pandas as pd
+
+from app.tools.registry import register_tool, record_tool_metric
+
+logger = logging.getLogger("quant.gateway.tools.flow")
+
+_FLOW_MEMORY_CACHE: Dict[str, Tuple[float, str]] = {}
+CACHE_TTL_SECONDS = 300
+MAX_FLOW_CACHE_ENTRIES = 1024
+
+
+def _store_flow_cache(cache_key: str, summary: str) -> None:
+    """Stores summary in memory cache with bounded capacity eviction."""
+    if len(_FLOW_MEMORY_CACHE) >= MAX_FLOW_CACHE_ENTRIES:
+        sorted_keys = sorted(_FLOW_MEMORY_CACHE.keys(), key=lambda k: _FLOW_MEMORY_CACHE[k][0])
+        for k in sorted_keys[:max(1, MAX_FLOW_CACHE_ENTRIES // 5)]:
+            _FLOW_MEMORY_CACHE.pop(k, None)
+    _FLOW_MEMORY_CACHE[cache_key] = (time.time(), summary)
+
+
+def _format_dollar_amount(val: Any) -> str:
+    """Formats numeric values into compact dollar strings (e.g. $14.20M, $780.00K, $1.85B, $0.00)."""
+    if val is None:
+        return "$0.00"
+    if isinstance(val, str):
+        if val.startswith("$"):
+            return val
+        try:
+            val = float(val)
+        except ValueError:
+            return val
+    try:
+        v = float(val)
+    except (TypeError, ValueError):
+        return str(val)
+
+    if v == 0:
+        return "$0.00"
+
+    abs_v = abs(v)
+    sign = "-" if v < 0 else ""
+    if abs_v >= 1_000_000_000:
+        return f"{sign}${abs_v / 1_000_000_000:.2f}B"
+    elif abs_v >= 1_000_000:
+        return f"{sign}${abs_v / 1_000_000:.2f}M"
+    elif abs_v >= 1_000:
+        return f"{sign}${abs_v / 1_000:.2f}K"
+    return f"{sign}${abs_v:.2f}"
+
+
+def _format_single_flow_summary(symbol: str, df: Optional[pd.DataFrame], lookback_days: int) -> str:
+    """Formats raw flow rows into a high-density institutional markdown briefing (~100 tokens)."""
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+        return f"[INSTITUTIONAL UNUSUAL OPTIONS FLOW: {symbol}] No unusual institutional options flow recorded in the past {lookback_days} days."
+
+    # Compute aggregates
+    total_records = len(df)
+    call_df = df[df["ORDER_TYPE"].str.contains("CALL", case=False, na=False)] if "ORDER_TYPE" in df.columns else pd.DataFrame()
+    put_df = df[df["ORDER_TYPE"].str.contains("PUT", case=False, na=False)] if "ORDER_TYPE" in df.columns else pd.DataFrame()
+
+    call_premium = float(call_df["PREMIUM"].sum()) if not call_df.empty and "PREMIUM" in call_df.columns else 0.0
+    put_premium = float(put_df["PREMIUM"].sum()) if not put_df.empty and "PREMIUM" in put_df.columns else 0.0
+    total_premium = call_premium + put_premium
+
+    call_pct = (call_premium / total_premium * 100.0) if total_premium > 0 else 0.0
+    put_pct = (put_premium / total_premium * 100.0) if total_premium > 0 else 0.0
+
+    # Net Score & Sentiment
+    net_score_val = None
+    if "NET_SCORE" in df.columns and pd.notna(df["NET_SCORE"].iloc[0]):
+        net_score_val = float(df["NET_SCORE"].iloc[0])
+
+    if net_score_val is not None:
+        net_score_str = f"{net_score_val:+.1f}" if net_score_val != 0 else "0.0"
+        if net_score_val > 0:
+            sentiment_str = "Bullish"
+        elif net_score_val < 0:
+            sentiment_str = "Bearish"
+        else:
+            sentiment_str = "Neutral"
+    else:
+        net_score_str = "N/A"
+        if call_pct >= 65:
+            sentiment_str = "Heavily Bullish"
+        elif call_pct >= 55:
+            sentiment_str = "Moderately Bullish"
+        elif put_pct >= 65:
+            sentiment_str = "Heavily Bearish"
+        elif put_pct >= 55:
+            sentiment_str = "Moderately Bearish"
+        else:
+            sentiment_str = "Neutral"
+
+    # Top high-conviction prints (up to 5)
+    sorted_df = df.sort_values(by=["PREMIUM", "TRADE_DATE"], ascending=[False, False]) if "PREMIUM" in df.columns else df
+    top_prints = sorted_df.head(5)
+
+    print_lines = []
+    for _, row in top_prints.iterrows():
+        t_date = str(row.get("TRADE_DATE", ""))[:10]
+        o_type = str(row.get("ORDER_TYPE", "")).replace("_", " ").upper()
+        strike = row.get("STRIKE_PRICE", "N/A")
+        try:
+            strike_fmt = f"${float(strike):.2f}"
+        except Exception:
+            strike_fmt = f"${strike}"
+            
+        otm = row.get("STRIKE_OTM_PCT")
+        exp = str(row.get("EXPIRATION_DATE", ""))[:10]
+        prem = _format_dollar_amount(row.get("PREMIUM", 0))
+        oi = row.get("OPEN_INTEREST", "N/A")
+        try:
+            oi_fmt = f"{int(oi):,}"
+        except Exception:
+            oi_fmt = str(oi)
+            
+        unusual_flag = " ⚠️" if row.get("IS_UNUSUAL_OI") in [1, True, "1"] else ""
+        otm_str = f" ({otm:+.1f}%)" if pd.notna(otm) and isinstance(otm, (int, float)) else ""
+        print_lines.append(f"  • {t_date}: {prem} {o_type} | Strike: {strike_fmt}{otm_str} | Exp: {exp} | OI: {oi_fmt}{unusual_flag}")
+
+    prints_block = "\n".join(print_lines) if print_lines else "  • None"
+
+    header = f"[INSTITUTIONAL UNUSUAL OPTIONS FLOW: {symbol} (Last {lookback_days} Days)]"
+    volume_line = f"• Total Net Flow Volume: {_format_dollar_amount(total_premium)} (Call Flow: {_format_dollar_amount(call_premium)} [{call_pct:.1f}%] | Put Flow: {_format_dollar_amount(put_premium)} [{put_pct:.1f}%])"
+    sentiment_line = f"• Flow Sentiment Score: {net_score_str} | Sentiment: {sentiment_str}"
+    prints_header = "• High-Conviction Prints:"
+
+    return f"{header}\n{volume_line}\n{sentiment_line}\n{prints_header}\n{prints_block}"
+
+
+@register_tool(
+    name="get_unusual_flow",
+    description=(
+        "Retrieves institutional unusual options flow, smart money blocks, aggressive sweeps, "
+        "and volume-to-open-interest anomalies for a given ticker symbol over a lookback window (default 30 days). "
+        "Use this tool when users inquire about options flow, whale trades, big money positioning, sweeps, or unusual volume."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "ticker": {
+                "type": "string",
+                "description": "Stock or ETF ticker symbol (e.g. 'NVDA', 'SPY', 'PLTR', or comma-separated list like 'AAPL,MSFT')"
+            },
+            "lookback_days": {
+                "type": "integer",
+                "description": "Number of days to look back for unusual flow prints (default: 30)"
+            },
+            "min_premium": {
+                "type": "number",
+                "description": "Minimum premium threshold in USD to filter flow prints (default: 0.0)"
+            }
+        },
+        "required": ["ticker"]
+    }
+)
+def get_unusual_flow(
+    ticker: str = "",
+    lookback_days: int = 30,
+    min_premium: float = 0.0,
+    force_refresh: bool = False
+) -> str:
+    """
+    Queries institutional unusual options flow from Oracle DB via common_lib.
+    Guarded by SWR in-memory cache (300s TTL) and fault isolation.
+    """
+    t0 = time.perf_counter()
+    clean_tickers = [t.strip().upper().replace("$", "") for t in str(ticker).split(",") if t.strip()]
+
+    if not clean_tickers:
+        record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="MISS", retry_count=0)
+        return "[INSTITUTIONAL UNUSUAL OPTIONS FLOW] No valid ticker provided."
+
+    summaries = []
+    cache_hit_all = True
+
+    for sym in clean_tickers:
+        cache_key = f"{sym}:{lookback_days}:{min_premium}"
+        now = time.time()
+
+        if not force_refresh and cache_key in _FLOW_MEMORY_CACHE:
+            ts, cached_summary = _FLOW_MEMORY_CACHE[cache_key]
+            if now - ts < CACHE_TTL_SECONDS:
+                summaries.append(cached_summary)
+                continue
+
+        cache_hit_all = False
+
+        # Query Oracle DB safely
+        try:
+            from common_lib.config.main_config import load_config
+            from common_lib.connectors.oracle import get_unusual_flow as oracle_get_flow
+
+            config = load_config()
+            df = oracle_get_flow(
+                config=config,
+                symbol=sym,
+                lookback_days=lookback_days,
+                min_premium=min_premium
+            )
+        except Exception as ex:
+            logger.warning(f"Failed to query Oracle DB for {sym} unusual flow: {ex}")
+            df = pd.DataFrame()
+
+        sym_summary = _format_single_flow_summary(sym, df, lookback_days)
+        _store_flow_cache(cache_key, sym_summary)
+        summaries.append(sym_summary)
+
+    cache_status = "HIT" if cache_hit_all else "MISS"
+    record_tool_metric(
+        latency_ms=(time.perf_counter() - t0) * 1000.0,
+        cache_status=cache_status,
+        retry_count=0
+    )
+
+    return "\n\n".join(summaries)
