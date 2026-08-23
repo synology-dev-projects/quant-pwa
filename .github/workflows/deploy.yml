@@ -38,12 +38,14 @@ jobs:
             echo "🌿 Deploying to: DEVELOP/DEVELOP2 (Local Home Wi-Fi Only)"
             echo "CONTAINER_PREFIX=dev" >> $GITHUB_ENV
             echo "FRONTEND_PORT=8096" >> $GITHUB_ENV
+            echo "POSTGRES_PORT=5436" >> $GITHUB_ENV
             echo "COMPOSE_PROJECT_NAME=quant-pwa-dev" >> $GITHUB_ENV
             echo "COMPOSE_PROFILE_CMD=" >> $GITHUB_ENV
           else
             echo "🚀 Deploying to: MASTER / PRODUCTION (Public Internet + Cloudflare Tunnel)"
             echo "CONTAINER_PREFIX=prod" >> $GITHUB_ENV
             echo "FRONTEND_PORT=8095" >> $GITHUB_ENV
+            echo "POSTGRES_PORT=5435" >> $GITHUB_ENV
             echo "COMPOSE_PROJECT_NAME=quant-pwa-prod" >> $GITHUB_ENV
             echo "COMPOSE_PROFILE_CMD=--profile production" >> $GITHUB_ENV
           fi
@@ -71,6 +73,7 @@ jobs:
           
           echo "CONTAINER_PREFIX=${{ env.CONTAINER_PREFIX }}" > "$ENV_FILE"
           echo "FRONTEND_PORT=${{ env.FRONTEND_PORT }}" >> "$ENV_FILE"
+          echo "POSTGRES_PORT=${{ env.POSTGRES_PORT }}" >> "$ENV_FILE"
           echo "APP_PASSCODE=${{ secrets.APP_PASSCODE }}" >> "$ENV_FILE"
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> "$ENV_FILE"
           echo "DEFAULT_GEMINI_MODEL=gemini-3.5-flash-lite" >> "$ENV_FILE"
