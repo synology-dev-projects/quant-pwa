@@ -13,6 +13,7 @@ if pipeline_dir.exists() and str(pipeline_dir) not in sys.path:
 
 import common_lib.config.main_config
 import common_lib.connectors.oracle
+import common_lib.connectors.postgres
 
 from app.tools.registry import registry
 from app.tools.flow_tool import (
@@ -119,10 +120,11 @@ def test_zero_data_fallback():
     assert summary_none == "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: AAPL] No unusual institutional options flow recorded in the past 14 days."
 
 
-@patch("common_lib.connectors.oracle.get_unusual_flow")
+@patch("common_lib.connectors.postgres.get_unusual_flow")
 @patch("common_lib.config.main_config.load_config")
 def test_get_unusual_flow_tool_execution(mock_load_config, mock_get_flow):
     mock_config = MagicMock()
+    mock_config.db_type = "postgres"
     mock_load_config.return_value = mock_config
 
     mock_df = pd.DataFrame([
@@ -160,8 +162,45 @@ def test_get_unusual_flow_tool_execution(mock_load_config, mock_get_flow):
 
 @patch("common_lib.connectors.oracle.get_unusual_flow")
 @patch("common_lib.config.main_config.load_config")
+def test_get_unusual_flow_oracle_routing(mock_load_config, mock_oracle_flow):
+    mock_config = MagicMock()
+    mock_config.db_type = "oracle"
+    mock_load_config.return_value = mock_config
+
+    mock_df = pd.DataFrame([
+        {
+            "FLOW_ID": "flow_ora_1",
+            "TRADE_DATE": "2026-08-20",
+            "SYMBOL": "SPY",
+            "ORDER_TYPE": "BUY_CALL",
+            "STRIKE_PRICE": 550.0,
+            "STRIKE_OTM_PCT": 1.0,
+            "EXPIRATION_DATE": "2026-09-18",
+            "OPEN_INTEREST": 10000,
+            "IS_UNUSUAL_OI": 0,
+            "PREMIUM": 3_000_000.0,
+            "NET_SCORE": 1.5,
+            "CREATED_AT": datetime.now()
+        }
+    ])
+    mock_oracle_flow.return_value = mock_df
+
+    res = get_unusual_flow(ticker="SPY", lookback_days=10)
+    assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: SPY (Last 10 Days)]" in res
+    assert mock_oracle_flow.call_count == 1
+    mock_oracle_flow.assert_called_once_with(
+        config=mock_config,
+        symbols=["SPY"],
+        lookback_days=10,
+        min_premium=0.0
+    )
+
+
+@patch("common_lib.connectors.postgres.get_unusual_flow")
+@patch("common_lib.config.main_config.load_config")
 def test_get_unusual_flow_caching(mock_load_config, mock_get_flow):
     mock_config = MagicMock()
+    mock_config.db_type = "postgres"
     mock_load_config.return_value = mock_config
 
     mock_df = pd.DataFrame([
@@ -198,10 +237,11 @@ def test_get_unusual_flow_caching(mock_load_config, mock_get_flow):
     assert res1 == res3
 
 
-@patch("common_lib.connectors.oracle.get_unusual_flow")
+@patch("common_lib.connectors.postgres.get_unusual_flow")
 @patch("common_lib.config.main_config.load_config")
 def test_get_unusual_flow_batch_tickers(mock_load_config, mock_get_flow):
     mock_config = MagicMock()
+    mock_config.db_type = "postgres"
     mock_load_config.return_value = mock_config
 
     # Return multi-ticker DataFrame in a single flight
@@ -236,10 +276,11 @@ def test_get_unusual_flow_batch_tickers(mock_load_config, mock_get_flow):
     assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: MSFT] No unusual institutional options flow recorded in the past 30 days." in res
 
 
-@patch("common_lib.connectors.oracle.get_unusual_flow")
+@patch("common_lib.connectors.postgres.get_unusual_flow")
 @patch("common_lib.config.main_config.load_config")
 def test_get_unusual_flow_partial_cache_hit(mock_load_config, mock_get_flow):
     mock_config = MagicMock()
+    mock_config.db_type = "postgres"
     mock_load_config.return_value = mock_config
 
     # First warm the cache for AAPL
@@ -290,12 +331,13 @@ def test_get_unusual_flow_partial_cache_hit(mock_load_config, mock_get_flow):
 
 
 @patch("src.extract.extract_flow_for_symbol")
-@patch("common_lib.connectors.oracle.get_unusual_flow")
+@patch("common_lib.connectors.postgres.get_unusual_flow")
 @patch("common_lib.config.main_config.load_config")
 def test_get_unusual_flow_live_fallback(mock_load_config, mock_get_flow, mock_extract):
     mock_config = MagicMock()
+    mock_config.db_type = "postgres"
     mock_load_config.return_value = mock_config
-    mock_get_flow.return_value = pd.DataFrame()  # Empty Oracle DB response
+    mock_get_flow.return_value = pd.DataFrame()  # Empty PostgreSQL DB response
 
     mock_extract.return_value = [
         {
@@ -320,8 +362,8 @@ def test_get_unusual_flow_live_fallback(mock_load_config, mock_get_flow, mock_ex
 
 
 @patch("src.extract.extract_flow_for_symbol", side_effect=Exception("Network error"))
-@patch("common_lib.connectors.oracle.get_unusual_flow", side_effect=Exception("Database connection timeout"))
-def test_get_unusual_flow_fault_isolation(mock_oracle, mock_extract):
+@patch("common_lib.connectors.postgres.get_unusual_flow", side_effect=Exception("Database connection timeout"))
+def test_get_unusual_flow_fault_isolation(mock_postgres, mock_extract):
     # Calling with empty or invalid ticker does not throw
     res = get_unusual_flow(ticker="")
     assert "No valid ticker provided" in res

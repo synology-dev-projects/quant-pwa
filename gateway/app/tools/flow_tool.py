@@ -202,17 +202,28 @@ def get_unusual_flow(
         config = None
         try:
             from common_lib.config.main_config import load_config
-            from common_lib.connectors.oracle import get_unusual_flow as oracle_get_flow
 
             config = load_config()
-            df_all = oracle_get_flow(
-                config=config,
-                symbols=missing_tickers,
-                lookback_days=lookback_days,
-                min_premium=min_premium
-            )
+            db_type = getattr(config, "db_type", "postgres").lower()
+
+            if db_type == "postgres":
+                from common_lib.connectors.postgres import get_unusual_flow as pg_get_flow
+                df_all = pg_get_flow(
+                    config=config,
+                    symbols=missing_tickers,
+                    lookback_days=lookback_days,
+                    min_premium=min_premium
+                )
+            else:
+                from common_lib.connectors.oracle import get_unusual_flow as oracle_get_flow
+                df_all = oracle_get_flow(
+                    config=config,
+                    symbols=missing_tickers,
+                    lookback_days=lookback_days,
+                    min_premium=min_premium
+                )
         except Exception as ex:
-            logger.warning(f"Failed to query Oracle DB for batch unusual flow ({missing_tickers}): {ex}")
+            logger.warning(f"Failed to query DB for batch unusual flow ({missing_tickers}): {ex}")
             df_all = pd.DataFrame()
 
         for sym in missing_tickers:
