@@ -14,6 +14,20 @@ const DEFAULT_TOOLS = [
     example: '/gex NVDA'
   },
   {
+    name: 'get_unusual_flow',
+    display: '/flow SPY',
+    icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+    title: 'Institutional Options Flow',
+    description: 'Queries high-conviction institutional options flow, block trades, sweeps, and smart money positioning.',
+    promptTemplate: '/flow SPY',
+    params: [
+      { name: 'ticker', type: 'string', required: true, desc: 'Stock ticker (e.g. SPY, NVDA, PLTR)' },
+      { name: 'lookback_days', type: 'int', required: false, desc: 'Historical lookback in days (default: 30)' },
+      { name: 'min_premium', type: 'float', required: false, desc: 'Minimum total trade premium in USD' }
+    ],
+    example: '/flow NVDA'
+  },
+  {
     name: 'get_strike_distribution',
     display: '/strikes NVDA',
     icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`,
@@ -316,6 +330,7 @@ export class PromptInput {
   processMcpTools(mcpTools) {
     const iconMap = {
       'get_gexdex': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`, display: '/gex SPY', example: '/gex NVDA' },
+      'get_unusual_flow': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`, display: '/flow SPY', example: '/flow NVDA' },
       'get_strike_distribution': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`, display: '/strikes NVDA', example: '/strikes TSLA' },
       'get_market_status': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`, display: '/market', example: '/market' }
     };
