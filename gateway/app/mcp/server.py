@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.core.temporal import get_market_status
 from app.tools.gexdex_tool import get_gexdex, get_strike_distribution
+from app.tools.flow_tool import get_unusual_flow
 
 logger = logging.getLogger("quant.mcp.server")
 
@@ -90,6 +91,30 @@ MCP_TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {}
+        }
+    },
+    {
+        "name": "get_unusual_flow",
+        "description": "Queries high-conviction institutional unusual options flow, block trades, sweeps, and smart money positioning for single or multiple stock tickers.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ticker": {
+                    "type": "string",
+                    "description": "Single ticker or comma-separated list of stock tickers (e.g. SPY, NVDA, AAPL)."
+                },
+                "lookback_days": {
+                    "type": "integer",
+                    "description": "Historical lookback in days.",
+                    "default": 30
+                },
+                "min_premium": {
+                    "type": "number",
+                    "description": "Minimum trade premium in USD.",
+                    "default": 0.0
+                }
+            },
+            "required": ["ticker"]
         }
     }
 ]
@@ -216,6 +241,24 @@ async def handle_rpc_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
                     "result": {
                         "content": [
                             {"type": "text", "text": json.dumps(status_res, indent=2)}
+                        ],
+                        "isError": False
+                    }
+                }
+
+            elif tool_name == "get_unusual_flow":
+                ticker = args.get("ticker", "SPY")
+                lookback = int(args.get("lookback_days", 30))
+                min_prem = float(args.get("min_premium", 0.0))
+                res = get_unusual_flow(ticker=ticker, lookback_days=lookback, min_premium=min_prem)
+                if inspect.isawaitable(res):
+                    res = await res
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "content": [
+                            {"type": "text", "text": res if isinstance(res, str) else json.dumps(res, indent=2)}
                         ],
                         "isError": False
                     }

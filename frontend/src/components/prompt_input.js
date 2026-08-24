@@ -365,6 +365,12 @@ export class PromptInput {
       });
     });
 
+    // Always ensure unusual options flow chip is present
+    if (!syncedTools.some(t => t.name === 'get_unusual_flow')) {
+      const flowDefault = DEFAULT_TOOLS.find(t => t.name === 'get_unusual_flow');
+      if (flowDefault) syncedTools.splice(1, 0, flowDefault);
+    }
+
     // Always ensure macro catalyst chip is present
     if (!syncedTools.some(t => t.name === 'macro_schedule')) {
       syncedTools.push({

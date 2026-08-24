@@ -44,6 +44,26 @@ def test_mcp_tools_list():
     assert "get_gexdex" in tool_names
     assert "get_strike_distribution" in tool_names
     assert "get_market_status" in tool_names
+    assert "get_unusual_flow" in tool_names
+
+
+def test_mcp_tools_call_unusual_flow():
+    """Verifies that MCP tools/call executes get_unusual_flow."""
+    req = {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
+        "params": {
+            "name": "get_unusual_flow",
+            "arguments": {"ticker": "SPY"}
+        }
+    }
+    with patch("app.mcp.server.get_unusual_flow", return_value="[INSTITUTIONAL UNUSUAL OPTIONS FLOW: SPY]"):
+        response = client.post("/mcp/messages", json=req)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["result"]["isError"] is False
+        assert "SPY" in data["result"]["content"][0]["text"]
 
 
 def test_mcp_tools_call_market_status():
