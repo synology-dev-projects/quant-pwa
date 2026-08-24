@@ -371,3 +371,106 @@ def test_get_unusual_flow_fault_isolation(mock_postgres, mock_extract):
     # Even if DB connection and live fallback fail, returns graceful fallback response without raising
     res_fail = get_unusual_flow(ticker="AMZN", lookback_days=7)
     assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: AMZN] No unusual institutional options flow recorded in the past 7 days." in res_fail
+
+
+def test_agent_system_instruction_slash_commands():
+    from app.core.agent import SYSTEM_INSTRUCTION_BASE
+    assert "/flow <ticker>" in SYSTEM_INSTRUCTION_BASE
+    assert "get_unusual_flow(ticker=" in SYSTEM_INSTRUCTION_BASE
+    assert "/gex <ticker>" in SYSTEM_INSTRUCTION_BASE
+    assert "/strikes <ticker>" in SYSTEM_INSTRUCTION_BASE
+
+
+@patch("common_lib.connectors.postgres.get_unusual_flow")
+@patch("common_lib.config.main_config.load_config")
+def test_slash_command_prompt_handling(mock_load_config, mock_get_flow):
+    mock_config = MagicMock()
+    mock_config.db_type = "postgres"
+    mock_load_config.return_value = mock_config
+    mock_get_flow.return_value = pd.DataFrame()
+
+    # Single ticker with /flow slash command
+    res1 = get_unusual_flow(ticker="/flow NVDA", lookback_days=30)
+    assert mock_get_flow.call_count == 1
+    mock_get_flow.assert_called_with(
+        config=mock_config,
+        symbols=["NVDA"],
+        lookback_days=30,
+        min_premium=0.0
+    )
+    assert "NVDA" in res1
+
+    mock_get_flow.reset_mock()
+
+    # Multi-ticker with /flow prefixes and dollar signs
+    res2 = get_unusual_flow(ticker="/flow $AAPL, /flow $TSLA", lookback_days=14)
+    assert mock_get_flow.call_count == 1
+    mock_get_flow.assert_called_with(
+        config=mock_config,
+        symbols=["AAPL", "TSLA"],
+        lookback_days=14,
+        min_premium=0.0
+    )
+    assert "AAPL" in res2
+    assert "TSLA" in res2
+
+
+@patch("common_lib.connectors.postgres.get_unusual_flow")
+@patch("common_lib.config.main_config.load_config")
+def test_multi_ticker_resolution_and_deduplication(mock_load_config, mock_get_flow):
+    mock_config = MagicMock()
+    mock_config.db_type = "postgres"
+    mock_load_config.return_value = mock_config
+
+    mock_df = pd.DataFrame([
+        {
+            "FLOW_ID": "flow_aapl",
+            "TRADE_DATE": "2026-08-22",
+            "SYMBOL": "AAPL",
+            "ORDER_TYPE": "SWEEP_CALL",
+            "STRIKE_PRICE": 230.0,
+            "STRIKE_OTM_PCT": 2.5,
+            "EXPIRATION_DATE": "2026-09-18",
+            "OPEN_INTEREST": 5000,
+            "IS_UNUSUAL_OI": 1,
+            "PREMIUM": 6_500_000.0,
+            "NET_SCORE": 1.5,
+            "CREATED_AT": datetime.now()
+        },
+        {
+            "FLOW_ID": "flow_googl",
+            "TRADE_DATE": "2026-08-22",
+            "SYMBOL": "GOOGL",
+            "ORDER_TYPE": "BUY_PUT",
+            "STRIKE_PRICE": 165.0,
+            "STRIKE_OTM_PCT": -3.0,
+            "EXPIRATION_DATE": "2026-09-18",
+            "OPEN_INTEREST": 3200,
+            "IS_UNUSUAL_OI": 0,
+            "PREMIUM": 4_200_000.0,
+            "NET_SCORE": -1.0,
+            "CREATED_AT": datetime.now()
+        }
+    ])
+    mock_get_flow.return_value = mock_df
+
+    # Query with duplicates and mixed formatting
+    res = get_unusual_flow(ticker=" AAPL, MSFT, $AAPL , GOOGL, msft ", lookback_days=30)
+
+    # Verify query was called once with deduplicated tickers preserving order
+    assert mock_get_flow.call_count == 1
+    mock_get_flow.assert_called_once_with(
+        config=mock_config,
+        symbols=["AAPL", "MSFT", "GOOGL"],
+        lookback_days=30,
+        min_premium=0.0
+    )
+
+    # Check that all 3 tickers have formatted sections
+    assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: AAPL (Last 30 Days)]" in res
+    assert "$6.50M" in res
+    assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: MSFT] No unusual institutional options flow recorded in the past 30 days." in res
+    assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: GOOGL (Last 30 Days)]" in res
+    assert "$4.20M" in res
+    assert "Bearish" in res
+

@@ -1,3 +1,4 @@
+import re
 import time
 import logging
 from datetime import datetime, date
@@ -170,7 +171,14 @@ def get_unusual_flow(
     Guarded by SWR in-memory cache (300s TTL), live scrape fallback, and fault isolation.
     """
     t0 = time.perf_counter()
-    raw_tickers = [t.strip().upper().replace("$", "") for t in str(ticker).split(",") if t.strip()]
+    raw_str = str(ticker or "").strip()
+    raw_str = re.sub(r"^(?:/(?:flow|gex|strikes)\s+)", "", raw_str, flags=re.IGNORECASE)
+    raw_parts = [t.strip() for t in raw_str.split(",") if t.strip()]
+    raw_tickers = []
+    for part in raw_parts:
+        cleaned_part = re.sub(r"^(?:/(?:flow|gex|strikes)\s+)", "", part, flags=re.IGNORECASE).strip().upper().replace("$", "")
+        if cleaned_part:
+            raw_tickers.append(cleaned_part)
     
     # Deduplicate while preserving order
     seen = set()
