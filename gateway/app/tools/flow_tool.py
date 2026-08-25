@@ -137,7 +137,11 @@ DATE_PATTERNS = [
     re.compile(r"^\d{4}-\d{2}-\d{2}$"),
     re.compile(r"^\d{1,2}/\d{1,2}(?:/\d{2,4})?$"),
 ]
-MARKET_DATE_KEYWORDS = {"YESTERDAY", "TODAY", "LATEST", "MARKET", "ALL"}
+MARKET_DATE_KEYWORDS = {
+    "YESTERDAY", "TODAY", "LATEST", "MARKET", "ALL", 
+    "FRIDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY",
+    "LAST FRIDAY", "THIS FRIDAY"
+}
 
 
 def format_market_wide_flow_summary(df: Optional[pd.DataFrame], target_date_str: str) -> str:
@@ -300,6 +304,9 @@ def get_unusual_flow(
         is_market_date = True
         if target_market_date is None:
             target_market_date = clean_raw_upper if clean_raw_upper in MARKET_DATE_KEYWORDS else raw_str
+    elif target_market_date is not None and clean_raw_upper in ("SPY", "MARKET", "ALL", ""):
+        # User passed a specific trade date and default/broad ticker: treat as market-wide date query
+        is_market_date = True
 
     if is_market_date:
         market_date_key = str(target_market_date or "latest").upper()
