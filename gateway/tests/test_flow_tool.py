@@ -28,8 +28,7 @@ def test_tool_registry_includes_flow_tool():
 
     decl = next(d for d in declarations if d["name"] == "get_unusual_flow")
     assert "date" in decl["parameters"]["properties"]
-    assert "ticker" in decl["parameters"]["properties"]
-    assert "min_premium" in decl["parameters"]["properties"]
+    assert len(decl["parameters"]["properties"]) == 1
 
 
 def test_format_dollar_amount():
@@ -75,10 +74,10 @@ def test_format_pure_flow_table_with_data():
     ])
 
     table = format_pure_flow_table(sample_df, "2026-08-21")
-    assert "| Symbol | Order Action | Strike | OTM % | Expiration | Open Interest | Premium | Trade Date |" in table
-    assert "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |" in table
-    assert "| **NVDA** | BUY CALL | $130.00 | +2.0% | 2026-09-18 | 15,000 ⚠️ | $25.00M | 2026-08-21 |" in table
-    assert "| **TSLA** | BUY PUT | $200.00 | -5.0% | 2026-09-18 | 8,000 | $10.00M | 2026-08-21 |" in table
+    assert "| Symbol | Order Action | Strike | OTM % | Expiration | Open Interest | Premium |" in table
+    assert "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" in table
+    assert "| **NVDA** | BUY CALL | $130.00 | +2.0% | 2026-09-18 | 15,000 ⚠️ | $25.00M |" in table
+    assert "| **TSLA** | BUY PUT | $200.00 | -5.0% | 2026-09-18 | 8,000 | $10.00M |" in table
 
 
 def test_format_pure_flow_table_empty():
@@ -116,12 +115,11 @@ def test_get_unusual_flow_default_latest_session(mock_load_config, mock_get_flow
 
     # Call /flow with no args -> defaults to latest session, 100% completeness (limit=None)
     res = get_unusual_flow()
-    assert "| **NVDA** | BUY CALL | $135.00 | +3.0% | 2026-09-18 | 5,000 ⚠️ | $5.00M | 2026-08-21 |" in res
+    assert "| **NVDA** | BUY CALL | $135.00 | +3.0% | 2026-09-18 | 5,000 ⚠️ | $5.00M |" in res
 
     mock_get_flow.assert_called_once_with(
         config=mock_config,
-        date="latest",
-        min_premium=0.0,
+        date_input=None,
         limit=None
     )
 
@@ -138,8 +136,7 @@ def test_get_unusual_flow_specific_date(mock_load_config, mock_get_flow):
     get_unusual_flow(date="2026-08-21")
     mock_get_flow.assert_called_with(
         config=mock_config,
-        date="2026-08-21",
-        min_premium=0.0,
+        date_input="2026-08-21",
         limit=None
     )
 
@@ -153,11 +150,10 @@ def test_get_unusual_flow_date_range(mock_load_config, mock_get_flow):
     mock_get_flow.return_value = pd.DataFrame()
 
     # /flow 2026-08-17 to 2026-08-21
-    get_unusual_flow(date="2026-08-17 to 2026-08-21", min_premium=500000.0)
+    get_unusual_flow(date="2026-08-17 to 2026-08-21")
     mock_get_flow.assert_called_with(
         config=mock_config,
-        date="2026-08-17 to 2026-08-21",
-        min_premium=500000.0,
+        date_input="2026-08-17 to 2026-08-21",
         limit=None
     )
 
@@ -171,22 +167,20 @@ def test_get_unusual_flow_named_dates(mock_load_config, mock_get_flow):
     mock_get_flow.return_value = pd.DataFrame()
 
     # /flow Friday
-    get_unusual_flow(ticker="/flow Friday")
+    get_unusual_flow(date="/flow Friday")
     mock_get_flow.assert_called_with(
         config=mock_config,
-        date="Friday",
-        min_premium=0.0,
+        date_input="Friday",
         limit=None
     )
 
     mock_get_flow.reset_mock()
 
     # /flow yesterday
-    get_unusual_flow(ticker="/flow yesterday")
+    get_unusual_flow(date="/flow yesterday")
     mock_get_flow.assert_called_with(
         config=mock_config,
-        date="yesterday",
-        min_premium=0.0,
+        date_input="yesterday",
         limit=None
     )
 
@@ -219,7 +213,7 @@ def test_get_unusual_flow_caching(mock_load_config, mock_get_flow):
     # First call: cache miss
     res1 = get_unusual_flow(date="2026-08-21")
     assert mock_get_flow.call_count == 1
-    assert "FLOW_DATE_2026-08-21_0.0" in _FLOW_MEMORY_CACHE
+    assert "FLOW_DATE_2026-08-21" in _FLOW_MEMORY_CACHE
     assert "AMD" in res1
 
     # Second call: cache hit (no DB queries)
@@ -243,4 +237,4 @@ def test_agent_system_instruction_slash_commands():
     from app.core.agent import SYSTEM_INSTRUCTION_BASE
     assert "/flow" in SYSTEM_INSTRUCTION_BASE
     assert "get_unusual_flow(date=" in SYSTEM_INSTRUCTION_BASE
-    assert "PURE DATA INVARIANT" in SYSTEM_INSTRUCTION_BASE
+    assert "Bloomberg Terminal Markdown Table" in SYSTEM_INSTRUCTION_BASE

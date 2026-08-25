@@ -272,7 +272,7 @@ def format_pure_flow_table(df: Optional[pd.DataFrame], date_label: str = "") -> 
     else:
         df_sorted = df
 
-    headers = ["Symbol", "Order Action", "Strike", "OTM %", "Expiration", "Open Interest", "Premium", "Trade Date"]
+    headers = ["Symbol", "Order Action", "Strike", "OTM %", "Expiration", "Open Interest", "Premium"]
     rows = []
 
     for _, row in df_sorted.iterrows():
@@ -303,7 +303,7 @@ def format_pure_flow_table(df: Optional[pd.DataFrame], date_label: str = "") -> 
         if pd.notna(otm_val) and isinstance(otm_val, (int, float)):
             otm_str = f"{float(otm_val):+.1f}%"
         else:
-            otm_str = "0.0%"
+            otm_str = "+0.0%"
 
         # Expiration Date
         exp_str = str(row.get("EXPIRATION_DATE", ""))[:10]
@@ -323,10 +323,7 @@ def format_pure_flow_table(df: Optional[pd.DataFrame], date_label: str = "") -> 
         prem_val = row.get("PREMIUM", 0.0)
         prem_str = _format_dollar_amount(prem_val)
 
-        # Trade Date
-        trade_date_str = str(row.get("TRADE_DATE", ""))[:10]
-
-        rows.append(f"| **{sym}** | {action_str} | {strike_str} | {otm_str} | {exp_str} | {oi_str} | {prem_str} | {trade_date_str} |")
+        rows.append(f"| **{sym}** | {action_str} | {strike_str} | {otm_str} | {exp_str} | {oi_str} | {prem_str} |")
 
     header_line = "| " + " | ".join(headers) + " |"
     separator_line = "| " + " | ".join([":---"] * len(headers)) + " |"
@@ -349,111 +346,34 @@ def format_pure_flow_table(df: Optional[pd.DataFrame], date_label: str = "") -> 
             "date": {
                 "type": "string",
                 "description": "Optional market session date, range, or keyword (e.g. '2026-08-21', 'Friday', 'yesterday', '2026-08-17 to 2026-08-21', 'latest'). Defaults to latest session if omitted."
-            },
-            "ticker": {
-                "type": "string",
-                "description": "Optional ticker symbol (e.g. 'NVDA') or date string if passed positionally."
-            },
-            "min_premium": {
-                "type": "number",
-                "description": "Minimum premium threshold in USD to filter flow prints (default: 0.0)"
             }
         }
     }
 )
 def get_unusual_flow(
     date: Optional[str] = None,
-    ticker: Optional[str] = None,
-    trade_date: Optional[str] = None,
-    lookback_days: int = 30,
-    min_premium: float = 0.0,
-    force_refresh: bool = False
+    force_refresh: bool = False,
+    **kwargs: Any
 ) -> str:
     """
     Queries institutional unusual options flow from PostgreSQL/Oracle DB via common_lib.
-    Supports single date, date ranges, latest session default, and ticker filters.
-    100% complete prints with zero unsolicited analysis in Bloomberg Markdown table.
+    Supports single date, date ranges, weekdays, and latest session default.
+    100% complete prints with zero unsolicited analysis in pure Bloomberg Markdown table.
     """
     t0 = time.perf_counter()
 
-    # Normalize date and ticker arguments
-    raw_input = str(date or trade_date or ticker or "").strip()
-    raw_input = re.sub(r"^(?:/(?:flow|gex|strikes)\s*)", "", raw_input, flags=re.IGNORECASE).strip()
+    raw_input = date if date is not None else kwargs.get("trade_date") or kwargs.get("ticker") or kwargs.get("date_input")
+    clean_date_str = str(raw_input).strip() if raw_input is not None else ""
+    clean_date_str = re.sub(r"^(?:/flow\s*)", "", clean_date_str, flags=re.IGNORECASE).strip()
 
-    is_date_query = False
-    target_date_str: Optional[str] = None
-    target_symbols: Optional[List[str]] = None
-
-    if not raw_input or raw_input.upper() in MARKET_DATE_KEYWORDS:
-        is_date_query = True
-        target_date_str = raw_input if raw_input else "latest"
-    elif any(p.match(raw_input) for p in DATE_PATTERNS) or re.search(r"\s+(?:to|-|through)\s+|[:\.]{2,}", raw_input, re.I):
-        is_date_query = True
-        target_date_str = raw_input
-    elif date is not None and str(date).strip():
-        is_date_query = True
-        target_date_str = str(date).strip()
-    elif trade_date is not None and str(trade_date).strip():
-        is_date_query = True
-        target_date_str = str(trade_date).strip()
+    if clean_date_str.lower() in ("", "none", "latest"):
+        target_date_param = None
+        cache_label = "LATEST"
     else:
-        # Check if input is a ticker or comma-separated list of tickers
-        raw_parts = [t.strip().upper().replace("$", "") for t in raw_input.split(",") if t.strip()]
-        if raw_parts and all(re.match(r"^[A-Z0-9\.\/]{1,6}$", p) for p in raw_parts):
-            target_symbols = list(dict.fromkeys(raw_parts))
-        else:
-            is_date_query = True
-            target_date_str = raw_input if raw_input else "latest"
+        target_date_param = clean_date_str
+        cache_label = clean_date_str.upper()
 
-    if is_date_query or target_symbols is None:
-        target_date_clean = str(target_date_str or "latest").strip()
-        cache_key = f"FLOW_DATE_{target_date_clean.upper()}_{min_premium}"
-        now = time.time()
-        if not force_refresh and cache_key in _FLOW_MEMORY_CACHE:
-            ts, cached_table = _FLOW_MEMORY_CACHE[cache_key]
-            if now - ts < CACHE_TTL_SECONDS:
-                record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="HIT", retry_count=0)
-                _LAST_EXECUTED_FLOW_RESULT["latest"] = (time.time(), cached_table)
-                return cached_table
-
-        df_flow = pd.DataFrame()
-        try:
-            from common_lib.config.main_config import load_config
-            config = load_config()
-            db_type = getattr(config, "db_type", "postgres").lower()
-
-            if db_type == "postgres":
-                from common_lib.connectors.postgres import get_unusual_flow as pg_get_flow
-                df_flow = pg_get_flow(
-                    config=config,
-                    date=target_date_clean,
-                    min_premium=min_premium,
-                    limit=None  # 100% of ALL entries
-                )
-            else:
-                from common_lib.connectors.oracle import get_unusual_flow as oracle_get_flow
-                df_flow = oracle_get_flow(
-                    config=config,
-                    trade_date=target_date_clean,
-                    min_premium=min_premium,
-                    limit=None
-                )
-        except Exception as ex:
-            logger.warning(f"Failed to query DB for flow ({target_date_clean}): {ex}")
-            df_flow = pd.DataFrame()
-
-        table_result = format_pure_flow_table(df_flow, target_date_clean)
-        _store_flow_cache(cache_key, table_result)
-        record_tool_metric(
-            latency_ms=(time.perf_counter() - t0) * 1000.0,
-            cache_status="MISS",
-            retry_count=0
-        )
-        _LAST_EXECUTED_FLOW_RESULT["latest"] = (time.time(), table_result)
-        return table_result
-
-    # Specific Tickers Query
-    cache_key = f"FLOW_SYMS_{','.join(target_symbols)}_{min_premium}_{lookback_days}"
+    cache_key = f"FLOW_DATE_{cache_label}"
     now = time.time()
     if not force_refresh and cache_key in _FLOW_MEMORY_CACHE:
         ts, cached_table = _FLOW_MEMORY_CACHE[cache_key]
@@ -472,25 +392,21 @@ def get_unusual_flow(
             from common_lib.connectors.postgres import get_unusual_flow as pg_get_flow
             df_flow = pg_get_flow(
                 config=config,
-                symbols=target_symbols,
-                lookback_days=lookback_days,
-                min_premium=min_premium,
-                limit=None
+                date_input=target_date_param,
+                limit=None  # 100% of ALL entries
             )
         else:
             from common_lib.connectors.oracle import get_unusual_flow as oracle_get_flow
             df_flow = oracle_get_flow(
                 config=config,
-                symbols=target_symbols,
-                lookback_days=lookback_days,
-                min_premium=min_premium,
+                trade_date=target_date_param or "latest",
                 limit=None
             )
     except Exception as ex:
-        logger.warning(f"Failed to query DB for symbols flow ({target_symbols}): {ex}")
+        logger.warning(f"Failed to query DB for unusual options flow ({clean_date_str}): {ex}")
         df_flow = pd.DataFrame()
 
-    table_result = format_pure_flow_table(df_flow, ", ".join(target_symbols))
+    table_result = format_pure_flow_table(df_flow, clean_date_str)
     _store_flow_cache(cache_key, table_result)
     record_tool_metric(
         latency_ms=(time.perf_counter() - t0) * 1000.0,

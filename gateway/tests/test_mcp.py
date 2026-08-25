@@ -55,15 +55,15 @@ def test_mcp_tools_call_unusual_flow():
         "method": "tools/call",
         "params": {
             "name": "get_unusual_flow",
-            "arguments": {"ticker": "SPY"}
+            "arguments": {"date": "2026-08-21"}
         }
     }
-    with patch("app.mcp.server.get_unusual_flow", return_value="[INSTITUTIONAL UNUSUAL OPTIONS FLOW: SPY]"):
+    with patch("app.mcp.server.get_unusual_flow", return_value="| **NVDA** | BUY CALL | $130.00 | +2.0% | 2026-09-18 | 15,000 ⚠️ | $25.00M |"):
         response = client.post("/mcp/messages", json=req)
         assert response.status_code == 200
         data = response.json()
         assert data["result"]["isError"] is False
-        assert "SPY" in data["result"]["content"][0]["text"]
+        assert "NVDA" in data["result"]["content"][0]["text"]
 
 
 def test_mcp_tools_call_market_status():

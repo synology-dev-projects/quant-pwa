@@ -1,11 +1,31 @@
 import { QuantChart } from './quant_chart.js';
 import { AppState } from '../state.js';
 
-function parseSortValue(rawText) {
-  if (!rawText) return -Infinity;
-  const clean = String(rawText).replace(/<[^>]+>/g, '').trim();
+function detectColType(headerText, sampleCellText = '') {
+  const hdr = String(headerText).trim().toUpperCase();
+  const sample = String(sampleCellText).replace(/<[^>]+>/g, '').trim();
 
-  // 1. Currency / Dollar amounts (e.g. $25.00M, $780.00K, $1.85B, $500.00)
+  if (hdr.includes('PREM') || hdr.includes('PRICE') || hdr.includes('VALUE') || sample.startsWith('$')) {
+    return 'currency';
+  }
+  if (hdr.includes('%') || hdr.includes('OTM') || hdr.includes('PCT') || /^[+-]?[\d\.]+%/i.test(sample)) {
+    return 'percentage';
+  }
+  if (hdr.includes('DATE') || hdr.includes('EXP') || hdr.includes('TIME') || /^\d{4}-\d{2}-\d{2}/.test(sample)) {
+    return 'date';
+  }
+  if (hdr.includes('STRIKE') || hdr.includes('SIZE') || hdr.includes('OI') || hdr.includes('VOL') || hdr.includes('QTY') || /^-?[\d,]+(\.\d+)?$/.test(sample)) {
+    return 'numeric';
+  }
+  return 'string';
+}
+
+function parseSortValue(rawText, colType = null) {
+  if (rawText === null || rawText === undefined) return -Infinity;
+  const clean = String(rawText).replace(/<[^>]+>/g, '').trim();
+  if (!clean || clean === '-' || clean === 'N/A') return -Infinity;
+
+  // 1. Currency / Dollar amounts (e.g. $15.50M, $10.90M, $500K, $1.85B, $500.00)
   const premMatch = clean.match(/^\$?([\d\.,]+)\s*([KMB])?$/i);
   if (premMatch) {
     const num = parseFloat(premMatch[1].replace(/,/g, ''));
@@ -18,14 +38,14 @@ function parseSortValue(rawText) {
     }
   }
 
-  // 2. Percentage values (e.g. +2.0%, -5.5%)
+  // 2. Percentage values (e.g. +8.0%, -2.0%)
   const pctMatch = clean.match(/^([+-]?[\d\.]+)\s*%$/);
   if (pctMatch) {
     const p = parseFloat(pctMatch[1]);
     if (!isNaN(p)) return p;
   }
 
-  // 3. Integer with comma / OI (e.g. 15,000, 15,000 ⚠️)
+  // 3. Integer with comma / OI / Volume (e.g. 15,000, 15,000 ⚠️)
   const oiMatch = clean.match(/^([\d,]+)/);
   if (oiMatch && clean.replace(/[^0-9,]/g, '').length === clean.length) {
     const oi = parseInt(oiMatch[1].replace(/,/g, ''), 10);
@@ -116,28 +136,42 @@ function formatTableCell(content, isHeader) {
   return `<td>${content}</td>`;
 }
 
+function renderPageNums(currentPage, totalPages) {
+  if (totalPages <= 1) {
+    return `<button type="button" class="bb-page-num active" data-page="1">1</button>`;
+  }
+  const buttons = [];
+  const maxButtons = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+  if (endPage - startPage + 1 < maxButtons) {
+    startPage = Math.max(1, endPage - maxButtons + 1);
+  }
+  for (let p = startPage; p <= endPage; p++) {
+    buttons.push(`<button type="button" class="bb-page-num ${p === currentPage ? 'active' : ''}" data-page="${p}">${p}</button>`);
+  }
+  return buttons.join('');
+}
+
 function buildTableHtml(tableRows) {
   if (!tableRows || tableRows.length === 0) return '';
   
   const headerRow = tableRows.find(r => r.isHeader) || tableRows[0];
   const dataRows = tableRows.filter(r => r !== headerRow && !r.isHeader);
   const totalRowsCount = dataRows.length;
+  const totalPagesCount = Math.max(1, Math.ceil(totalRowsCount / 20));
   
   const tableId = `bbtbl-${Math.random().toString(36).substring(2, 9)}`;
 
-  // Headers HTML
+  // Headers HTML with sortable indicators
   const thsHtml = headerRow.cells.map((c, idx) => {
     let hdr = c.trim().toUpperCase();
-    let accentClass = (hdr.includes("TAG") || hdr.includes("SIZE") || hdr.includes("PREMIUM")) ? ' th-accent' : '';
-    return `<th class="quant-table-th-sortable${accentClass}" data-col-idx="${idx}">
-      <div class="th-content">
-        <span>${c}</span>
-        <span class="th-sort-icon"></span>
-      </div>
-    </th>`;
+    let colType = detectColType(c, dataRows[0]?.cells[idx] || '');
+    let accentClass = (hdr.includes("TAG") || hdr.includes("SIZE") || hdr.includes("PREMIUM") || hdr.includes("PREM")) ? ' th-accent' : '';
+    return `<th class="sortable${accentClass}" data-col="${idx}" data-type="${colType}">${c} <span class="sort-icon"></span></th>`;
   }).join('');
 
-  // Initial first 20 rows HTML for fast SSR/render
+  // Initial render: first 20 rows
   const initialSlice = dataRows.slice(0, 20);
   let tbodyHtml = '';
   initialSlice.forEach(row => {
@@ -151,73 +185,92 @@ function buildTableHtml(tableRows) {
   }).replace(/</g, '\\u003c');
 
   return `
-    <div class="quant-table-wrapper" id="${tableId}" data-total-rows="${totalRowsCount}">
-      <div class="quant-table-toolbar">
-        <div class="qt-toolbar-left">
-          <span class="qt-brand-tag">BLOOMBERG FLOW</span>
-          <span class="qt-total-badge">${totalRowsCount} PRINTS</span>
-        </div>
-        <div class="qt-pagination-controls">
-          <button type="button" class="qt-page-btn qt-prev-btn" title="Previous Page">◄ Prev</button>
-          <span class="qt-page-indicator">Page 1 of ${Math.max(1, Math.ceil(totalRowsCount / 20))}</span>
-          <button type="button" class="qt-page-btn qt-next-btn" title="Next Page">Next ►</button>
-        </div>
-      </div>
+    <div class="quant-table-wrapper" data-table-id="${tableId}" data-total-rows="${totalRowsCount}">
       <div class="quant-table-scroll">
         <table class="quant-table">
           <thead><tr>${thsHtml}</tr></thead>
           <tbody>${tbodyHtml}</tbody>
         </table>
       </div>
+      <div class="bb-pagination">
+        <button type="button" class="bb-page-btn btn-prev" disabled>◄ PREV</button>
+        <span class="bb-page-info">PAGE 1 OF ${totalPagesCount} (${totalRowsCount} PRINTS)</span>
+        <div class="bb-page-nums">${renderPageNums(1, totalPagesCount)}</div>
+        <button type="button" class="bb-page-btn btn-next" ${totalPagesCount <= 1 ? 'disabled' : ''}>NEXT ►</button>
+      </div>
       <script type="application/json" class="tbl-payload">${rawDataPayload}</script>
     </div>
   `;
 }
 
-export function initQuantTables(container = document) {
-  const wrappers = container.querySelectorAll('.quant-table-wrapper');
+export function initInteractiveTables(container = document) {
+  const wrappers = container.querySelectorAll ? container.querySelectorAll('.quant-table-wrapper') : [];
   wrappers.forEach(wrapper => {
     if (wrapper.dataset.initialized === 'true') return;
-    
-    const payloadEl = wrapper.querySelector('.tbl-payload');
-    if (!payloadEl) return;
 
-    let tableData;
-    try {
-      tableData = JSON.parse(payloadEl.textContent);
-    } catch (e) {
-      return;
+    const tbody = wrapper.querySelector('tbody');
+    if (!tbody) return;
+
+    const thEls = Array.from(wrapper.querySelectorAll('th.sortable, th[data-col]'));
+    const prevBtn = wrapper.querySelector('.btn-prev');
+    const nextBtn = wrapper.querySelector('.btn-next');
+    const pageInfo = wrapper.querySelector('.bb-page-info');
+    const pageNumsContainer = wrapper.querySelector('.bb-page-nums');
+
+    // Extract all table rows from payload or tbody
+    let structuredRows = [];
+    const payloadEl = wrapper.querySelector('.tbl-payload');
+    if (payloadEl) {
+      try {
+        const parsed = JSON.parse(payloadEl.textContent);
+        if (parsed.rows && Array.isArray(parsed.rows)) {
+          structuredRows = parsed.rows.map((rowCells, originalIdx) => ({
+            cells: rowCells,
+            formattedHtml: rowCells.map(c => formatTableCell(c, false)).join(''),
+            sortKeys: rowCells.map((c, colIdx) => parseSortValue(c, thEls[colIdx]?.dataset?.type)),
+            originalIdx
+          }));
+        }
+      } catch (e) {
+        // Fallback to DOM extraction
+      }
     }
 
-    const { headers, rows } = tableData;
-    if (!rows || rows.length === 0) return;
+    // Fallback if payload not present or empty
+    if (structuredRows.length === 0) {
+      const allTrs = Array.from(tbody.querySelectorAll('tr'));
+      if (allTrs.length === 0) return;
+      structuredRows = allTrs.map((tr, originalIdx) => {
+        const cellEls = Array.from(tr.querySelectorAll('td'));
+        const cellTexts = cellEls.map(td => td.textContent.trim());
+        return {
+          cells: cellTexts,
+          formattedHtml: tr.innerHTML,
+          sortKeys: cellTexts.map((c, colIdx) => parseSortValue(c, thEls[colIdx]?.dataset?.type)),
+          originalIdx
+        };
+      });
+    }
 
-    // Find default sort column (prefer PREMIUM or PREM, default descending)
-    let sortCol = headers.findIndex(h => /PREMIUM|PREM/i.test(h));
-    if (sortCol === -1) sortCol = 0;
-    let sortDir = 'desc';
-
+    const totalRows = structuredRows.length;
     let currentPage = 1;
     const pageSize = 20;
 
-    // Pre-calculate sort keys for high performance
-    const processedRows = rows.map((r, originalIdx) => ({
-      cells: r,
-      sortKeys: r.map(c => parseSortValue(c)),
-      originalIdx
-    }));
-
-    const tbody = wrapper.querySelector('tbody');
-    const thEls = wrapper.querySelectorAll('.quant-table-th-sortable');
-    const prevBtn = wrapper.querySelector('.qt-prev-btn');
-    const nextBtn = wrapper.querySelector('.qt-next-btn');
-    const pageIndicator = wrapper.querySelector('.qt-page-indicator');
+    // Default sort column: col 6 (Premium) or header matching PREMIUM/PREM
+    let sortCol = 6;
+    const premIdx = thEls.findIndex(th => /PREMIUM|PREM/i.test(th.textContent));
+    if (premIdx !== -1) {
+      sortCol = premIdx;
+    } else if (sortCol >= thEls.length && thEls.length > 0) {
+      sortCol = 0;
+    }
+    let sortDir = 'desc';
 
     function applySortAndRender() {
       // Sort rows
-      processedRows.sort((a, b) => {
-        const valA = a.sortKeys[sortCol];
-        const valB = b.sortKeys[sortCol];
+      structuredRows.sort((a, b) => {
+        const valA = a.sortKeys[sortCol] !== undefined ? a.sortKeys[sortCol] : -Infinity;
+        const valB = b.sortKeys[sortCol] !== undefined ? b.sortKeys[sortCol] : -Infinity;
 
         if (typeof valA === 'number' && typeof valB === 'number') {
           return sortDir === 'asc' ? valA - valB : valB - valA;
@@ -227,50 +280,58 @@ export function initQuantTables(container = document) {
         return a.originalIdx - b.originalIdx;
       });
 
-      const totalPages = Math.max(1, Math.ceil(processedRows.length / pageSize));
+      const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
       if (currentPage > totalPages) currentPage = totalPages;
       if (currentPage < 1) currentPage = 1;
 
-      // Slice page
+      // Slice current page
       const startIdx = (currentPage - 1) * pageSize;
-      const pageRows = processedRows.slice(startIdx, startIdx + pageSize);
+      const pageSlice = structuredRows.slice(startIdx, startIdx + pageSize);
 
-      // Render table rows
+      // Render 20 rows in tbody
       let rowsHtml = '';
-      pageRows.forEach(row => {
-        const cellsHtml = row.cells.map(c => formatTableCell(c, false)).join('');
-        rowsHtml += `<tr>${cellsHtml}</tr>`;
+      pageSlice.forEach(row => {
+        rowsHtml += `<tr>${row.formattedHtml}</tr>`;
       });
       tbody.innerHTML = rowsHtml;
 
-      // Update Toolbar
-      if (pageIndicator) {
-        pageIndicator.textContent = `Page ${currentPage} of ${totalPages}`;
+      // Update Pagination Toolbar
+      if (pageInfo) {
+        pageInfo.textContent = `PAGE ${currentPage} OF ${totalPages} (${totalRows} PRINTS)`;
       }
       if (prevBtn) {
-        prevBtn.disabled = currentPage <= 1;
+        prevBtn.disabled = currentPage === 1;
       }
       if (nextBtn) {
-        nextBtn.disabled = currentPage >= totalPages;
+        nextBtn.disabled = currentPage === totalPages;
+      }
+      if (pageNumsContainer) {
+        pageNumsContainer.innerHTML = renderPageNums(currentPage, totalPages);
+        pageNumsContainer.querySelectorAll('.bb-page-num').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const p = parseInt(btn.dataset.page, 10);
+            if (!isNaN(p) && p !== currentPage) {
+              currentPage = p;
+              applySortAndRender();
+            }
+          });
+        });
       }
 
-      // Update Sort Icons
+      // Update Header Sort Icons & Classes
       thEls.forEach((th, idx) => {
-        const icon = th.querySelector('.th-sort-icon');
+        th.classList.remove('sort-asc', 'sort-desc');
         if (idx === sortCol) {
-          th.classList.add('sorted');
-          if (icon) icon.textContent = sortDir === 'asc' ? ' ▲' : ' ▼';
-        } else {
-          th.classList.remove('sorted');
-          if (icon) icon.textContent = '';
+          th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
         }
       });
     }
 
-    // Attach Header Click Events (Click to Sort)
-    thEls.forEach((th) => {
+    // Attach Header Click Event Listeners
+    thEls.forEach((th, idx) => {
       th.addEventListener('click', () => {
-        const colIdx = parseInt(th.dataset.colIdx, 10);
+        const colIdx = parseInt(th.dataset.col !== undefined ? th.dataset.col : idx, 10);
         if (sortCol === colIdx) {
           sortDir = sortDir === 'asc' ? 'desc' : 'asc';
         } else {
@@ -282,9 +343,10 @@ export function initQuantTables(container = document) {
       });
     });
 
-    // Attach Pagination Events
+    // Attach Pagination Controls
     if (prevBtn) {
-      prevBtn.addEventListener('click', () => {
+      prevBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (currentPage > 1) {
           currentPage--;
           applySortAndRender();
@@ -293,8 +355,9 @@ export function initQuantTables(container = document) {
     }
 
     if (nextBtn) {
-      nextBtn.addEventListener('click', () => {
-        const totalPages = Math.max(1, Math.ceil(processedRows.length / pageSize));
+      nextBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
         if (currentPage < totalPages) {
           currentPage++;
           applySortAndRender();
@@ -308,8 +371,11 @@ export function initQuantTables(container = document) {
   });
 }
 
+export const initQuantTables = initInteractiveTables;
+
 if (typeof window !== 'undefined') {
-  window.initQuantTables = initQuantTables;
+  window.initInteractiveTables = initInteractiveTables;
+  window.initQuantTables = initInteractiveTables;
 }
 
 function parseMarkdownTables(text) {
@@ -463,10 +529,10 @@ export function createMessageElement(role, content, metadata = null, toolUiEvent
   contentDiv.className = 'markdown-body';
   contentDiv.innerHTML = badgeHtml + renderMarkdown(cleanedContent.trim());
 
-  // Initialize interactive Bloomberg tables
-  initQuantTables(contentDiv);
-
   bubble.appendChild(contentDiv);
+
+  // Initialize interactive Bloomberg tables on message bubble
+  initInteractiveTables(bubble);
 
   // 3. Render subtle latency badge in assistant message footer if metrics exist
   if (role === 'assistant' && resolvedMetrics) {
