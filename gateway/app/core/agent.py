@@ -364,8 +364,8 @@ async def stream_chat_response(
     if response and response.text and response.text.strip():
         final_text = response.text
     else:
-        from app.tools.flow_tool import last_flow_table_var
-        flow_table = last_flow_table_var.get()
+        from app.tools.flow_tool import get_last_flow_table
+        flow_table = get_last_flow_table()
         if flow_table:
             final_text = flow_table
 

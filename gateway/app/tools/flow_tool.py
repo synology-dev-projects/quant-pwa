@@ -11,9 +11,20 @@ from app.tools.registry import register_tool, record_tool_metric
 logger = logging.getLogger("quant.gateway.tools.flow")
 
 _FLOW_MEMORY_CACHE: Dict[str, Tuple[float, str]] = {}
-last_flow_table_var: ContextVar[Optional[str]] = ContextVar("last_flow_table_var", default=None)
+_LAST_EXECUTED_FLOW_RESULT: Dict[str, Tuple[float, str]] = {}
 CACHE_TTL_SECONDS = 300
 MAX_FLOW_CACHE_ENTRIES = 1024
+
+
+def get_last_flow_table() -> Optional[str]:
+    """Returns the most recently executed flow table result across threads (within 30s window)."""
+    now = time.time()
+    if _LAST_EXECUTED_FLOW_RESULT:
+        latest_key = max(_LAST_EXECUTED_FLOW_RESULT.keys(), key=lambda k: _LAST_EXECUTED_FLOW_RESULT[k][0])
+        ts, table = _LAST_EXECUTED_FLOW_RESULT[latest_key]
+        if now - ts < 30.0:
+            return table
+    return None
 
 
 def _store_flow_cache(cache_key: str, summary: str) -> None:
@@ -402,7 +413,7 @@ def get_unusual_flow(
             ts, cached_table = _FLOW_MEMORY_CACHE[cache_key]
             if now - ts < CACHE_TTL_SECONDS:
                 record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="HIT", retry_count=0)
-                last_flow_table_var.set(cached_table)
+                _LAST_EXECUTED_FLOW_RESULT["latest"] = (time.time(), cached_table)
                 return cached_table
 
         df_flow = pd.DataFrame()
@@ -438,7 +449,7 @@ def get_unusual_flow(
             cache_status="MISS",
             retry_count=0
         )
-        last_flow_table_var.set(table_result)
+        _LAST_EXECUTED_FLOW_RESULT["latest"] = (time.time(), table_result)
         return table_result
 
     # Specific Tickers Query
@@ -448,7 +459,7 @@ def get_unusual_flow(
         ts, cached_table = _FLOW_MEMORY_CACHE[cache_key]
         if now - ts < CACHE_TTL_SECONDS:
             record_tool_metric(latency_ms=(time.perf_counter() - t0) * 1000.0, cache_status="HIT", retry_count=0)
-            last_flow_table_var.set(cached_table)
+            _LAST_EXECUTED_FLOW_RESULT["latest"] = (time.time(), cached_table)
             return cached_table
 
     df_flow = pd.DataFrame()
@@ -486,5 +497,5 @@ def get_unusual_flow(
         cache_status="MISS",
         retry_count=0
     )
-    last_flow_table_var.set(table_result)
+    _LAST_EXECUTED_FLOW_RESULT["latest"] = (time.time(), table_result)
     return table_result
