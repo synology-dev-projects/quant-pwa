@@ -95,13 +95,17 @@ MCP_TOOLS = [
     },
     {
         "name": "get_unusual_flow",
-        "description": "Queries high-conviction institutional unusual options flow, block trades, sweeps, and smart money positioning for single or multiple stock tickers.",
+        "description": "Queries high-conviction institutional unusual options flow, block trades, sweeps, and smart money positioning for single or multiple stock tickers or market-wide dates.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "ticker": {
                     "type": "string",
-                    "description": "Single ticker or comma-separated list of stock tickers (e.g. SPY, NVDA, AAPL)."
+                    "description": "Single ticker or comma-separated list of stock tickers (e.g. SPY, NVDA, AAPL) or date/market keywords ('2026-08-21', 'yesterday', 'latest', 'MARKET')."
+                },
+                "trade_date": {
+                    "type": "string",
+                    "description": "Optional specific trade date (e.g. '2026-08-21', 'yesterday', 'latest')."
                 },
                 "lookback_days": {
                     "type": "integer",
@@ -248,9 +252,10 @@ async def handle_rpc_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
 
             elif tool_name == "get_unusual_flow":
                 ticker = args.get("ticker", "SPY")
+                trade_date = args.get("trade_date")
                 lookback = int(args.get("lookback_days", 30))
                 min_prem = float(args.get("min_premium", 0.0))
-                res = get_unusual_flow(ticker=ticker, lookback_days=lookback, min_premium=min_prem)
+                res = get_unusual_flow(ticker=ticker, trade_date=trade_date, lookback_days=lookback, min_premium=min_prem)
                 if inspect.isawaitable(res):
                     res = await res
                 return {

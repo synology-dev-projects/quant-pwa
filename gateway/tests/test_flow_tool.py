@@ -20,6 +20,7 @@ from app.tools.flow_tool import (
     get_unusual_flow,
     _format_dollar_amount,
     _format_single_flow_summary,
+    format_market_wide_flow_summary,
     _FLOW_MEMORY_CACHE,
     CACHE_TTL_SECONDS
 )
@@ -473,4 +474,165 @@ def test_multi_ticker_resolution_and_deduplication(mock_load_config, mock_get_fl
     assert "[INSTITUTIONAL UNUSUAL OPTIONS FLOW: GOOGL (Last 30 Days)]" in res
     assert "$4.20M" in res
     assert "Bearish" in res
+
+
+def test_format_market_wide_flow_summary():
+    sample_df = pd.DataFrame([
+        {
+            "FLOW_ID": "f1",
+            "TRADE_DATE": "2026-08-21",
+            "SYMBOL": "NVDA",
+            "ORDER_TYPE": "BUY_CALL",
+            "STRIKE_PRICE": 130.0,
+            "STRIKE_OTM_PCT": 2.0,
+            "EXPIRATION_DATE": "2026-09-18",
+            "OPEN_INTEREST": 15000,
+            "IS_UNUSUAL_OI": 1,
+            "PREMIUM": 25_000_000.0,
+            "NET_SCORE": 2.0,
+            "CREATED_AT": datetime.now()
+        },
+        {
+            "FLOW_ID": "f2",
+            "TRADE_DATE": "2026-08-21",
+            "SYMBOL": "TSLA",
+            "ORDER_TYPE": "BUY_PUT",
+            "STRIKE_PRICE": 200.0,
+            "STRIKE_OTM_PCT": -5.0,
+            "EXPIRATION_DATE": "2026-09-18",
+            "OPEN_INTEREST": 8000,
+            "IS_UNUSUAL_OI": 0,
+            "PREMIUM": 10_000_000.0,
+            "NET_SCORE": -1.5,
+            "CREATED_AT": datetime.now()
+        }
+    ])
+
+    summary = format_market_wide_flow_summary(sample_df, "2026-08-21")
+    assert "[MARKET-WIDE UNUSUAL OPTIONS FLOW: 2026-08-21]" in summary
+    assert "• Total Flow Volume: $35.00M" in summary
+    assert "Call Flow: $25.00M [71.4%]" in summary
+    assert "Put Flow: $10.00M [28.6%]" in summary
+    assert "• Market Sentiment Score:" in summary
+    assert "Net Directional Bias: BULLISH" in summary
+    assert "• Top Bullish Tickers (Call Volume):" in summary
+    assert "NVDA: $25.00M" in summary
+    assert "• Top Bearish Tickers (Put Volume):" in summary
+    assert "TSLA: $10.00M" in summary
+    assert "• Top Whale Sweeps & Block Prints:" in summary
+    assert "NVDA (2026-08-21): $25.00M BUY CALL | Strike: $130.00 (+2.0%) | Exp: 2026-09-18 | OI: 15,000 ⚠️" in summary
+
+    # Empty DataFrame fallback
+    summary_empty = format_market_wide_flow_summary(pd.DataFrame(), "2026-08-21")
+    assert summary_empty == "[MARKET-WIDE UNUSUAL OPTIONS FLOW: 2026-08-21] No qualifying institutional options flow recorded for this trading date."
+
+
+@patch("common_lib.connectors.postgres.get_unusual_flow")
+@patch("common_lib.config.main_config.load_config")
+def test_smart_date_input_detection(mock_load_config, mock_get_flow):
+    mock_config = MagicMock()
+    mock_config.db_type = "postgres"
+    mock_load_config.return_value = mock_config
+    mock_get_flow.return_value = pd.DataFrame()
+
+    # 1. ISO date: /flow 2026-08-21
+    get_unusual_flow(ticker="/flow 2026-08-21")
+    assert mock_get_flow.call_count == 1
+    mock_get_flow.assert_called_with(
+        config=mock_config,
+        symbols=None,
+        trade_date="2026-08-21",
+        min_premium=0.0,
+        limit=100
+    )
+
+    mock_get_flow.reset_mock()
+
+    # 2. Keyword 'yesterday': /flow yesterday
+    get_unusual_flow(ticker="/flow yesterday")
+    assert mock_get_flow.call_count == 1
+    mock_get_flow.assert_called_with(
+        config=mock_config,
+        symbols=None,
+        trade_date="YESTERDAY",
+        min_premium=0.0,
+        limit=100
+    )
+
+    mock_get_flow.reset_mock()
+
+    # 3. Keyword 'latest': /flow latest
+    get_unusual_flow(ticker="/flow latest")
+    assert mock_get_flow.call_count == 1
+    mock_get_flow.assert_called_with(
+        config=mock_config,
+        symbols=None,
+        trade_date="LATEST",
+        min_premium=0.0,
+        limit=100
+    )
+
+    mock_get_flow.reset_mock()
+
+    # 4. Slash date format: /flow 8/21
+    get_unusual_flow(ticker="/flow 8/21")
+    assert mock_get_flow.call_count == 1
+    mock_get_flow.assert_called_with(
+        config=mock_config,
+        symbols=None,
+        trade_date="8/21",
+        min_premium=0.0,
+        limit=100
+    )
+
+    mock_get_flow.reset_mock()
+
+    # 5. Keyword 'MARKET'
+    get_unusual_flow(ticker="/flow MARKET")
+    assert mock_get_flow.call_count == 1
+    mock_get_flow.assert_called_with(
+        config=mock_config,
+        symbols=None,
+        trade_date="MARKET",
+        min_premium=0.0,
+        limit=100
+    )
+
+
+@patch("common_lib.connectors.postgres.get_unusual_flow")
+@patch("common_lib.config.main_config.load_config")
+def test_market_wide_cache_retrieval(mock_load_config, mock_get_flow):
+    mock_config = MagicMock()
+    mock_config.db_type = "postgres"
+    mock_load_config.return_value = mock_config
+
+    mock_df = pd.DataFrame([
+        {
+            "FLOW_ID": "m1",
+            "TRADE_DATE": "2026-08-21",
+            "SYMBOL": "SPY",
+            "ORDER_TYPE": "BUY_CALL",
+            "STRIKE_PRICE": 550.0,
+            "STRIKE_OTM_PCT": 1.0,
+            "EXPIRATION_DATE": "2026-09-18",
+            "OPEN_INTEREST": 50000,
+            "IS_UNUSUAL_OI": 0,
+            "PREMIUM": 50_000_000.0,
+            "NET_SCORE": 2.0,
+            "CREATED_AT": datetime.now()
+        }
+    ])
+    mock_get_flow.return_value = mock_df
+
+    # First call: cache miss
+    res1 = get_unusual_flow(ticker="2026-08-21", min_premium=10000.0)
+    assert mock_get_flow.call_count == 1
+    assert "MARKET_DATE_2026-08-21_10000.0" in _FLOW_MEMORY_CACHE
+    assert "[MARKET-WIDE UNUSUAL OPTIONS FLOW: 2026-08-21]" in res1
+
+    # Second call: cache hit
+    res2 = get_unusual_flow(ticker="2026-08-21", min_premium=10000.0)
+    assert mock_get_flow.call_count == 1
+    assert res1 == res2
+
 
