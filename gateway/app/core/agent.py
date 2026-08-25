@@ -360,8 +360,17 @@ async def stream_chat_response(
     stream_start_time = None
     stream_end_time = None
 
-    if response and response.text:
-        words = response.text.split(" ")
+    final_text = ""
+    if response and response.text and response.text.strip():
+        final_text = response.text
+    else:
+        from app.tools.flow_tool import last_flow_table_var
+        flow_table = last_flow_table_var.get()
+        if flow_table:
+            final_text = flow_table
+
+    if final_text:
+        words = final_text.split(" ")
         token_count = len(words)
         stream_start_time = time.perf_counter()
         
