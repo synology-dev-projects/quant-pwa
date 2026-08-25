@@ -2034,3 +2034,138 @@ input:checked + .slider:before {
     font-size: 11.5px;
   }
 }
+
+/* ==========================================================================
+   Bloomberg Terminal Quantitative Options Flow Table
+   ========================================================================== */
+.quant-table-wrapper {
+  width: 100%;
+  margin: 14px 0 10px 0;
+  overflow-x: auto;
+  border-radius: 6px;
+  border: 1px solid #1e293b;
+  background-color: #0c1017;
+  box-shadow: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.quant-table-wrapper::-webkit-scrollbar {
+  height: 5px;
+}
+.quant-table-wrapper::-webkit-scrollbar-track {
+  background: #080c12;
+}
+.quant-table-wrapper::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 2px;
+}
+
+.quant-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: left;
+}
+
+.quant-table th {
+  background-color: #131b26;
+  color: #94a3b8;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 10px;
+  border-bottom: 1px solid #1e293b;
+  border-right: 1px solid #16202e;
+  white-space: nowrap;
+}
+
+.quant-table th.th-accent {
+  color: #fbbf24;
+}
+
+.quant-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #16202e;
+  border-right: 1px solid #131b26;
+  color: #e2e8f0;
+  white-space: nowrap;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.quant-table tbody tr:hover {
+  background-color: #111827;
+}
+
+.quant-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Bloomberg Terminal Badges & Tags */
+.bb-ticker {
+  font-weight: 700;
+  color: #60a5fa;
+  letter-spacing: 0.02em;
+}
+
+.bb-action {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.bb-action-bull {
+  background-color: #064e3b;
+  color: #34d399;
+  border: 1px solid #059669;
+}
+
+.bb-action-bear {
+  background-color: #450a0a;
+  color: #f87171;
+  border: 1px solid #b91c1c;
+}
+
+.bb-prem {
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.bb-tag {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-left: 4px;
+  text-transform: uppercase;
+}
+
+.bb-tag-whale {
+  background-color: #451a03;
+  color: #fbbf24;
+  border: 1px solid #d97706;
+}
+
+.bb-tag-large {
+  background-color: #312e81;
+  color: #a5b4fc;
+  border: 1px solid #4f46e5;
+}
+
+.bb-otm-pos {
+  color: #34d399;
+}
+
+.bb-otm-neg {
+  color: #f87171;
+}
+

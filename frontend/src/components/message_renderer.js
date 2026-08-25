@@ -1,6 +1,139 @@
 import { QuantChart } from './quant_chart.js';
 import { AppState } from '../state.js';
 
+function formatTableCell(content, isHeader) {
+  if (isHeader) {
+    let hdr = content.trim().toUpperCase();
+    if (hdr.includes("TAG") || hdr.includes("SIZE")) {
+      return `<th class="th-accent">${content}</th>`;
+    }
+    return `<th>${content}</th>`;
+  }
+  
+  let trimmed = content.trim();
+  
+  // 1. Binary Action Formatting (Green = Bullish, Red = Bearish)
+  if (/^(?:<strong>)?(?:BUY[_\s]+CALL|CALL)(?:<\/strong>)?$/i.test(trimmed)) {
+    return `<td><span class="bb-action bb-action-bull">BUY CALL</span></td>`;
+  }
+  if (/^(?:<strong>)?(?:SELL[_\s]+PUT)(?:<\/strong>)?$/i.test(trimmed)) {
+    return `<td><span class="bb-action bb-action-bull">SELL PUT</span></td>`;
+  }
+  if (/^(?:<strong>)?(?:BUY[_\s]+PUT|PUT)(?:<\/strong>)?$/i.test(trimmed)) {
+    return `<td><span class="bb-action bb-action-bear">BUY PUT</span></td>`;
+  }
+  if (/^(?:<strong>)?(?:SELL[_\s]+CALL)(?:<\/strong>)?$/i.test(trimmed)) {
+    return `<td><span class="bb-action bb-action-bear">SELL CALL</span></td>`;
+  }
+  
+  // 2. Format Ticker Symbols (e.g. **AMD** or AMD)
+  if (/^<strong>[A-Z0-9\.\/]{1,6}<\/strong>$/i.test(trimmed) || /^[A-Z0-9\.\/]{1,6}$/.test(trimmed)) {
+    const rawSym = trimmed.replace(/<\/?strong>/gi, '');
+    return `<td><span class="bb-ticker">${rawSym}</span></td>`;
+  }
+  
+  // 3. Format Premium with Whale / Large Size Indicator
+  const premMatch = trimmed.match(/^\$?([\d\.,]+)\s*([KMB])?$/i) || trimmed.match(/^<strong>\$?([\d\.,]+)\s*([KMB])?<\/strong>$/i);
+  if (premMatch || trimmed.startsWith("$")) {
+    const rawPrem = trimmed.replace(/<\/?strong>/gi, '');
+    let tagHtml = '';
+    
+    // Parse numeric value in millions
+    if (premMatch) {
+      const num = parseFloat(premMatch[1].replace(/,/g, ''));
+      const unit = (premMatch[2] || '').toUpperCase();
+      let valInM = 0;
+      if (unit === 'B') valInM = num * 1000;
+      else if (unit === 'M') valInM = num;
+      else if (unit === 'K') valInM = num / 1000;
+      else valInM = num / 1000000; // Raw integer dollar amount (e.g. $5,000,000)
+      
+      if (valInM >= 5.0) {
+        tagHtml = ` <span class="bb-tag bb-tag-whale">[WHALE]</span>`;
+      } else if (valInM >= 1.0) {
+        tagHtml = ` <span class="bb-tag bb-tag-large">[LARGE]</span>`;
+      }
+    }
+    
+    return `<td><span class="bb-prem">${rawPrem}</span>${tagHtml}</td>`;
+  }
+  
+  // 4. Format OTM % (e.g. +8.0% or -2.0%)
+  if (/^\+[\d\.]+%$/.test(trimmed)) {
+    return `<td><span class="bb-otm-pos">${trimmed}</span></td>`;
+  }
+  if (/^\-[\d\.]+%$/.test(trimmed)) {
+    return `<td><span class="bb-otm-neg">${trimmed}</span></td>`;
+  }
+
+  return `<td>${content}</td>`;
+}
+
+function buildTableHtml(tableRows) {
+  if (!tableRows || tableRows.length === 0) return '';
+  let thead = '';
+  let tbody = '';
+
+  tableRows.forEach(row => {
+    const cellsHtml = row.cells.map(c => formatTableCell(c, row.isHeader)).join('');
+    if (row.isHeader) {
+      thead += `<tr>${cellsHtml}</tr>`;
+    } else {
+      tbody += `<tr>${cellsHtml}</tr>`;
+    }
+  });
+
+  return `
+    <div class="quant-table-wrapper">
+      <table class="quant-table">
+        ${thead ? `<thead>${thead}</thead>` : ''}
+        ${tbody ? `<tbody>${tbody}</tbody>` : ''}
+      </table>
+    </div>
+  `;
+}
+
+function parseMarkdownTables(text) {
+  const lines = text.split('\n');
+  const result = [];
+  let inTable = false;
+  let tableRows = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('|') && line.endsWith('|')) {
+      // Check if it's a separator line (e.g. | :--- | :--- |)
+      if (/^\|(?:\s*:?-+:?\s*\|)+$/.test(line)) {
+        if (tableRows.length > 0) {
+          tableRows[tableRows.length - 1].isHeader = true;
+        }
+        continue;
+      }
+      
+      const cells = line
+        .slice(1, -1)
+        .split('|')
+        .map(c => c.trim());
+      
+      tableRows.push({ cells, isHeader: false });
+      inTable = true;
+    } else {
+      if (inTable) {
+        result.push(buildTableHtml(tableRows));
+        tableRows = [];
+        inTable = false;
+      }
+      result.push(lines[i]);
+    }
+  }
+
+  if (inTable && tableRows.length > 0) {
+    result.push(buildTableHtml(tableRows));
+  }
+
+  return result.join('\n');
+}
+
 export function renderMarkdown(text) {
   if (!text) return '';
 
@@ -49,9 +182,19 @@ export function renderMarkdown(text) {
   html = html.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>');
   html = html.replace(/<\/ul>\s*<ul>/g, '');
 
-  // Line breaks & paragraphs
-  html = html.replace(/\n\n/g, '<p></p>');
-  html = html.replace(/\n/g, '<br/>');
+  // Parse Markdown Tables before line break processing
+  html = parseMarkdownTables(html);
+
+  // Line breaks & paragraphs (protect table blocks from broken <br/> tags)
+  const parts = html.split(/(<div class="quant-table-wrapper">[\s\S]*?<\/div>)/g);
+  html = parts.map(part => {
+    if (part.startsWith('<div class="quant-table-wrapper">')) {
+      return part;
+    }
+    return part
+      .replace(/\n\n/g, '<p></p>')
+      .replace(/\n/g, '<br/>');
+  }).join('');
 
   return html;
 }
