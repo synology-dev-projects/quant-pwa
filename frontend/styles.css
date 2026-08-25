@@ -2049,106 +2049,6 @@ input:checked + .slider:before {
   box-sizing: border-box;
 }
 
-/* Toolbar */
-.quant-table-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background-color: #111722;
-  border-bottom: 1px solid #1e293b;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.qt-toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.qt-brand-tag {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: #94a3b8;
-  text-transform: uppercase;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.qt-brand-tag::before {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #fbbf24;
-  box-shadow: 0 0 6px rgba(251, 191, 36, 0.6);
-}
-
-.qt-total-badge {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.1);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  border-radius: 4px;
-  padding: 1px 6px;
-  letter-spacing: 0.04em;
-}
-
-.qt-pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.qt-page-btn {
-  background: #17202e;
-  border: 1px solid #28354b;
-  color: #cbd5e1;
-  border-radius: 4px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-
-.qt-page-btn:hover:not(:disabled) {
-  background: #233045;
-  border-color: #3b82f6;
-  color: #ffffff;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.25);
-}
-
-.qt-page-btn:active:not(:disabled) {
-  transform: scale(0.96);
-}
-
-.qt-page-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  border-color: #1e293b;
-  color: #64748b;
-  background: #0d131d;
-}
-
-.qt-page-indicator {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: #94a3b8;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 /* Scroll Container */
 .quant-table-scroll {
   width: 100%;
@@ -2189,34 +2089,32 @@ input:checked + .slider:before {
   white-space: nowrap;
 }
 
-.quant-table-th-sortable {
+th.sortable {
   cursor: pointer;
   user-select: none;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.quant-table-th-sortable:hover {
-  background-color: #1a2433;
+th.sortable:hover {
+  background-color: #1e293b;
   color: #f1f5f9;
 }
 
-.quant-table-th-sortable.sorted {
-  background-color: #162130;
+th .sort-icon {
+  font-size: 9px;
+  margin-left: 4px;
+  color: #64748b;
+  display: inline-block;
+}
+
+th.sort-asc .sort-icon::after {
+  content: ' ▲';
   color: #60a5fa;
 }
 
-.th-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.th-sort-icon {
-  font-size: 10px;
-  color: #fbbf24;
-  min-width: 10px;
-  display: inline-block;
+th.sort-desc .sort-icon::after {
+  content: ' ▼';
+  color: #60a5fa;
 }
 
 .quant-table th.th-accent {
@@ -2239,6 +2137,82 @@ input:checked + .slider:before {
 
 .quant-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* Bloomberg Pagination Toolbar */
+.bb-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #0c1017;
+  border: 1px solid #1e293b;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.bb-page-btn {
+  background: #131b26;
+  color: #94a3b8;
+  border: 1px solid #1e293b;
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.bb-page-btn:hover:not(:disabled) {
+  background: #1e293b;
+  color: #f1f5f9;
+}
+
+.bb-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bb-page-info {
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.bb-page-nums {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bb-page-num {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid transparent;
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  transition: all 0.15s ease;
+}
+
+.bb-page-num:hover:not(.active) {
+  background: #1e293b;
+  color: #f1f5f9;
+}
+
+.bb-page-num.active {
+  background: #1e293b;
+  color: #60a5fa;
+  border-color: #3b82f6;
+  font-weight: 700;
 }
 
 /* Bloomberg Terminal Badges & Tags */
