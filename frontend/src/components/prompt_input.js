@@ -15,17 +15,15 @@ const DEFAULT_TOOLS = [
   },
   {
     name: 'get_unusual_flow',
-    display: '/flow SPY',
+    display: '/flow',
     icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
     title: 'Institutional Options Flow',
-    description: 'Queries high-conviction institutional options flow, block trades, and sweeps for specific tickers (e.g. /flow NVDA) or market-wide for a specific date (e.g. /flow 2026-08-21).',
-    promptTemplate: '/flow SPY',
+    description: 'Queries 100% complete institutional options flow prints as an interactive paginated Bloomberg table (e.g. /flow Friday, /flow 2026-08-21, /flow 2026-08-17 to 2026-08-21). Defaults to latest session.',
+    promptTemplate: '/flow',
     params: [
-      { name: 'ticker', type: 'string', required: false, desc: 'Stock ticker (e.g. SPY, NVDA, AAPL) or date (e.g. 2026-08-21, yesterday)' },
-      { name: 'trade_date', type: 'string', required: false, desc: 'Specific trading date in YYYY-MM-DD format (default: latest session)' },
-      { name: 'min_premium', type: 'float', required: false, desc: 'Minimum trade premium in USD' }
+      { name: 'date', type: 'string', required: false, desc: 'Market session date or range (e.g. 2026-08-21, Friday, 2026-08-17 to 2026-08-21). Defaults to latest session.' }
     ],
-    example: '/flow NVDA or /flow 2026-08-21'
+    example: '/flow Friday or /flow 2026-08-21'
   },
   {
     name: 'get_strike_distribution',
@@ -330,7 +328,7 @@ export class PromptInput {
   processMcpTools(mcpTools) {
     const iconMap = {
       'get_gexdex': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`, display: '/gex SPY', example: '/gex NVDA' },
-      'get_unusual_flow': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`, display: '/flow SPY', example: '/flow NVDA or /flow 2026-08-21' },
+      'get_unusual_flow': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`, display: '/flow', example: '/flow Friday or /flow 2026-08-21' },
       'get_strike_distribution': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`, display: '/strikes NVDA', example: '/strikes TSLA' },
       'get_market_status': { icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`, display: '/market', example: '/market' }
     };
