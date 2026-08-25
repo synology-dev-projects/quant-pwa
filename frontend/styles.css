@@ -2036,33 +2036,140 @@ input:checked + .slider:before {
 }
 
 /* ==========================================================================
-   Bloomberg Terminal Quantitative Options Flow Table
+   Bloomberg Terminal Quantitative Options Flow Table (Interactive & Paginated)
    ========================================================================== */
 .quant-table-wrapper {
   width: 100%;
   margin: 14px 0 10px 0;
-  overflow-x: auto;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid #1e293b;
   background-color: #0c1017;
-  box-shadow: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Toolbar */
+.quant-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: #111722;
+  border-bottom: 1px solid #1e293b;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.qt-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qt-brand-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.qt-brand-tag::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.6);
+}
+
+.qt-total-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 4px;
+  padding: 1px 6px;
+  letter-spacing: 0.04em;
+}
+
+.qt-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qt-page-btn {
+  background: #17202e;
+  border: 1px solid #28354b;
+  color: #cbd5e1;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.qt-page-btn:hover:not(:disabled) {
+  background: #233045;
+  border-color: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.25);
+}
+
+.qt-page-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.qt-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: #1e293b;
+  color: #64748b;
+  background: #0d131d;
+}
+
+.qt-page-indicator {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Scroll Container */
+.quant-table-scroll {
+  width: 100%;
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
-.quant-table-wrapper::-webkit-scrollbar {
+.quant-table-scroll::-webkit-scrollbar {
   height: 5px;
 }
-.quant-table-wrapper::-webkit-scrollbar-track {
+.quant-table-scroll::-webkit-scrollbar-track {
   background: #080c12;
 }
-.quant-table-wrapper::-webkit-scrollbar-thumb {
+.quant-table-scroll::-webkit-scrollbar-thumb {
   background: #334155;
   border-radius: 2px;
 }
 
 .quant-table {
   width: 100%;
-  min-width: 520px;
+  min-width: 600px;
   border-collapse: collapse;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -2080,6 +2187,36 @@ input:checked + .slider:before {
   border-bottom: 1px solid #1e293b;
   border-right: 1px solid #16202e;
   white-space: nowrap;
+}
+
+.quant-table-th-sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.quant-table-th-sortable:hover {
+  background-color: #1a2433;
+  color: #f1f5f9;
+}
+
+.quant-table-th-sortable.sorted {
+  background-color: #162130;
+  color: #60a5fa;
+}
+
+.th-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.th-sort-icon {
+  font-size: 10px;
+  color: #fbbf24;
+  min-width: 10px;
+  display: inline-block;
 }
 
 .quant-table th.th-accent {
@@ -2168,4 +2305,5 @@ input:checked + .slider:before {
 .bb-otm-neg {
   color: #f87171;
 }
+
 

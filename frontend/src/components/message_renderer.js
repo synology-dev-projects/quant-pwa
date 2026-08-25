@@ -1,6 +1,53 @@
 import { QuantChart } from './quant_chart.js';
 import { AppState } from '../state.js';
 
+function parseSortValue(rawText) {
+  if (!rawText) return -Infinity;
+  const clean = String(rawText).replace(/<[^>]+>/g, '').trim();
+
+  // 1. Currency / Dollar amounts (e.g. $25.00M, $780.00K, $1.85B, $500.00)
+  const premMatch = clean.match(/^\$?([\d\.,]+)\s*([KMB])?$/i);
+  if (premMatch) {
+    const num = parseFloat(premMatch[1].replace(/,/g, ''));
+    const unit = (premMatch[2] || '').toUpperCase();
+    if (!isNaN(num)) {
+      if (unit === 'B') return num * 1_000_000_000;
+      if (unit === 'M') return num * 1_000_000;
+      if (unit === 'K') return num * 1_000;
+      return num;
+    }
+  }
+
+  // 2. Percentage values (e.g. +2.0%, -5.5%)
+  const pctMatch = clean.match(/^([+-]?[\d\.]+)\s*%$/);
+  if (pctMatch) {
+    const p = parseFloat(pctMatch[1]);
+    if (!isNaN(p)) return p;
+  }
+
+  // 3. Integer with comma / OI (e.g. 15,000, 15,000 ⚠️)
+  const oiMatch = clean.match(/^([\d,]+)/);
+  if (oiMatch && clean.replace(/[^0-9,]/g, '').length === clean.length) {
+    const oi = parseInt(oiMatch[1].replace(/,/g, ''), 10);
+    if (!isNaN(oi)) return oi;
+  }
+
+  // 4. ISO Date (e.g. 2026-08-21)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+    const ts = Date.parse(clean);
+    if (!isNaN(ts)) return ts;
+  }
+
+  // 5. Raw numeric float
+  const f = parseFloat(clean.replace(/,/g, ''));
+  if (!isNaN(f) && String(f) === clean.replace(/,/g, '')) {
+    return f;
+  }
+
+  // Default string comparison
+  return clean.toLowerCase();
+}
+
 function formatTableCell(content, isHeader) {
   if (isHeader) {
     let hdr = content.trim().toUpperCase();
@@ -71,26 +118,198 @@ function formatTableCell(content, isHeader) {
 
 function buildTableHtml(tableRows) {
   if (!tableRows || tableRows.length === 0) return '';
-  let thead = '';
-  let tbody = '';
+  
+  const headerRow = tableRows.find(r => r.isHeader) || tableRows[0];
+  const dataRows = tableRows.filter(r => r !== headerRow && !r.isHeader);
+  const totalRowsCount = dataRows.length;
+  
+  const tableId = `bbtbl-${Math.random().toString(36).substring(2, 9)}`;
 
-  tableRows.forEach(row => {
-    const cellsHtml = row.cells.map(c => formatTableCell(c, row.isHeader)).join('');
-    if (row.isHeader) {
-      thead += `<tr>${cellsHtml}</tr>`;
-    } else {
-      tbody += `<tr>${cellsHtml}</tr>`;
-    }
+  // Headers HTML
+  const thsHtml = headerRow.cells.map((c, idx) => {
+    let hdr = c.trim().toUpperCase();
+    let accentClass = (hdr.includes("TAG") || hdr.includes("SIZE") || hdr.includes("PREMIUM")) ? ' th-accent' : '';
+    return `<th class="quant-table-th-sortable${accentClass}" data-col-idx="${idx}">
+      <div class="th-content">
+        <span>${c}</span>
+        <span class="th-sort-icon"></span>
+      </div>
+    </th>`;
+  }).join('');
+
+  // Initial first 20 rows HTML for fast SSR/render
+  const initialSlice = dataRows.slice(0, 20);
+  let tbodyHtml = '';
+  initialSlice.forEach(row => {
+    const cellsHtml = row.cells.map(c => formatTableCell(c, false)).join('');
+    tbodyHtml += `<tr>${cellsHtml}</tr>`;
   });
 
+  const rawDataPayload = JSON.stringify({
+    headers: headerRow.cells,
+    rows: dataRows.map(r => r.cells)
+  }).replace(/</g, '\\u003c');
+
   return `
-    <div class="quant-table-wrapper">
-      <table class="quant-table">
-        ${thead ? `<thead>${thead}</thead>` : ''}
-        ${tbody ? `<tbody>${tbody}</tbody>` : ''}
-      </table>
+    <div class="quant-table-wrapper" id="${tableId}" data-total-rows="${totalRowsCount}">
+      <div class="quant-table-toolbar">
+        <div class="qt-toolbar-left">
+          <span class="qt-brand-tag">BLOOMBERG FLOW</span>
+          <span class="qt-total-badge">${totalRowsCount} PRINTS</span>
+        </div>
+        <div class="qt-pagination-controls">
+          <button type="button" class="qt-page-btn qt-prev-btn" title="Previous Page">◄ Prev</button>
+          <span class="qt-page-indicator">Page 1 of ${Math.max(1, Math.ceil(totalRowsCount / 20))}</span>
+          <button type="button" class="qt-page-btn qt-next-btn" title="Next Page">Next ►</button>
+        </div>
+      </div>
+      <div class="quant-table-scroll">
+        <table class="quant-table">
+          <thead><tr>${thsHtml}</tr></thead>
+          <tbody>${tbodyHtml}</tbody>
+        </table>
+      </div>
+      <script type="application/json" class="tbl-payload">${rawDataPayload}</script>
     </div>
   `;
+}
+
+export function initQuantTables(container = document) {
+  const wrappers = container.querySelectorAll('.quant-table-wrapper');
+  wrappers.forEach(wrapper => {
+    if (wrapper.dataset.initialized === 'true') return;
+    
+    const payloadEl = wrapper.querySelector('.tbl-payload');
+    if (!payloadEl) return;
+
+    let tableData;
+    try {
+      tableData = JSON.parse(payloadEl.textContent);
+    } catch (e) {
+      return;
+    }
+
+    const { headers, rows } = tableData;
+    if (!rows || rows.length === 0) return;
+
+    // Find default sort column (prefer PREMIUM or PREM, default descending)
+    let sortCol = headers.findIndex(h => /PREMIUM|PREM/i.test(h));
+    if (sortCol === -1) sortCol = 0;
+    let sortDir = 'desc';
+
+    let currentPage = 1;
+    const pageSize = 20;
+
+    // Pre-calculate sort keys for high performance
+    const processedRows = rows.map((r, originalIdx) => ({
+      cells: r,
+      sortKeys: r.map(c => parseSortValue(c)),
+      originalIdx
+    }));
+
+    const tbody = wrapper.querySelector('tbody');
+    const thEls = wrapper.querySelectorAll('.quant-table-th-sortable');
+    const prevBtn = wrapper.querySelector('.qt-prev-btn');
+    const nextBtn = wrapper.querySelector('.qt-next-btn');
+    const pageIndicator = wrapper.querySelector('.qt-page-indicator');
+
+    function applySortAndRender() {
+      // Sort rows
+      processedRows.sort((a, b) => {
+        const valA = a.sortKeys[sortCol];
+        const valB = b.sortKeys[sortCol];
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        }
+        if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+        return a.originalIdx - b.originalIdx;
+      });
+
+      const totalPages = Math.max(1, Math.ceil(processedRows.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      // Slice page
+      const startIdx = (currentPage - 1) * pageSize;
+      const pageRows = processedRows.slice(startIdx, startIdx + pageSize);
+
+      // Render table rows
+      let rowsHtml = '';
+      pageRows.forEach(row => {
+        const cellsHtml = row.cells.map(c => formatTableCell(c, false)).join('');
+        rowsHtml += `<tr>${cellsHtml}</tr>`;
+      });
+      tbody.innerHTML = rowsHtml;
+
+      // Update Toolbar
+      if (pageIndicator) {
+        pageIndicator.textContent = `Page ${currentPage} of ${totalPages}`;
+      }
+      if (prevBtn) {
+        prevBtn.disabled = currentPage <= 1;
+      }
+      if (nextBtn) {
+        nextBtn.disabled = currentPage >= totalPages;
+      }
+
+      // Update Sort Icons
+      thEls.forEach((th, idx) => {
+        const icon = th.querySelector('.th-sort-icon');
+        if (idx === sortCol) {
+          th.classList.add('sorted');
+          if (icon) icon.textContent = sortDir === 'asc' ? ' ▲' : ' ▼';
+        } else {
+          th.classList.remove('sorted');
+          if (icon) icon.textContent = '';
+        }
+      });
+    }
+
+    // Attach Header Click Events (Click to Sort)
+    thEls.forEach((th) => {
+      th.addEventListener('click', () => {
+        const colIdx = parseInt(th.dataset.colIdx, 10);
+        if (sortCol === colIdx) {
+          sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortCol = colIdx;
+          sortDir = 'desc';
+        }
+        currentPage = 1;
+        applySortAndRender();
+      });
+    });
+
+    // Attach Pagination Events
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        if (currentPage > 1) {
+          currentPage--;
+          applySortAndRender();
+        }
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        const totalPages = Math.max(1, Math.ceil(processedRows.length / pageSize));
+        if (currentPage < totalPages) {
+          currentPage++;
+          applySortAndRender();
+        }
+      });
+    }
+
+    // Initial render & mark initialized
+    applySortAndRender();
+    wrapper.dataset.initialized = 'true';
+  });
+}
+
+if (typeof window !== 'undefined') {
+  window.initQuantTables = initQuantTables;
 }
 
 function parseMarkdownTables(text) {
@@ -186,9 +405,9 @@ export function renderMarkdown(text) {
   html = parseMarkdownTables(html);
 
   // Line breaks & paragraphs (protect table blocks from broken <br/> tags)
-  const parts = html.split(/(<div class="quant-table-wrapper">[\s\S]*?<\/div>)/g);
+  const parts = html.split(/(<div class="quant-table-wrapper"[\s\S]*?<\/div>\s*<\/div>)/g);
   html = parts.map(part => {
-    if (part.startsWith('<div class="quant-table-wrapper">')) {
+    if (part.startsWith('<div class="quant-table-wrapper"')) {
       return part;
     }
     return part
@@ -243,6 +462,9 @@ export function createMessageElement(role, content, metadata = null, toolUiEvent
   const contentDiv = document.createElement('div');
   contentDiv.className = 'markdown-body';
   contentDiv.innerHTML = badgeHtml + renderMarkdown(cleanedContent.trim());
+
+  // Initialize interactive Bloomberg tables
+  initQuantTables(contentDiv);
 
   bubble.appendChild(contentDiv);
 
