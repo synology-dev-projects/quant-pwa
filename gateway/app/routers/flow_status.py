@@ -149,68 +149,23 @@ async def get_flow_status():
 @router.post("/sync", response_model=FlowSyncResponse)
 async def trigger_flow_sync(current_user: str = Depends(get_current_user)):
     """
-    Manually triggers the daily incremental options flow ingestion pipeline on the host.
+    Manually triggers the daily incremental options flow ingestion pipeline on the host or in-process.
     Auth protected (requires valid session token).
     """
     logger.info(f"User '{current_user}' triggered manual Options Flow sync.")
     
-    nas_script = "/volume2/homes/rachardv/scripts/run_daily_quant_pipelines.sh"
-    nas_pipeline_script = "/volume2/homes/rachardv/git-repos/master/unusual-option-flow-pipeline/src/scripts/daily_incremental.py"
-    nas_venv_python = "/volume2/homes/rachardv/git-repos/master/unusual-option-flow-pipeline/.venv/bin/python"
-
-    local_pipeline_script = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "unusual-option-flow-pipeline", "src", "scripts", "daily_incremental.py")
-    )
-
-    cmd = None
-    if os.path.exists(nas_script):
-        cmd = [nas_script]
-    elif os.path.exists(nas_venv_python) and os.path.exists(nas_pipeline_script):
-        cmd = [nas_venv_python, nas_pipeline_script]
-    elif os.path.exists(local_pipeline_script):
-        cmd = [sys.executable, local_pipeline_script]
-
-    if not cmd:
-        logger.warning("Could not find flow pipeline script on local path, attempting direct import.")
-        try:
-            from src.scripts.daily_incremental import run_daily_incremental
-            config = load_config()
-            rows = run_daily_incremental(config)
-            return FlowSyncResponse(
-                status="ok",
-                message=f"Options Flow sync completed successfully. Ingested {rows} records.",
-                rows_upserted=rows
-            )
-        except Exception as ex:
-            logger.error(f"Failed direct execution of daily_incremental: {ex}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Pipeline execution failed: {str(ex)}"
-            )
-
     try:
-        logger.info(f"Spawning sync command: {cmd}")
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        if proc.returncode != 0:
-            logger.error(f"Sync command failed with code {proc.returncode}: {proc.stderr}")
-            return FlowSyncResponse(
-                status="error",
-                message=f"Pipeline exited with code {proc.returncode}. Log: {proc.stderr[:200]}"
-            )
-        
+        from app.flow_pipeline.runner import run_daily_incremental
+        config = load_config()
+        rows = run_daily_incremental(config)
         return FlowSyncResponse(
             status="ok",
-            message="Options Flow incremental sync completed successfully."
-        )
-    except subprocess.TimeoutExpired:
-        logger.warning("Pipeline sync timed out after 120s.")
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Pipeline synchronization timed out."
+            message=f"Options Flow sync completed successfully. Ingested {rows} records.",
+            rows_upserted=rows
         )
     except Exception as ex:
-        logger.error(f"Unexpected error running sync command: {ex}")
+        logger.error(f"In-process pipeline sync failed: {ex}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Execution error: {str(ex)}"
+            detail=f"Pipeline execution failed: {str(ex)}"
         )

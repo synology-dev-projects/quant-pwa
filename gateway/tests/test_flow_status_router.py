@@ -94,12 +94,9 @@ def test_trigger_flow_sync_unauthorized():
     assert response.status_code == 401
 
 
-@patch("app.routers.flow_status.subprocess.run")
-def test_trigger_flow_sync_authorized(mock_subproc):
-    mock_proc = MagicMock()
-    mock_proc.returncode = 0
-    mock_proc.stdout = "Sync success"
-    mock_subproc.return_value = mock_proc
+@patch("app.flow_pipeline.runner.run_daily_incremental")
+def test_trigger_flow_sync_authorized(mock_run):
+    mock_run.return_value = 51
 
     token, _ = create_session_token()
     headers = {"Authorization": f"Bearer {token}"}
@@ -107,3 +104,4 @@ def test_trigger_flow_sync_authorized(mock_subproc):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
+    assert data["rows_upserted"] == 51
