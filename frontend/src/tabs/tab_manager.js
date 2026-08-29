@@ -1,7 +1,8 @@
 export class TabManager {
-  constructor(tabBarContainer, contentContainer) {
+  constructor(tabBarContainer, contentContainer, onTabChange = null) {
     this.tabBarContainer = tabBarContainer;
     this.contentContainer = contentContainer;
+    this.onTabChange = onTabChange;
     this.tabs = new Map();
     this.activeTabId = null;
   }
@@ -50,5 +51,9 @@ export class TabManager {
       }
       idx++;
     });
+
+    if (typeof this.onTabChange === 'function') {
+      this.onTabChange(tabId);
+    }
   }
 }
