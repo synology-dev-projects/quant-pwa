@@ -78,6 +78,7 @@ async def get_flow_status():
     """
     expected_market_day = get_last_market_day()
     expected_str = expected_market_day.strftime("%Y-%m-%d")
+    tomorrow_str = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
 
     try:
         config = load_config()
@@ -87,9 +88,9 @@ async def get_flow_status():
             COUNT(*) AS total_count,
             COUNT(*) FILTER (WHERE trade_date = :expected_day) AS expected_day_count
         FROM unusual_option_flow_te
-        WHERE trade_date <= CURRENT_DATE + INTERVAL '1 day';
+        WHERE trade_date <= :tomorrow_str;
         """
-        df = postgres.sql(config, sql_summary, params={"expected_day": expected_str})
+        df = postgres.sql(config, sql_summary, params={"expected_day": expected_str, "tomorrow_str": tomorrow_str})
         
         if df.empty:
             return FlowStatusResponse(
