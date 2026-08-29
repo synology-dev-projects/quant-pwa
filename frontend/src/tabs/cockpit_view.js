@@ -746,12 +746,14 @@ export class CockpitView {
     if (filter === 'all') return prints;
 
     return prints.filter(p => {
-      const oType = String(p.order_type || p.type || '').toUpperCase();
-      const prem = typeof p.premium === 'number' ? p.premium : parseFloat(String(p.premium || '0').replace(/[^0-9\.]/g, ''));
-      const isUnusual = Boolean(p.is_unusual_oi || String(p.open_interest || p.oi || '').includes('⚠️'));
+      const oType = String(p.ORDER_ACTION || p.ORDER_TYPE || p.order_type || p.type || '').toUpperCase();
+      const rawPrem = p.PREMIUM !== undefined ? p.PREMIUM : (p.premium !== undefined ? p.premium : 0);
+      const prem = typeof rawPrem === 'number' ? rawPrem : parseFloat(String(rawPrem || '0').replace(/[^0-9\.]/g, ''));
+      const rawOi = p.OPEN_INTEREST !== undefined ? p.OPEN_INTEREST : (p.open_interest !== undefined ? p.open_interest : (p.oi || ''));
+      const isUnusual = Boolean(p.IS_UNUSUAL_OI || p.is_unusual_oi || String(rawOi).includes('⚠️'));
 
       if (filter === 'whales') {
-        return prem >= 1_000_000 || String(p.tag || '').includes('WHALE') || String(p.tag || '').includes('LARGE');
+        return prem >= 1_000_000 || String(p.TAG || p.tag || '').includes('WHALE') || String(p.TAG || p.tag || '').includes('LARGE');
       }
       if (filter === 'calls') {
         return oType.includes('CALL');
@@ -769,17 +771,17 @@ export class CockpitView {
   buildFlowTableMarkdown(prints) {
     const headers = ['EXP', 'SYMBOL', 'TYPE', 'STRIKE', 'SPOT', '%OTM', 'PREMIUM', 'SIZE', 'OI', 'TAG'];
     const rows = prints.map(p => {
-      const exp = p.expiration || p.exp || '2026-09-18';
-      const sym = p.symbol || p.ticker || this.currentTicker || 'QUANT';
-      const type = (p.order_type || p.type || 'BUY CALL').replace(/_/g, ' ').toUpperCase();
+      const exp = p.EXPIRATION_DATE || p.EXPIRATION || p.expiration || p.exp || '2026-09-18';
+      const sym = p.SYMBOL || p.symbol || p.ticker || this.currentTicker || 'QUANT';
+      const type = String(p.ORDER_ACTION || p.ORDER_TYPE || p.order_type || p.type || 'BUY CALL').replace(/_/g, ' ').toUpperCase();
       
-      const rawStrike = p.strike_price || p.strike || 0;
+      const rawStrike = p.STRIKE_PRICE !== undefined ? p.STRIKE_PRICE : (p.STRIKE !== undefined ? p.STRIKE : (p.strike_price !== undefined ? p.strike_price : (p.strike || 0)));
       const strike = typeof rawStrike === 'number' ? `$${rawStrike.toFixed(2)}` : (String(rawStrike).startsWith('$') ? rawStrike : `$${rawStrike}`);
       
-      const rawSpot = p.spot_price || p.spot || 0;
+      const rawSpot = p.SPOT_PRICE !== undefined ? p.SPOT_PRICE : (p.SPOT !== undefined ? p.SPOT : (p.spot_price !== undefined ? p.spot_price : (p.spot || 0)));
       const spot = rawSpot ? (typeof rawSpot === 'number' ? `$${rawSpot.toFixed(2)}` : (String(rawSpot).startsWith('$') ? rawSpot : `$${rawSpot}`)) : '-';
       
-      const rawOtm = p.strike_otm_pct !== undefined ? p.strike_otm_pct : (p.otm_pct !== undefined ? p.otm_pct : p.otm);
+      const rawOtm = p.OTM_PCT !== undefined ? p.OTM_PCT : (p.STRIKE_OTM_PCT !== undefined ? p.STRIKE_OTM_PCT : (p.strike_otm_pct !== undefined ? p.strike_otm_pct : (p.otm_pct !== undefined ? p.otm_pct : p.otm)));
       let otm = '+0.0%';
       if (typeof rawOtm === 'number') {
         otm = `${rawOtm >= 0 ? '+' : ''}${rawOtm.toFixed(1)}%`;
@@ -787,20 +789,20 @@ export class CockpitView {
         otm = String(rawOtm);
       }
 
-      const rawPrem = p.premium !== undefined ? p.premium : 0;
+      const rawPrem = p.PREMIUM !== undefined ? p.PREMIUM : (p.premium !== undefined ? p.premium : 0);
       const prem = typeof rawPrem === 'number' ? this.formatDollarAmount(rawPrem) : String(rawPrem);
 
-      const rawSize = p.size !== undefined ? p.size : (p.volume || 1000);
+      const rawSize = p.VOLUME !== undefined ? p.VOLUME : (p.SIZE !== undefined ? p.SIZE : (p.size !== undefined ? p.size : (p.volume || 1000)));
       const size = typeof rawSize === 'number' ? rawSize.toLocaleString() : String(rawSize);
 
-      const rawOi = p.open_interest !== undefined ? p.open_interest : (p.oi || 5000);
+      const rawOi = p.OPEN_INTEREST !== undefined ? p.OPEN_INTEREST : (p.open_interest !== undefined ? p.open_interest : (p.oi || 5000));
       const oiNum = typeof rawOi === 'number' ? rawOi.toLocaleString() : String(rawOi);
-      const unusualTag = (p.is_unusual_oi || String(rawOi).includes('⚠️')) ? ' ⚠️' : '';
+      const unusualTag = (p.IS_UNUSUAL_OI || p.is_unusual_oi || String(rawOi).includes('⚠️')) ? ' ⚠️' : '';
       const oi = `${oiNum.replace('⚠️', '').trim()}${unusualTag}`;
 
-      let tag = p.tag;
+      let tag = p.TAG || p.tag;
       if (!tag) {
-        const numPrem = typeof rawPrem === 'number' ? rawPrem : 0;
+        const numPrem = typeof rawPrem === 'number' ? rawPrem : (parseFloat(String(rawPrem).replace(/[^0-9\.]/g, '')) || 0);
         if (numPrem >= 5_000_000) tag = '[WHALE]';
         else if (numPrem >= 1_000_000) tag = '[LARGE]';
         else tag = '-';
