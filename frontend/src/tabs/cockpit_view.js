@@ -484,7 +484,7 @@ export class CockpitView {
 
   async streamSynthesis(ticker) {
     const gatewayBase = AppState.getGatewayUrl() || '';
-    const token = AppState.getSessionToken();
+    const token = AppState.getSessionToken() || AppState.getPasscode();
     const headers = {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {})
