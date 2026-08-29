@@ -18,11 +18,14 @@ from app.core.auth import (
     validate_master_password,
     check_rate_limit,
     record_failed_attempt,
-    record_successful_attempt
+    record_successful_attempt,
+    verify_app_passcode,
+    get_current_user
 )
 
 from contextlib import asynccontextmanager
 from app.mcp import mcp_router, mcp_client_manager
+from app.routers.cockpit import router as cockpit_router
 from app.tools.gexdex_tool import run_cache_warmer_loop
 from app.engine.service import gexdex_service
 
@@ -95,6 +98,13 @@ app.add_middleware(
 
 # Mount Model Context Protocol (MCP) Router
 app.include_router(mcp_router)
+
+# Mount Ticker Cockpit Router (Protected by 6-Hour Session Token Auth)
+app.include_router(
+    cockpit_router,
+    prefix="/api/cockpit",
+    dependencies=[Depends(get_current_user)]
+)
 
 
 def verify_app_passcode(authorization: Optional[str] = Header(None)) -> str:
