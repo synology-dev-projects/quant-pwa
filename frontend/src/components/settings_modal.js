@@ -1,5 +1,7 @@
 import { AppState } from '../state.js';
 
+export const CLIENT_VERSION = 'v27';
+
 export class SettingsModal {
   constructor({ onSettingsChanged, onLockApp, onClearHistory } = {}) {
     this.onSettingsChanged = onSettingsChanged;
@@ -13,6 +15,8 @@ export class SettingsModal {
     this.clearHistoryBtn = document.getElementById('clearHistoryBtn');
     this.lockAppBtn = document.getElementById('lockAppBtn');
     this.forceUpdateBtn = document.getElementById('forceUpdateBtn');
+    this.appBuildVersion = document.getElementById('appBuildVersion');
+    this.syncStatusText = document.getElementById('syncStatusText');
     this.passcodeInput = document.getElementById('passcodeInput');
     this.gatewayUrlInput = document.getElementById('gatewayUrlInput');
     this.diagnosticsToggle = document.getElementById('diagnosticsToggle');
@@ -70,7 +74,52 @@ export class SettingsModal {
     if (this.diagnosticsToggle) {
       this.diagnosticsToggle.checked = AppState.getShowDiagnostics();
     }
+    this.checkVersionStatus();
     this.modal.classList.add('open');
+  }
+
+  async checkVersionStatus() {
+    if (this.appBuildVersion) {
+      this.appBuildVersion.textContent = `${CLIENT_VERSION} (Production)`;
+    }
+
+    try {
+      const gatewayUrl = AppState.getGatewayUrl() || '';
+      const res = await fetch(`${gatewayUrl.replace(/\/$/, '')}/api/health`);
+      if (res.ok) {
+        const data = await res.json();
+        const serverVersion = data.version || CLIENT_VERSION;
+
+        if (serverVersion === CLIENT_VERSION) {
+          // Up to date state: subtle grey/secondary styling
+          if (this.syncStatusText) {
+            this.syncStatusText.textContent = `Synchronized (${CLIENT_VERSION})`;
+          }
+          if (this.forceUpdateBtn) {
+            this.forceUpdateBtn.className = 'btn btn-secondary btn-synced';
+            this.forceUpdateBtn.innerHTML = `✓ Up to Date (${CLIENT_VERSION}) · Tap to Re-sync`;
+          }
+        } else {
+          // Outdated state: prominent glowing danger styling
+          if (this.syncStatusText) {
+            this.syncStatusText.textContent = `Update Available (${serverVersion})`;
+          }
+          if (this.forceUpdateBtn) {
+            this.forceUpdateBtn.className = 'btn btn-danger btn-pulse';
+            this.forceUpdateBtn.innerHTML = `⚡ Update Available (${serverVersion}) · Tap to Sync`;
+          }
+        }
+        return;
+      }
+    } catch (e) {
+      // Fallback
+    }
+
+    // Default state if offline
+    if (this.forceUpdateBtn) {
+      this.forceUpdateBtn.className = 'btn btn-secondary btn-synced';
+      this.forceUpdateBtn.innerHTML = `✓ App Version ${CLIENT_VERSION} · Tap to Re-sync`;
+    }
   }
 
   close() {
