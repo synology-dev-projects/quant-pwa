@@ -61,7 +61,9 @@ export const AppState = {
     if (typeof window !== 'undefined' && (window.location.port === '3000' || window.location.port === '5173')) {
       return `http://${window.location.hostname}:8000`;
     }
-    // Defaults to relative URL (works seamlessly via Nginx on Synology NAS or Cloudflare Tunnel)
+    if (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null') {
+      return window.location.origin;
+    }
     return '';
   },
 

@@ -466,7 +466,8 @@ global.window = {
   removeEventListener: () => {},
   location: {
     hostname: 'localhost',
-    port: '8000'
+    port: '8000',
+    origin: 'http://localhost:8000'
   },
   localStorage: {
     _data: {},
