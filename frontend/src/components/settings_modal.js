@@ -1,6 +1,6 @@
 import { AppState } from '../state.js';
 
-export const CLIENT_VERSION = 'v29';
+export const CLIENT_VERSION = 'v30';
 
 export class SettingsModal {
   constructor({ onSettingsChanged, onLockApp, onClearHistory } = {}) {
@@ -16,8 +16,12 @@ export class SettingsModal {
     this.lockAppBtn = document.getElementById('lockAppBtn');
     this.forceUpdateBtn = document.getElementById('forceUpdateBtn');
     this.manualResyncLink = document.getElementById('manualResyncLink');
+    this.syncFlowBtn = document.getElementById('syncFlowBtn');
     this.appBuildVersion = document.getElementById('appBuildVersion');
     this.syncStatusText = document.getElementById('syncStatusText');
+    this.flowStatusText = document.getElementById('flowStatusText');
+    this.flowSyncDot = document.getElementById('flowSyncDot');
+    this.flowStatusBadge = document.getElementById('flowStatusBadge');
     this.passcodeInput = document.getElementById('passcodeInput');
     this.gatewayUrlInput = document.getElementById('gatewayUrlInput');
     this.diagnosticsToggle = document.getElementById('diagnosticsToggle');
@@ -30,6 +34,7 @@ export class SettingsModal {
 
     this.forceUpdateBtn?.addEventListener('click', () => this.handleForceUpdate());
     this.manualResyncLink?.addEventListener('click', () => this.handleForceUpdate());
+    this.syncFlowBtn?.addEventListener('click', () => this.handleSyncFlow());
 
     // Toggle default state from AppState (defaults to true)
     if (this.diagnosticsToggle) {
@@ -77,6 +82,7 @@ export class SettingsModal {
       this.diagnosticsToggle.checked = AppState.getShowDiagnostics();
     }
     this.checkVersionStatus();
+    this.checkFlowStatus();
     this.modal.classList.add('open');
   }
 
@@ -86,14 +92,12 @@ export class SettingsModal {
     }
 
     try {
-      // Always query relative /api/health to inspect the local environment's gateway container
       const res = await fetch('/api/health');
       if (res.ok) {
         const data = await res.json();
         const serverVersion = data.version || CLIENT_VERSION;
 
         if (serverVersion === CLIENT_VERSION) {
-          // Up to date state: completely disabled greyed out button
           if (this.syncStatusText) {
             this.syncStatusText.textContent = `Synchronized (${CLIENT_VERSION})`;
           }
@@ -106,7 +110,6 @@ export class SettingsModal {
             this.manualResyncLink.style.display = 'block';
           }
         } else {
-          // Outdated state: active glowing danger button
           if (this.syncStatusText) {
             this.syncStatusText.textContent = `Update Available (${serverVersion})`;
           }
@@ -125,7 +128,6 @@ export class SettingsModal {
       console.warn('Health check version fetch failed:', e);
     }
 
-    // Default state if offline or error
     if (this.forceUpdateBtn) {
       this.forceUpdateBtn.disabled = true;
       this.forceUpdateBtn.className = 'btn btn-synced';
@@ -134,6 +136,99 @@ export class SettingsModal {
     if (this.manualResyncLink) {
       this.manualResyncLink.style.display = 'block';
     }
+  }
+
+  async checkFlowStatus() {
+    if (!this.flowStatusText) return;
+
+    try {
+      const res = await fetch('/api/flow/status');
+      if (res.ok) {
+        const data = await res.json();
+        const isFresh = Boolean(data.is_fresh);
+        const latestDate = data.latest_trade_date || 'None';
+        const expectedDate = data.last_market_day || 'Latest';
+
+        if (isFresh) {
+          if (this.flowSyncDot) this.flowSyncDot.className = 'status-dot dot-live';
+          this.flowStatusText.textContent = `In Sync (${latestDate})`;
+          if (this.syncFlowBtn) {
+            this.syncFlowBtn.disabled = true;
+            this.syncFlowBtn.className = 'btn btn-synced';
+            this.syncFlowBtn.innerHTML = `✓ Flow Up to Date (${latestDate})`;
+          }
+        } else {
+          if (this.flowSyncDot) this.flowSyncDot.className = 'status-dot dot-stale';
+          this.flowStatusText.textContent = `Stale (Missing ${expectedDate})`;
+          if (this.syncFlowBtn) {
+            this.syncFlowBtn.disabled = false;
+            this.syncFlowBtn.className = 'btn btn-danger btn-pulse';
+            this.syncFlowBtn.innerHTML = `⚡ Sync Missing Flow (${expectedDate}) · Tap to Run`;
+          }
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn('Flow status fetch failed:', e);
+    }
+
+    if (this.flowSyncDot) this.flowSyncDot.className = 'status-dot dot-stale';
+    if (this.flowStatusText) this.flowStatusText.textContent = 'Status Unavailable';
+    if (this.syncFlowBtn) {
+      this.syncFlowBtn.disabled = false;
+      this.syncFlowBtn.className = 'btn btn-warning';
+      this.syncFlowBtn.innerHTML = '⚡ Sync Flow Data';
+    }
+  }
+
+  async handleSyncFlow() {
+    if (!this.syncFlowBtn) return;
+    this.syncFlowBtn.disabled = true;
+    this.syncFlowBtn.className = 'btn btn-synced';
+    this.syncFlowBtn.innerHTML = '<span class="status-dot dot-fast"></span> Ingesting Flow from Market Source...';
+
+    try {
+      const token = AppState.getSessionToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch('/api/flow/sync', {
+        method: 'POST',
+        headers: headers
+      });
+
+      if (res.ok) {
+        this.syncFlowBtn.innerHTML = '<span class="status-dot dot-live"></span> Ingestion Complete! Verifying DB...';
+        await new Promise((r) => setTimeout(r, 600));
+        await this.checkFlowStatus();
+        this.showToast('✓ Options Flow Ingestion Completed Successfully!');
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Sync failed: ${errData.detail || errData.message || 'Error executing pipeline'}`);
+        await this.checkFlowStatus();
+      }
+    } catch (err) {
+      console.error('Flow sync error:', err);
+      alert(`Network error during sync: ${err.message}`);
+      await this.checkFlowStatus();
+    }
+  }
+
+  showToast(message) {
+    const existing = document.querySelector('.update-toast-banner');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = 'update-toast-banner';
+    toast.innerHTML = `<span class="status-dot dot-live"></span> <span>${message}</span>`;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+      toast.classList.add('toast-fade-out');
+      setTimeout(() => toast.remove(), 400);
+    }, 3500);
   }
 
   close() {

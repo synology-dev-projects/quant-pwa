@@ -2949,5 +2949,30 @@ th.sort-desc .sort-icon::after {
   overflow-x: auto;
 }
 
+/* Options Flow Freshness Status Row & Actions (SETTINGS-04) */
+.flow-status-row {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
 
+.status-dot.dot-stale {
+  background-color: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
 
+.status-dot.dot-fast {
+  background-color: #3b82f6;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.6);
+  animation: dotPulse 1.2s infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+#syncFlowBtn {
+  margin-top: 4px;
+  width: 100%;
+}
