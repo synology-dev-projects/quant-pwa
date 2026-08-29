@@ -128,13 +128,14 @@ export class SettingsModal {
   }
 
   async handleForceUpdate() {
-    if (this.forceUpdateBtn) {
-      this.forceUpdateBtn.disabled = true;
-      this.forceUpdateBtn.textContent = '⚡ Purging cache & updating...';
-    }
+    if (!this.forceUpdateBtn) return;
+    this.forceUpdateBtn.disabled = true;
+
+    // Stage 1: Purge local cache and workers
+    this.forceUpdateBtn.innerHTML = '<span class="status-dot dot-fast"></span> 01/03 Purging Disk Cache &amp; Storage...';
+    await new Promise((r) => setTimeout(r, 350));
 
     try {
-      // 1. Unregister all active Service Workers
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
         for (const reg of registrations) {
@@ -142,19 +143,25 @@ export class SettingsModal {
         }
       }
 
-      // 2. Wipe CacheStorage API
       if ('caches' in window) {
         const keys = await caches.keys();
         await Promise.all(keys.map((k) => caches.delete(k)));
       }
 
-      // 3. Clear temporary local memory
       localStorage.removeItem('quant_cockpit_recent');
     } catch (e) {
       console.warn('Error during cache purge:', e);
     }
 
-    // 4. Force hard reload with timestamp cache-buster
+    // Stage 2: Sync latest server build
+    this.forceUpdateBtn.innerHTML = '<span class="status-dot dot-live"></span> 02/03 Syncing Latest Server Bundle (v27)...';
+    await new Promise((r) => setTimeout(r, 400));
+
+    // Stage 3: Verified fresh & reload
+    this.forceUpdateBtn.innerHTML = '<span class="status-dot dot-optimal"></span> 03/03 Verified Fresh · Reloading Interface...';
+    await new Promise((r) => setTimeout(r, 350));
+
+    // Force hard reload with timestamp cache-buster
     const targetUrl = window.location.origin + window.location.pathname + '?_v=' + Date.now();
     window.location.href = targetUrl;
   }

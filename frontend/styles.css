@@ -839,6 +839,49 @@ html, body {
   border-color: var(--border-active);
 }
 
+/* Version Info Card in Settings */
+.version-info-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(15, 20, 34, 0.75);
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 4px;
+  margin-bottom: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+}
+
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.version-label {
+  color: #64748b;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10.5px;
+}
+
+.version-val {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.version-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #4ade80;
+  font-weight: 600;
+  font-size: 11px;
+}
+
 .settings-actions {
   display: flex;
   flex-direction: column;
