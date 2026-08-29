@@ -1,6 +1,6 @@
-import { createMessageElement, renderMarkdown, initInteractiveTables } from '../components/message_renderer.js';
-import { QuantChart } from '../components/quant_chart.js';
-import { AppState } from '../state.js';
+import { createMessageElement, renderMarkdown, initInteractiveTables } from '../components/message_renderer.js?v=28';
+import { QuantChart } from '../components/quant_chart.js?v=28';
+import { AppState } from '../state.js?v=28';
 
 export class ChatView {
   constructor() {

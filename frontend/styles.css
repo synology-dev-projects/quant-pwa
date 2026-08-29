@@ -954,16 +954,29 @@ html, body {
 }
 
 .btn-synced {
-  background: rgba(30, 41, 59, 0.65);
-  color: #94a3b8;
-  border: 1px solid #334155;
-  font-size: 13px;
+  background: #090d16 !important;
+  color: #475569 !important;
+  border: 1px solid #1e293b !important;
+  opacity: 0.55;
+  cursor: default !important;
+  box-shadow: none !important;
+  pointer-events: none;
 }
 
-.btn-synced:hover, .btn-synced:active {
-  background: rgba(51, 65, 85, 0.85);
-  color: #f1f5f9;
-  border-color: #475569;
+.manual-resync-link {
+  text-align: center;
+  font-size: 11px;
+  color: #475569;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  margin-top: -2px;
+  margin-bottom: 2px;
+  transition: color 0.15s ease;
+}
+
+.manual-resync-link:hover {
+  color: #94a3b8;
 }
 
 .btn-pulse {
@@ -973,6 +986,46 @@ html, body {
 @keyframes pulseGlow {
   0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
   50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.8); }
+}
+
+/* Update Success Toast Notification */
+.update-success-toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(10, 15, 29, 0.96);
+  color: #f1f5f9;
+  border: 1px solid rgba(74, 222, 128, 0.6);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8), 0 0 16px rgba(74, 222, 128, 0.25);
+  border-radius: 24px;
+  padding: 10px 18px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  z-index: 9999;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: toastSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.update-success-toast.fade-out {
+  opacity: 0;
+  transform: translate(-50%, -10px);
+  transition: all 0.4s ease;
+}
+
+@keyframes toastSlideDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 /* Lightbox Modal */
