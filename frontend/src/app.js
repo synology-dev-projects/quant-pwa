@@ -307,7 +307,20 @@ class App {
   registerServiceWorker() {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch((err) => {
+        navigator.serviceWorker.register('./sw.js').then((reg) => {
+          reg.update();
+          reg.onupdatefound = () => {
+            const installingWorker = reg.installing;
+            if (installingWorker) {
+              installingWorker.onstatechange = () => {
+                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // Promptly reload so user gets new tab
+                  window.location.reload();
+                }
+              };
+            }
+          };
+        }).catch((err) => {
           console.log('ServiceWorker registration failed: ', err);
         });
       });
