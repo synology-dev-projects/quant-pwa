@@ -63,7 +63,14 @@ class App {
   initTabs() {
     const tabBar = document.getElementById('tabBar');
     const tabContent = document.getElementById('tabContent');
-    this.tabManager = new TabManager(tabBar, tabContent);
+    const promptContainer = document.getElementById('promptContainer');
+
+    this.tabManager = new TabManager(tabBar, tabContent, (tabId) => {
+      AppState.setActiveTab(tabId);
+      if (promptContainer) {
+        promptContainer.style.display = tabId === 'cockpit' ? 'none' : 'block';
+      }
+    });
 
     // Register primary Chat tab
     this.tabManager.registerTab({
@@ -81,7 +88,7 @@ class App {
       render: (container) => this.cockpitView.render(container)
     });
 
-    const activeTab = AppState.getActiveTab();
+    const activeTab = AppState.getActiveTab() || 'chat';
     this.tabManager.switchTab(activeTab);
   }
 
