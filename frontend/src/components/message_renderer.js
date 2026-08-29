@@ -477,22 +477,32 @@ function parseMarkdownTables(text) {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    if (line.startsWith('|') && line.endsWith('|')) {
-      // Check if it's a separator line (e.g. | :--- | :--- |)
-      if (/^\|(?:\s*:?-+:?\s*\|)+$/.test(line)) {
+    // Check if line looks like a markdown table row (starts with | or contains at least 2 pipes)
+    if (line.startsWith('|') && (line.endsWith('|') || line.split('|').length >= 3)) {
+      // Check if it's a separator line (e.g. | :--- | :--- | or |---|---|)
+      if (/^\|(?:\s*:?-+:?\s*\|?)+$/.test(line)) {
         if (tableRows.length > 0) {
           tableRows[tableRows.length - 1].isHeader = true;
         }
         continue;
       }
       
-      const cells = line
-        .slice(1, -1)
-        .split('|')
-        .map(c => c.trim());
+      let rawCells = line;
+      if (rawCells.startsWith('|')) rawCells = rawCells.slice(1);
+      if (rawCells.endsWith('|')) rawCells = rawCells.slice(0, -1);
+      const cells = rawCells.split('|').map(c => c.trim());
       
-      tableRows.push({ cells, isHeader: false });
-      inTable = true;
+      if (cells.length > 1) {
+        tableRows.push({ cells, isHeader: false });
+        inTable = true;
+      } else {
+        if (inTable) {
+          result.push(buildTableHtml(tableRows));
+          tableRows = [];
+          inTable = false;
+        }
+        result.push(lines[i]);
+      }
     } else {
       if (inTable) {
         result.push(buildTableHtml(tableRows));
@@ -514,6 +524,11 @@ export function renderMarkdown(text) {
   if (!text) return '';
 
   let html = text;
+
+  // 1. Unwrap any Markdown tables enclosed in triple backticks (e.g. ```markdown\n| Symbol | ... \n``` or ``` ... ```)
+  html = html.replace(/```(?:markdown|md|table)?\s*\n?(\|[\s\S]*?\|)\s*\n?```/gi, '\n$1\n');
+  // Also unwrap streaming unclosed code blocks that start with a table
+  html = html.replace(/```(?:markdown|md|table)?\s*\n?(\|[\s\S]*?\|)\s*$/gi, '\n$1\n');
 
   // Escape raw HTML tags to prevent XSS
   html = html
