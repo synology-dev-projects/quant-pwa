@@ -317,9 +317,18 @@ def test_cockpit_synthesis_stream_with_gemini(auth_header, mock_gex_data, mock_f
         assert "Tactical Action Playbook" in assembled_text
 
 
-def test_build_synthesis_prompt_structure(mock_gex_data, mock_flow_df):
+def test_stream_cockpit_synthesis_with_precomputed_payload(auth_header, mock_gex_data, mock_flow_df):
+    mock_chunk = MagicMock()
+    mock_chunk.text = "Precomputed stream token."
+
+    async def fake_async_stream(*args, **kwargs):
+        yield mock_chunk
+
+    mock_client = MagicMock()
+    mock_client.aio.models.generate_content_stream = AsyncMock(return_value=fake_async_stream())
+
     metrics = _calculate_cockpit_metrics(mock_gex_data, mock_flow_df)
-    payload = {
+    precomputed_payload = {
         "metrics": metrics,
         "gex": mock_gex_data,
         "flow": {
@@ -327,11 +336,19 @@ def test_build_synthesis_prompt_structure(mock_gex_data, mock_flow_df):
             "total_count": 3
         }
     }
-    prompt = _build_synthesis_prompt("NVDA", payload)
-    assert "NVDA" in prompt
-    assert "Spot Price: $130.00" in prompt
-    assert "Call Wall" in prompt
-    assert "Put Wall" in prompt
-    assert "1. Core Confluence Thesis" in prompt
-    assert "2. Microstructure Alignment" in prompt
-    assert "3. Tactical Action Playbook" in prompt
+
+    with patch("app.routers.cockpit.get_strike_distribution") as mock_gex, \
+         patch("app.routers.cockpit._fetch_postgres_flow_sync") as mock_flow, \
+         patch("google.genai.Client", return_value=mock_client):
+
+        response = client.post(
+            "/api/cockpit/synthesis/stream",
+            json={"ticker": "NVDA", "payload": precomputed_payload},
+            headers=auth_header
+        )
+        assert response.status_code == 200
+        # GEX calculation and Postgres fetch should NOT have been called
+        mock_gex.assert_not_called()
+        mock_flow.assert_not_called()
+        assert "Precomputed stream token." in response.text
+
