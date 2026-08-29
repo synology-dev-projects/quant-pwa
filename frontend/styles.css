@@ -2105,6 +2105,23 @@ th .sort-icon {
   margin-left: 4px;
   color: #64748b;
   display: inline-block;
+  opacity: 0.5;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+th.sortable:not(.sort-asc):not(.sort-desc) .sort-icon::after {
+  content: ' ⇅';
+  color: #64748b;
+}
+
+th.sortable:not(.sort-asc):not(.sort-desc):hover .sort-icon {
+  opacity: 1;
+  color: #cbd5e1;
+}
+
+th.sort-asc .sort-icon,
+th.sort-desc .sort-icon {
+  opacity: 1;
 }
 
 th.sort-asc .sort-icon::after {
