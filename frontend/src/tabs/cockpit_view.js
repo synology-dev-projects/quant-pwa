@@ -379,11 +379,14 @@ export class CockpitView {
       this.setLoadingState(cleanTicker);
     }
 
-    // 2. Concurrently execute instant data call & SSE synthesis stream
-    await Promise.allSettled([
-      this.loadCockpitData(cleanTicker),
-      this.streamSynthesis(cleanTicker)
-    ]);
+    // 2. Sequential Single-Payload Pipeline:
+    // First, retrieve the calculated GEX + Flow data (1 server calculation)
+    const data = await this.loadCockpitData(cleanTicker);
+
+    // Second, stream the quantitative thesis passing the pre-computed payload (0ms backend calculation)
+    if (this.currentTicker === cleanTicker) {
+      await this.streamSynthesis(cleanTicker, data);
+    }
   }
 
   setLoadingState(ticker) {
@@ -480,9 +483,10 @@ export class CockpitView {
       this.cockpitData = data;
       this.renderDataPanels(data);
     }
+    return data;
   }
 
-  async streamSynthesis(ticker) {
+  async streamSynthesis(ticker, precomputedPayload = null) {
     const gatewayBase = AppState.getGatewayUrl() || '';
     const token = AppState.getSessionToken() || AppState.getPasscode();
     const headers = {
@@ -499,7 +503,10 @@ export class CockpitView {
         method: 'POST',
         headers,
         cache: 'no-store',
-        body: JSON.stringify({ ticker }),
+        body: JSON.stringify({
+          ticker,
+          payload: precomputedPayload || this.cockpitData || null
+        }),
         signal: this.activeAbortController?.signal
       });
 

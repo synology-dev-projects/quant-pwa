@@ -18,6 +18,7 @@ router = APIRouter(tags=["Cockpit"])
 
 class CockpitRequest(BaseModel):
     ticker: str = Field(..., description="Stock ticker symbol (e.g. NVDA, SPY, AAPL)")
+    payload: Optional[Dict[str, Any]] = Field(None, description="Optional pre-computed Cockpit payload to prevent duplicate recalculation")
 
 
 def _fetch_postgres_flow_sync(symbol: str, lookback_days: int = 30, limit: int = 500) -> pd.DataFrame:
@@ -323,12 +324,18 @@ async def stream_cockpit_synthesis_post(request: Request, req: CockpitRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ticker symbol cannot be empty."
         )
-    return await _stream_synthesis_impl(request, clean_ticker)
+    return await _stream_synthesis_impl(request, clean_ticker, precomputed_payload=req.payload)
 
 
-async def _stream_synthesis_impl(request: Request, clean_ticker: str):
-    # 1. Fetch cockpit data payload
-    cockpit_payload = await get_cockpit_full_payload(clean_ticker)
+async def _stream_synthesis_impl(request: Request, clean_ticker: str, precomputed_payload: Optional[Dict[str, Any]] = None):
+    # 1. Fetch cockpit data payload (use pre-computed if valid to avoid duplicate server calculation)
+    if precomputed_payload and isinstance(precomputed_payload, dict) and precomputed_payload.get("metrics"):
+        logger.info(f"Using pre-computed Cockpit payload for {clean_ticker} synthesis stream (0ms compute overhead)")
+        cockpit_payload = precomputed_payload
+    else:
+        logger.info(f"Computing Cockpit payload on the fly for {clean_ticker} synthesis stream")
+        cockpit_payload = await get_cockpit_full_payload(clean_ticker)
+
     prompt = _build_synthesis_prompt(clean_ticker, cockpit_payload)
 
     async def sse_generator():
