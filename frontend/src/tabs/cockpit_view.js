@@ -351,9 +351,9 @@ export class CockpitView {
     }
     this.activeAbortController = new AbortController();
 
-    // Instant 0ms memory switch if previously loaded
-    if (this.dataCache.has(cleanTicker)) {
-      const cached = this.dataCache.get(cleanTicker);
+    // Instant 0ms memory switch if valid cached data exists
+    const cached = this.dataCache.get(cleanTicker);
+    if (cached && cached.gex && Array.isArray(cached.gex.strikes) && cached.gex.strikes.length > 0 && cached.gex.spot_price > 0) {
       this.cockpitData = cached;
       this.renderDataPanels(cached);
       
@@ -445,7 +445,7 @@ export class CockpitView {
 
   async loadCockpitData(ticker) {
     const gatewayBase = AppState.getGatewayUrl() || '';
-    const token = AppState.getSessionToken();
+    const token = AppState.getSessionToken() || AppState.getPasscode();
     const headers = {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -463,12 +463,16 @@ export class CockpitView {
 
       if (res.ok) {
         data = await res.json();
-        this.dataCache.set(ticker, data);
+        if (data && data.gex && Array.isArray(data.gex.strikes) && data.gex.strikes.length > 0 && data.gex.spot_price > 0) {
+          this.dataCache.set(ticker, data);
+        }
       } else {
+        console.warn(`Cockpit data fetch returned status ${res.status} for ${ticker}`);
         data = this.generateFallbackData(ticker);
       }
     } catch (err) {
       if (err.name === 'AbortError') return;
+      console.warn(`Cockpit data network error for ${ticker}:`, err);
       data = this.generateFallbackData(ticker);
     }
 
@@ -824,33 +828,57 @@ export class CockpitView {
   }
 
   generateFallbackData(ticker) {
-    const sym = ticker.toUpperCase();
-    let spot = 130.00;
-    if (sym === 'SPY') spot = 560.00;
-    else if (sym === 'QQQ') spot = 485.00;
-    else if (sym === 'TSLA') spot = 220.00;
-    else if (sym === 'AAPL') spot = 230.00;
-    else if (sym === 'AMD') spot = 155.00;
-    else if (sym === 'NVDA') spot = 128.50;
+    const sym = (ticker || 'NVDA').toUpperCase();
+    let spot = 150.00;
+    if (sym === 'SPY') spot = 769.00;
+    else if (sym === 'QQQ') spot = 716.00;
+    else if (sym === 'TSLA') spot = 348.00;
+    else if (sym === 'AAPL') spot = 320.00;
+    else if (sym === 'AMD') spot = 465.00;
+    else if (sym === 'NVDA') spot = 217.00;
+    else if (sym === 'COIN') spot = 178.00;
+    else if (sym === 'POWL') spot = 182.00;
+    else if (sym === 'META') spot = 578.00;
+    else if (sym === 'MSFT') spot = 513.00;
 
     const callWall = Math.round(spot * 1.07 * 100) / 100;
     const putWall = Math.round(spot * 0.93 * 100) / 100;
     const zeroFlip = Math.round(spot * 0.99 * 100) / 100;
+    const strikes = this.generateMockStrikes(spot, callWall, putWall);
 
     return {
       ticker: sym,
-      spot_price: spot,
-      zero_flip: zeroFlip,
-      call_wall: callWall,
-      put_wall: putWall,
-      confluence_bias: 'BULLISH CONFLUENCE',
-      gamma_regime: 'LONG GAMMA (+GEX)',
-      flow_ratio: '71% CALL FLOW',
-      call_put_ratio: 1.52,
-      wall_range: `$${putWall.toFixed(0)} ↔ $${callWall.toFixed(0)}`,
-      expirations: ['2026-09-18', '2026-10-16', '2026-11-20'],
-      strikes: this.generateMockStrikes(spot, callWall, putWall),
-      flow_prints: this.generateMockFlowPrints(sym, spot)
+      status: 'ok',
+      gex: {
+        ticker: sym,
+        spot_price: spot,
+        zero_gex_level: zeroFlip,
+        call_wall: callWall,
+        put_wall: putWall,
+        call_put_ratio: 1.45,
+        gamma_regime: 'LONG GAMMA (+GEX)',
+        expirations: ['2026-08-31', '2026-09-18', '2026-10-16'],
+        strikes: strikes
+      },
+      flow: {
+        records: this.generateMockFlowPrints(sym, spot),
+        total_count: 7
+      },
+      metrics: {
+        spot_price: spot,
+        zero_gamma_flip: zeroFlip,
+        call_wall: callWall,
+        put_wall: putWall,
+        confluence_bias: 'BULLISH CONFLUENCE',
+        gamma_regime: 'LONG GAMMA (+GEX)',
+        flow_ratio: '71% CALL FLOW',
+        call_pct: 71.0,
+        put_pct: 29.0,
+        call_flow: 35000000,
+        put_flow: 14000000,
+        whale_count: 4,
+        unusual_oi_count: 3
+      }
     };
   }
 

@@ -55,6 +55,16 @@ class App {
   onUnlocked() {
     this.initModelSelector();
 
+    // Clear any stale unauthenticated caches
+    if (this.cockpitView && this.cockpitView.dataCache) {
+      this.cockpitView.dataCache.clear();
+    }
+
+    // If cockpit tab is active, re-fetch fresh data with valid session token
+    if (AppState.getActiveTab() === 'cockpit' && this.cockpitView && this.cockpitView.currentTicker) {
+      this.cockpitView.searchTicker(this.cockpitView.currentTicker);
+    }
+
     // Load initial chat history
     const history = AppState.getHistory();
     this.chatView.loadHistory(history);
