@@ -481,6 +481,41 @@ symHeader.click(); // Sort SYMBOL desc
 assert(pageInfo.textContent.includes('PAGE 1 OF 2'), 'Changing sort column resets currentPage back to 1');
 assert(getFirstRowCell(1) === 'ZS', `Page 1 displays top sorted row (ZS): got ${getFirstRowCell(1)}`);
 
+// ----------------------------------------------------------------------------
+// TEST 7: Code-Block Wrapped Table Parsing & Multi-Table Interactivity
+// ----------------------------------------------------------------------------
+console.log('\n--- TEST 7: Code-Block Wrapped Table Parsing & Multi-Table ---');
+
+const codeBlockedTableMarkdown = `
+Here is the unusual options flow:
+
+\`\`\`markdown
+| Symbol | Order Action | Strike | OTM % | Expiration | Open Interest | Premium |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **NVDA** | BUY CALL | $135.00 | +4.5% | 2026-09-18 | 14,520 | $12.50M |
+| **AAPL** | BUY PUT | $220.00 | -3.0% | 2026-09-18 | 8,200 | $1.20M |
+| **TSLA** | BUY CALL | $260.00 | +12.0% | 2026-10-16 | 25,000 ⚠️ | $8.90M |
+\`\`\`
+`;
+
+const renderedHtml = renderMarkdown(codeBlockedTableMarkdown);
+assert(renderedHtml.includes('quant-table-wrapper'), 'Code-blocked markdown table was unwrapped and converted to quant-table-wrapper');
+assert(!renderedHtml.includes('<pre><code class="language-markdown">| Symbol'), 'Raw code block pre/code tags were removed for table');
+
+const container2 = new MockElement('DIV');
+container2.innerHTML = renderedHtml;
+initInteractiveTables(container2);
+
+const wrapper2 = container2.querySelector('.quant-table-wrapper');
+assert(wrapper2 !== null, 'Second table wrapper found and initialized');
+const thPrem2 = Array.from(wrapper2.querySelectorAll('th.sortable')).find(th => th.textContent.includes('Premium'));
+assert(thPrem2 !== null, 'Premium header found in second table');
+
+// Click Premium header in second table
+thPrem2.click(); // Click 1: Descending
+const firstCell = wrapper2.querySelector('tbody tr td:first-child');
+assert(firstCell.textContent.includes('NVDA'), 'Top row in second table is NVDA ($12.50M)');
+
 // ============================================================================
 // Summary & Exit
 // ============================================================================
