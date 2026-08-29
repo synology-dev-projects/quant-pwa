@@ -12,6 +12,7 @@ export class SettingsModal {
     this.saveBtn = document.getElementById('settingsSave');
     this.clearHistoryBtn = document.getElementById('clearHistoryBtn');
     this.lockAppBtn = document.getElementById('lockAppBtn');
+    this.forceUpdateBtn = document.getElementById('forceUpdateBtn');
     this.passcodeInput = document.getElementById('passcodeInput');
     this.gatewayUrlInput = document.getElementById('gatewayUrlInput');
     this.diagnosticsToggle = document.getElementById('diagnosticsToggle');
@@ -21,6 +22,8 @@ export class SettingsModal {
 
   init() {
     if (!this.modal) return;
+
+    this.forceUpdateBtn?.addEventListener('click', () => this.handleForceUpdate());
 
     // Toggle default state from AppState (defaults to true)
     if (this.diagnosticsToggle) {
@@ -124,13 +127,35 @@ export class SettingsModal {
     }
   }
 
-  handleClearHistory() {
-    if (confirm('Clear all conversation history?')) {
-      AppState.clearHistory();
-      this.close();
-      if (this.onClearHistory) {
-        this.onClearHistory();
-      }
+  async handleForceUpdate() {
+    if (this.forceUpdateBtn) {
+      this.forceUpdateBtn.disabled = true;
+      this.forceUpdateBtn.textContent = '⚡ Purging cache & updating...';
     }
+
+    try {
+      // 1. Unregister all active Service Workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const reg of registrations) {
+          await reg.unregister();
+        }
+      }
+
+      // 2. Wipe CacheStorage API
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+
+      // 3. Clear temporary local memory
+      localStorage.removeItem('quant_cockpit_recent');
+    } catch (e) {
+      console.warn('Error during cache purge:', e);
+    }
+
+    // 4. Force hard reload with timestamp cache-buster
+    const targetUrl = window.location.origin + window.location.pathname + '?_v=' + Date.now();
+    window.location.href = targetUrl;
   }
 }
