@@ -175,7 +175,7 @@ def test_cockpit_data_auth_rejection():
 
 
 def test_cockpit_data_success(auth_header, mock_gex_data, mock_flow_df):
-    with patch("app.routers.cockpit.gexdex_service.get_summary", new_callable=AsyncMock) as mock_gex, \
+    with patch("app.routers.cockpit.get_strike_distribution") as mock_gex, \
          patch("app.routers.cockpit._fetch_postgres_flow_sync") as mock_flow:
         mock_gex.return_value = mock_gex_data
         mock_flow.return_value = mock_flow_df
@@ -217,7 +217,7 @@ def test_cockpit_data_empty_ticker_validation(auth_header):
 
 
 def test_cockpit_data_fault_tolerance(auth_header):
-    with patch("app.routers.cockpit.gexdex_service.get_summary", new_callable=AsyncMock) as mock_gex, \
+    with patch("app.routers.cockpit.get_strike_distribution") as mock_gex, \
          patch("app.routers.cockpit._fetch_postgres_flow_sync") as mock_flow:
         # Simulate GEX failure and Postgres DB down
         mock_gex.side_effect = Exception("TradingEdge circuit trip")
@@ -245,7 +245,7 @@ def test_cockpit_synthesis_stream_auth_rejection():
 def test_cockpit_synthesis_stream_deterministic_fallback(auth_header, mock_gex_data, mock_flow_df, monkeypatch):
     monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
 
-    with patch("app.routers.cockpit.gexdex_service.get_summary", new_callable=AsyncMock) as mock_gex, \
+    with patch("app.routers.cockpit.get_strike_distribution") as mock_gex, \
          patch("app.routers.cockpit._fetch_postgres_flow_sync") as mock_flow:
         mock_gex.return_value = mock_gex_data
         mock_flow.return_value = mock_flow_df
@@ -289,7 +289,7 @@ def test_cockpit_synthesis_stream_with_gemini(auth_header, mock_gex_data, mock_f
     mock_client = MagicMock()
     mock_client.aio.models.generate_content_stream = AsyncMock(return_value=fake_async_stream())
 
-    with patch("app.routers.cockpit.gexdex_service.get_summary", new_callable=AsyncMock) as mock_gex, \
+    with patch("app.routers.cockpit.get_strike_distribution") as mock_gex, \
          patch("app.routers.cockpit._fetch_postgres_flow_sync") as mock_flow, \
          patch("google.genai.Client", return_value=mock_client):
         mock_gex.return_value = mock_gex_data

@@ -2717,16 +2717,22 @@ th.sort-desc .sort-icon::after {
 }
 
 .cockpit-chart-slot {
-  min-height: 280px;
+  min-height: 480px;
   position: relative;
   background-color: #0a0e17;
   border: 1px solid #1e293b;
   border-radius: 8px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .cockpit-canvas-wrapper {
   width: 100%;
+  flex: 1;
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
 }
 
 .chart-empty-state, .flow-empty-state {

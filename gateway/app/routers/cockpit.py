@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.engine.service import gexdex_service
+from app.engine.service import gexdex_service, get_strike_distribution
 
 logger = logging.getLogger("quant.gateway.cockpit")
 
@@ -129,17 +129,23 @@ async def get_cockpit_full_payload(ticker: str) -> Dict[str, Any]:
             detail="Ticker symbol cannot be empty."
         )
 
-    # Concurrently execute GEX/DEX calculation and DB options flow query
-    gex_task = asyncio.create_task(gexdex_service.get_summary(ticker=clean_ticker))
+    # Concurrently execute full strike distribution calculation and DB options flow query
+    gex_task = asyncio.create_task(asyncio.to_thread(get_strike_distribution, clean_ticker))
     flow_task = asyncio.create_task(asyncio.to_thread(_fetch_postgres_flow_sync, clean_ticker, 30, 500))
 
     gex_result, flow_result = await asyncio.gather(gex_task, flow_task, return_exceptions=True)
 
     if isinstance(gex_result, Exception):
         logger.error(f"GEX/DEX query exception for {clean_ticker}: {gex_result}")
-        gex_data = {"error": str(gex_result), "ticker": clean_ticker, "spot_price": 0.0}
+        gex_data = {"error": str(gex_result), "ticker": clean_ticker, "spot_price": 0.0, "strikes": []}
+    elif hasattr(gex_result, "model_dump"):
+        gex_data = gex_result.model_dump()
+    elif hasattr(gex_result, "dict"):
+        gex_data = gex_result.dict()
+    elif isinstance(gex_result, dict):
+        gex_data = gex_result
     else:
-        gex_data = gex_result or {}
+        gex_data = {}
 
     if isinstance(flow_result, Exception):
         logger.error(f"Postgres flow query exception for {clean_ticker}: {flow_result}")
