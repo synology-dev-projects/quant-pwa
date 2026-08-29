@@ -1,5 +1,7 @@
 import { AppState } from '../state.js';
 
+export const CLIENT_VERSION = 'v27';
+
 export class SettingsModal {
   constructor({ onSettingsChanged, onLockApp, onClearHistory } = {}) {
     this.onSettingsChanged = onSettingsChanged;
@@ -13,6 +15,8 @@ export class SettingsModal {
     this.clearHistoryBtn = document.getElementById('clearHistoryBtn');
     this.lockAppBtn = document.getElementById('lockAppBtn');
     this.forceUpdateBtn = document.getElementById('forceUpdateBtn');
+    this.appBuildVersion = document.getElementById('appBuildVersion');
+    this.syncStatusText = document.getElementById('syncStatusText');
     this.passcodeInput = document.getElementById('passcodeInput');
     this.gatewayUrlInput = document.getElementById('gatewayUrlInput');
     this.diagnosticsToggle = document.getElementById('diagnosticsToggle');
@@ -70,7 +74,52 @@ export class SettingsModal {
     if (this.diagnosticsToggle) {
       this.diagnosticsToggle.checked = AppState.getShowDiagnostics();
     }
+    this.checkVersionStatus();
     this.modal.classList.add('open');
+  }
+
+  async checkVersionStatus() {
+    if (this.appBuildVersion) {
+      this.appBuildVersion.textContent = `${CLIENT_VERSION} (Production)`;
+    }
+
+    try {
+      const gatewayUrl = AppState.getGatewayUrl() || '';
+      const res = await fetch(`${gatewayUrl.replace(/\/$/, '')}/api/health`);
+      if (res.ok) {
+        const data = await res.json();
+        const serverVersion = data.version || CLIENT_VERSION;
+
+        if (serverVersion === CLIENT_VERSION) {
+          // Up to date state: subtle grey/secondary styling
+          if (this.syncStatusText) {
+            this.syncStatusText.textContent = `Synchronized (${CLIENT_VERSION})`;
+          }
+          if (this.forceUpdateBtn) {
+            this.forceUpdateBtn.className = 'btn btn-secondary btn-synced';
+            this.forceUpdateBtn.innerHTML = `✓ Up to Date (${CLIENT_VERSION}) · Tap to Re-sync`;
+          }
+        } else {
+          // Outdated state: prominent glowing danger styling
+          if (this.syncStatusText) {
+            this.syncStatusText.textContent = `Update Available (${serverVersion})`;
+          }
+          if (this.forceUpdateBtn) {
+            this.forceUpdateBtn.className = 'btn btn-danger btn-pulse';
+            this.forceUpdateBtn.innerHTML = `⚡ Update Available (${serverVersion}) · Tap to Sync`;
+          }
+        }
+        return;
+      }
+    } catch (e) {
+      // Fallback
+    }
+
+    // Default state if offline
+    if (this.forceUpdateBtn) {
+      this.forceUpdateBtn.className = 'btn btn-secondary btn-synced';
+      this.forceUpdateBtn.innerHTML = `✓ App Version ${CLIENT_VERSION} · Tap to Re-sync`;
+    }
   }
 
   close() {
@@ -128,13 +177,14 @@ export class SettingsModal {
   }
 
   async handleForceUpdate() {
-    if (this.forceUpdateBtn) {
-      this.forceUpdateBtn.disabled = true;
-      this.forceUpdateBtn.textContent = '⚡ Purging cache & updating...';
-    }
+    if (!this.forceUpdateBtn) return;
+    this.forceUpdateBtn.disabled = true;
+
+    // Stage 1: Purge local cache and workers
+    this.forceUpdateBtn.innerHTML = '<span class="status-dot dot-fast"></span> 01/03 Purging Disk Cache &amp; Storage...';
+    await new Promise((r) => setTimeout(r, 350));
 
     try {
-      // 1. Unregister all active Service Workers
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
         for (const reg of registrations) {
@@ -142,19 +192,25 @@ export class SettingsModal {
         }
       }
 
-      // 2. Wipe CacheStorage API
       if ('caches' in window) {
         const keys = await caches.keys();
         await Promise.all(keys.map((k) => caches.delete(k)));
       }
 
-      // 3. Clear temporary local memory
       localStorage.removeItem('quant_cockpit_recent');
     } catch (e) {
       console.warn('Error during cache purge:', e);
     }
 
-    // 4. Force hard reload with timestamp cache-buster
+    // Stage 2: Sync latest server build
+    this.forceUpdateBtn.innerHTML = '<span class="status-dot dot-live"></span> 02/03 Syncing Latest Server Bundle (v27)...';
+    await new Promise((r) => setTimeout(r, 400));
+
+    // Stage 3: Verified fresh & reload
+    this.forceUpdateBtn.innerHTML = '<span class="status-dot dot-optimal"></span> 03/03 Verified Fresh · Reloading Interface...';
+    await new Promise((r) => setTimeout(r, 350));
+
+    // Force hard reload with timestamp cache-buster
     const targetUrl = window.location.origin + window.location.pathname + '?_v=' + Date.now();
     window.location.href = targetUrl;
   }

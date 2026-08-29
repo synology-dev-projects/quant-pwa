@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=26" />
+  <link rel="stylesheet" href="styles.css?v=27" />
 </head>
 <body>
   <div id="app">
@@ -78,6 +78,16 @@
             <input type="checkbox" id="diagnosticsToggle" checked />
             <span class="slider round"></span>
           </label>
+        </div>
+        <div class="version-info-card" id="versionInfoCard">
+          <div class="version-row">
+            <span class="version-label">App Build</span>
+            <span class="version-val" id="appBuildVersion">v27 (Latest)</span>
+          </div>
+          <div class="version-row">
+            <span class="version-label">Sync Status</span>
+            <span class="version-status"><span class="status-dot dot-live"></span> <span id="syncStatusText">Synchronized</span></span>
+          </div>
         </div>
         <div class="settings-actions">
           <button type="button" id="forceUpdateBtn" class="btn btn-danger">⚡ Force Update &amp; Clear Cache</button>
@@ -264,6 +274,6 @@
   </div>
 
   <!-- Core Module Script -->
-  <script type="module" src="src/app.js?v=26"></script>
+  <script type="module" src="src/app.js?v=27"></script>
 </body>
 </html>
