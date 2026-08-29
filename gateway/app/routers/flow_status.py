@@ -103,7 +103,7 @@ async def get_flow_status():
                 message="No flow records found in database."
             )
             
-        row = df.iloc[0]
+        row = {str(k).lower(): v for k, v in df.iloc[0].items()}
         max_date_val = str(row.get("max_date")) if pd_not_na(row.get("max_date")) else None
         total_count = int(row.get("total_count", 0))
         expected_day_count = int(row.get("expected_day_count", 0))
