@@ -1,12 +1,12 @@
-import { AppState } from './state.js?v=28';
-import { TabManager } from './tabs/tab_manager.js?v=28';
-import { ChatView } from './tabs/chat_view.js?v=28';
-import { CockpitView } from './tabs/cockpit_view.js?v=28';
-import { PromptInput } from './components/prompt_input.js?v=28';
-import { Lightbox } from './components/lightbox.js?v=28';
-import { LockScreen } from './components/lock_screen.js?v=28';
-import { SettingsModal } from './components/settings_modal.js?v=28';
-import { DiagnosticsModal } from './components/diagnostics_modal.js?v=28';
+import { AppState } from './state.js?v=29';
+import { TabManager } from './tabs/tab_manager.js?v=29';
+import { ChatView } from './tabs/chat_view.js?v=29';
+import { CockpitView } from './tabs/cockpit_view.js?v=29';
+import { PromptInput } from './components/prompt_input.js?v=29';
+import { Lightbox } from './components/lightbox.js?v=29';
+import { LockScreen } from './components/lock_screen.js?v=29';
+import { SettingsModal } from './components/settings_modal.js?v=29';
+import { DiagnosticsModal } from './components/diagnostics_modal.js?v=29';
 
 const AVAILABLE_MODELS = [
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite' },

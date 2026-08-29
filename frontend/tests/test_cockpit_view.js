@@ -587,25 +587,38 @@ const canvas = rootContainer.querySelector('canvas.quant-canvas');
 assert(canvas !== null, 'HTML5 Canvas element is mounted inside QuantChart card');
 
 // ----------------------------------------------------------------------------
-// TEST 4: Net GEX | Net DEX Toggle Switch
+// TEST 4: Both | Net GEX | Net DEX Tri-Mode Switcher
 // ----------------------------------------------------------------------------
-console.log('\n--- TEST 4: Net GEX | Net DEX Toggle ---');
+console.log('\n--- TEST 4: Both | Net GEX | Net DEX Tri-Mode Switcher ---');
+const toggleBoth = rootContainer.querySelector('#gexDexToggle .toggle-btn[data-mode="both"]');
 const toggleGex = rootContainer.querySelector('#gexDexToggle .toggle-btn[data-mode="gex"]');
 const toggleDex = rootContainer.querySelector('#gexDexToggle .toggle-btn[data-mode="dex"]');
 
-assert(toggleGex !== null && toggleDex !== null, 'GEX and DEX toggle buttons found');
-assert(toggleGex.classList.contains('active'), 'Net GEX button active by default');
+assert(toggleBoth !== null && toggleGex !== null && toggleDex !== null, 'Both, GEX, and DEX toggle buttons found');
+assert(toggleBoth.classList.contains('active'), 'Both button active by default');
+assert(cockpitView.chartMode === 'both', 'CockpitView chartMode initialized to both');
+assert(cockpitView.quantChartInstance.mode === 'both', 'QuantChart initialized with mode both');
 
-// Click Net DEX
+// 1. Click Net GEX
+toggleGex.click();
+assert(toggleGex.classList.contains('active'), 'Net GEX button is active after click');
+assert(!toggleBoth.classList.contains('active'), 'Both button is no longer active');
+assert(cockpitView.chartMode === 'gex', 'CockpitView chartMode updated to gex');
+assert(cockpitView.quantChartInstance.mode === 'gex', 'QuantChart mode updated to gex');
+
+// 2. Click Net DEX
 toggleDex.click();
 assert(toggleDex.classList.contains('active'), 'Net DEX button is active after click');
 assert(!toggleGex.classList.contains('active'), 'Net GEX button is no longer active');
 assert(cockpitView.chartMode === 'dex', 'CockpitView chartMode updated to dex');
+assert(cockpitView.quantChartInstance.mode === 'dex', 'QuantChart mode updated to dex');
 
-// Click Net GEX back
-toggleGex.click();
-assert(toggleGex.classList.contains('active'), 'Net GEX button is active after toggle back');
-assert(cockpitView.chartMode === 'gex', 'CockpitView chartMode updated back to gex');
+// 3. Click Both back
+toggleBoth.click();
+assert(toggleBoth.classList.contains('active'), 'Both button is active after toggle back');
+assert(!toggleDex.classList.contains('active'), 'Net DEX button is no longer active');
+assert(cockpitView.chartMode === 'both', 'CockpitView chartMode updated back to both');
+assert(cockpitView.quantChartInstance.mode === 'both', 'QuantChart mode updated back to both');
 
 // ----------------------------------------------------------------------------
 // TEST 5: Panel 3 Options Flow Table & Bloomberg Interactivity
