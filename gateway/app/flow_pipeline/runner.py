@@ -30,7 +30,7 @@ def run_daily_incremental(config: Optional[MainConfig] = None) -> int:
     logger.info(f"Targeting {len(symbols)} universe symbols.")
     all_raw_records = []
     for sym in symbols:
-        recs, score = extract.extract_flow_for_symbol(config, sym, cutoff_date=cutoff_date, session=session)
+        recs = extract.extract_flow_for_symbol(config, sym, cutoff_date=cutoff_date, session=session)
         if recs:
             all_raw_records.extend(recs)
 
