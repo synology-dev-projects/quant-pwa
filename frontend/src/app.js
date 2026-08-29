@@ -1,6 +1,7 @@
 import { AppState } from './state.js';
 import { TabManager } from './tabs/tab_manager.js';
 import { ChatView } from './tabs/chat_view.js';
+import { CockpitView } from './tabs/cockpit_view.js';
 import { PromptInput } from './components/prompt_input.js';
 import { Lightbox } from './components/lightbox.js';
 import { LockScreen } from './components/lock_screen.js';
@@ -17,6 +18,7 @@ const AVAILABLE_MODELS = [
 class App {
   constructor() {
     this.chatView = new ChatView();
+    this.cockpitView = new CockpitView();
     this.lightbox = new Lightbox();
     window.quantLightbox = this.lightbox;
 
@@ -69,6 +71,14 @@ class App {
       title: 'Chat Stream',
       iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
       render: (container) => this.chatView.render(container)
+    });
+
+    // Register Cockpit tab
+    this.tabManager.registerTab({
+      id: 'cockpit',
+      title: 'Cockpit',
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="22" y1="12" x2="18" y2="12"></line><line x1="6" y1="12" x2="2" y2="12"></line><line x1="12" y1="6" x2="12" y2="2"></line><line x1="12" y1="22" x2="12" y2="18"></line></svg>`,
+      render: (container) => this.cockpitView.render(container)
     });
 
     const activeTab = AppState.getActiveTab();

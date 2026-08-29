@@ -5,6 +5,7 @@ import json
 import time
 import secrets
 from typing import Optional, Tuple, Dict, Any
+from fastapi import HTTPException, status, Header
 from app.config import settings
 
 
@@ -175,4 +176,46 @@ def record_successful_attempt(client_ip: str) -> None:
     Resets failed attempt count upon successful authentication.
     """
     _ip_attempt_tracker.pop(client_ip, None)
+
+
+def verify_app_passcode(authorization: Optional[str] = Header(None)) -> str:
+    """
+    Validates Authorization Bearer token header.
+    Accepts valid HMAC-SHA256 session tokens (within 6h expiration)
+    or direct APP_PASSCODE matching (fallback).
+    Enforces fail-closed passcode validation.
+    """
+    if not settings.APP_PASSCODE or not settings.APP_PASSCODE.strip():
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server passcode unconfigured.",
+        )
+        
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or malformed Authorization Bearer header.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    token = authorization.split("Bearer ")[1].strip()
+    
+    # 1. Check if token is a valid signed session token
+    session_payload = verify_session_token(token)
+    if session_payload is not None:
+        return session_payload.get("sub", "quant-user")
+
+    # 2. Check direct master password match using constant-time comparison (fallback for scripts / tooling)
+    if secrets.compare_digest(token, settings.APP_PASSCODE.strip()) or validate_master_password(token):
+        return "quant-master"
+        
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Session expired or invalid passcode. Please unlock the app again.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+get_current_user = verify_app_passcode
+
 
