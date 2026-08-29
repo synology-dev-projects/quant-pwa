@@ -890,6 +890,26 @@ html, body {
   color: #ffffff;
 }
 
+.btn-danger {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.25), rgba(185, 28, 28, 0.35));
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.btn-danger:hover, .btn-danger:active {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.45), rgba(185, 28, 28, 0.55));
+  color: #ffffff;
+  border-color: #ef4444;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.35);
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 /* Lightbox Modal */
 .lightbox-overlay {
   position: fixed;
