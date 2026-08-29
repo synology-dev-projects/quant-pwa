@@ -26,6 +26,7 @@ from app.core.auth import (
 from contextlib import asynccontextmanager
 from app.mcp import mcp_router, mcp_client_manager
 from app.routers.cockpit import router as cockpit_router
+from app.routers.flow_status import router as flow_status_router
 from app.tools.gexdex_tool import run_cache_warmer_loop
 from app.engine.service import gexdex_service
 
@@ -104,6 +105,12 @@ app.include_router(
     cockpit_router,
     prefix="/api/cockpit",
     dependencies=[Depends(get_current_user)]
+)
+
+# Mount Options Flow Ingestion Status Router
+app.include_router(
+    flow_status_router,
+    prefix="/api/flow"
 )
 
 
@@ -244,7 +251,7 @@ def health_check():
     return {
         "status": "ok",
         "service": "quant-gateway",
-        "version": "v29",
+        "version": "v30",
         "market": market_meta
     }
 
