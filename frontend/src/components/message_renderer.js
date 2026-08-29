@@ -22,7 +22,7 @@ function detectColType(headerText, sampleCellText = '') {
 
 function parseSortValue(rawText, colType = null) {
   if (rawText === null || rawText === undefined) return -Infinity;
-  const clean = String(rawText).replace(/<[^>]+>/g, '').trim();
+  const clean = String(rawText).replace(/<[^>]+>/g, '').replace(/\[.*?\]/g, '').trim();
   if (!clean || clean === '-' || clean === 'N/A') return -Infinity;
 
   // 1. Currency / Dollar amounts (e.g. $15.50M, $10.90M, $500K, $1.85B, $500.00)
@@ -217,6 +217,9 @@ export function initInteractiveTables(container = document) {
     const pageInfo = wrapper.querySelector('.bb-page-info');
     const pageNumsContainer = wrapper.querySelector('.bb-page-nums');
 
+    // Find Premium column index for secondary tie-breaker & default sort
+    const premIdx = thEls.findIndex(th => /PREMIUM|PREM/i.test(th.textContent));
+
     // Extract all table rows from payload or tbody
     let structuredRows = [];
     const payloadEl = wrapper.querySelector('.tbl-payload');
@@ -224,12 +227,18 @@ export function initInteractiveTables(container = document) {
       try {
         const parsed = JSON.parse(payloadEl.textContent);
         if (parsed.rows && Array.isArray(parsed.rows)) {
-          structuredRows = parsed.rows.map((rowCells, originalIdx) => ({
-            cells: rowCells,
-            formattedHtml: rowCells.map(c => formatTableCell(c, false)).join(''),
-            sortKeys: rowCells.map((c, colIdx) => parseSortValue(c, thEls[colIdx]?.dataset?.type)),
-            originalIdx
-          }));
+          structuredRows = parsed.rows.map((rowCells, originalIdx) => {
+            const sortKeys = rowCells.map((c, colIdx) => parseSortValue(c, thEls[colIdx]?.dataset?.type));
+            const rawPremVal = premIdx !== -1 ? sortKeys[premIdx] : parseSortValue(rowCells.find(c => /^\$?[\d\.,]+[KMB]?$/i.test(String(c).trim())) || 0, 'currency');
+            const premVal = (typeof rawPremVal === 'number' && rawPremVal !== -Infinity) ? rawPremVal : 0;
+            return {
+              cells: rowCells,
+              formattedHtml: rowCells.map(c => formatTableCell(c, false)).join(''),
+              sortKeys,
+              originalIdx,
+              premVal
+            };
+          });
         }
       } catch (e) {
         // Fallback to DOM extraction
@@ -243,11 +252,15 @@ export function initInteractiveTables(container = document) {
       structuredRows = allTrs.map((tr, originalIdx) => {
         const cellEls = Array.from(tr.querySelectorAll('td'));
         const cellTexts = cellEls.map(td => td.textContent.trim());
+        const sortKeys = cellTexts.map((c, colIdx) => parseSortValue(c, thEls[colIdx]?.dataset?.type));
+        const rawPremVal = premIdx !== -1 ? sortKeys[premIdx] : parseSortValue(cellTexts.find(c => /^\$?[\d\.,]+[KMB]?$/i.test(String(c).trim())) || 0, 'currency');
+        const premVal = (typeof rawPremVal === 'number' && rawPremVal !== -Infinity) ? rawPremVal : 0;
         return {
           cells: cellTexts,
           formattedHtml: tr.innerHTML,
-          sortKeys: cellTexts.map((c, colIdx) => parseSortValue(c, thEls[colIdx]?.dataset?.type)),
-          originalIdx
+          sortKeys,
+          originalIdx,
+          premVal
         };
       });
     }
@@ -257,28 +270,38 @@ export function initInteractiveTables(container = document) {
     const pageSize = 20;
 
     // Default sort column: col 6 (Premium) or header matching PREMIUM/PREM
-    let sortCol = 6;
-    const premIdx = thEls.findIndex(th => /PREMIUM|PREM/i.test(th.textContent));
-    if (premIdx !== -1) {
-      sortCol = premIdx;
-    } else if (sortCol >= thEls.length && thEls.length > 0) {
-      sortCol = 0;
-    }
+    let sortCol = premIdx !== -1 ? premIdx : (thEls.length > 6 ? 6 : 0);
     let sortDir = 'desc';
 
     function applySortAndRender() {
       // Sort rows
-      structuredRows.sort((a, b) => {
-        const valA = a.sortKeys[sortCol] !== undefined ? a.sortKeys[sortCol] : -Infinity;
-        const valB = b.sortKeys[sortCol] !== undefined ? b.sortKeys[sortCol] : -Infinity;
+      if (sortCol === null || sortDir === null) {
+        // Reset to Default Natural Order
+        structuredRows.sort((a, b) => a.originalIdx - b.originalIdx);
+      } else {
+        structuredRows.sort((a, b) => {
+          const valA = a.sortKeys[sortCol] !== undefined ? a.sortKeys[sortCol] : -Infinity;
+          const valB = b.sortKeys[sortCol] !== undefined ? b.sortKeys[sortCol] : -Infinity;
 
-        if (typeof valA === 'number' && typeof valB === 'number') {
-          return sortDir === 'asc' ? valA - valB : valB - valA;
-        }
-        if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-        if (valA > valB) return sortDir === 'asc' ? 1 : -1;
-        return a.originalIdx - b.originalIdx;
-      });
+          let diff = 0;
+          if (typeof valA === 'number' && typeof valB === 'number') {
+            diff = sortDir === 'asc' ? valA - valB : valB - valA;
+          } else {
+            const strA = String(valA);
+            const strB = String(valB);
+            if (strA < strB) diff = sortDir === 'asc' ? -1 : 1;
+            else if (strA > strB) diff = sortDir === 'asc' ? 1 : -1;
+          }
+
+          if (diff !== 0) return diff;
+
+          // Secondary Tie-Breaking: highest premium first (descending)
+          const premDiff = (b.premVal || 0) - (a.premVal || 0);
+          if (premDiff !== 0) return premDiff;
+
+          return a.originalIdx - b.originalIdx;
+        });
+      }
 
       const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
       if (currentPage > totalPages) currentPage = totalPages;
@@ -322,18 +345,28 @@ export function initInteractiveTables(container = document) {
       // Update Header Sort Icons & Classes
       thEls.forEach((th, idx) => {
         th.classList.remove('sort-asc', 'sort-desc');
-        if (idx === sortCol) {
+        const colIdx = parseInt(th.dataset.col !== undefined ? th.dataset.col : idx, 10);
+        if (sortCol !== null && colIdx === sortCol) {
           th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
         }
       });
     }
 
-    // Attach Header Click Event Listeners
+    // Attach Header Click Event Listeners (Tri-State Sort State Machine)
     thEls.forEach((th, idx) => {
       th.addEventListener('click', () => {
         const colIdx = parseInt(th.dataset.col !== undefined ? th.dataset.col : idx, 10);
-        if (sortCol === colIdx) {
-          sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        if (sortCol !== colIdx) {
+          // Click 1: New Column -> Descending
+          sortCol = colIdx;
+          sortDir = 'desc';
+        } else if (sortDir === 'desc') {
+          // Click 2: Same Column -> Ascending
+          sortDir = 'asc';
+        } else if (sortDir === 'asc') {
+          // Click 3: Same Column -> Reset to Default Natural Order
+          sortCol = null;
+          sortDir = null;
         } else {
           sortCol = colIdx;
           sortDir = 'desc';
