@@ -560,15 +560,27 @@ export class CockpitView {
     this.renderExposureChart(data);
 
     // 3. 30-Day Options Flow Table in Panel 3
-    this.allFlowPrints = data.flow_prints || [];
+    const flowObj = data.flow || {};
+    this.allFlowPrints = flowObj.records || data.flow_prints || [];
     this.renderFlowTable();
   }
 
   renderMetricPills(data) {
-    const confluence = data.confluence_bias || 'NEUTRAL PIN';
-    const regime = data.gamma_regime || 'LONG GAMMA (+GEX)';
-    const flowRatio = data.flow_ratio || '68% CALL FLOW';
-    const wallRange = data.wall_range || (data.put_wall && data.call_wall ? `$${data.put_wall.toFixed(0)} ↔ $${data.call_wall.toFixed(0)}` : 'N/A');
+    const metrics = data.metrics || {};
+    const gex = data.gex || {};
+
+    const confluence = metrics.confluence_bias || data.confluence_bias || 'NEUTRAL PIN';
+    const regime = metrics.gamma_regime || gex.gamma_regime || data.gamma_regime || 'LONG GAMMA (+GEX)';
+    
+    let flowRatio = data.flow_ratio;
+    if (!flowRatio && metrics.call_pct !== undefined) {
+      flowRatio = `${metrics.call_pct.toFixed(0)}% CALL FLOW`;
+    }
+    flowRatio = flowRatio || '68% CALL FLOW';
+
+    const putWall = metrics.put_wall || gex.put_wall || data.put_wall;
+    const callWall = metrics.call_wall || gex.call_wall || data.call_wall;
+    const wallRange = (putWall && callWall) ? `$${Number(putWall).toFixed(0)} ↔ $${Number(callWall).toFixed(0)}` : (data.wall_range || 'N/A');
 
     // Confluence Bias Pill
     const pillConfluence = this.container.querySelector('#pillConfluence');
@@ -586,8 +598,8 @@ export class CockpitView {
     const pillRegime = this.container.querySelector('#pillRegime');
     if (pillRegime) {
       let regimeClass = 'neutral';
-      if (regime.includes('+GEX') || regime.includes('LONG')) regimeClass = 'bullish';
-      else if (regime.includes('-GEX') || regime.includes('SHORT')) regimeClass = 'bearish';
+      if (regime.includes('+GEX') || regime.includes('LONG') || regime.includes('Positive')) regimeClass = 'bullish';
+      else if (regime.includes('-GEX') || regime.includes('SHORT') || regime.includes('Negative')) regimeClass = 'bearish';
 
       pillRegime.className = `metric-pill regime-pill ${regimeClass}`;
       const valEl = pillRegime.querySelector('.pill-val');
@@ -598,7 +610,7 @@ export class CockpitView {
     const pillFlowRatio = this.container.querySelector('#pillFlowRatio');
     if (pillFlowRatio) {
       let flowClass = 'bullish';
-      if (flowRatio.includes('PUT') || flowRatio.includes('BEAR')) flowClass = 'bearish';
+      if (flowRatio.includes('PUT') || flowRatio.includes('BEAR') || (metrics.put_pct > 55)) flowClass = 'bearish';
       else if (flowRatio.includes('NEUTRAL')) flowClass = 'neutral';
 
       pillFlowRatio.className = `metric-pill flow-pill ${flowClass}`;
@@ -616,11 +628,15 @@ export class CockpitView {
   }
 
   renderExposureChart(data) {
+    const gex = data.gex || {};
+    const metrics = data.metrics || {};
+
     // Key levels
-    const spot = data.spot_price || 0;
-    const flip = data.zero_flip || 0;
-    const callWall = data.call_wall || 0;
-    const putWall = data.put_wall || 0;
+    const spot = Number(gex.spot_price || metrics.spot_price || data.spot_price || 0);
+    const flip = Number(gex.zero_gex_level || metrics.zero_gamma_flip || data.zero_flip || spot);
+    const callWall = Number(gex.call_wall || metrics.call_wall || data.call_wall || 0);
+    const putWall = Number(gex.put_wall || metrics.put_wall || data.put_wall || 0);
+    const cpRatio = Number(gex.call_put_ratio || data.call_put_ratio || 1.0);
 
     const klSpot = this.container.querySelector('#klSpot');
     const klFlip = this.container.querySelector('#klFlip');
@@ -640,15 +656,23 @@ export class CockpitView {
       chartWrapper.className = 'cockpit-canvas-wrapper';
       chartSlot.appendChild(chartWrapper);
 
-      const chartPayload = data.chart_data || {
-        ticker: data.ticker,
+      const strikes = (gex.strikes && gex.strikes.length > 0)
+        ? gex.strikes
+        : (data.strikes || this.generateMockStrikes(spot, callWall, putWall));
+
+      const expirations = (gex.expirations && gex.expirations.length > 0)
+        ? gex.expirations
+        : (data.expirations || ['Front Expiry', 'Next Expiry']);
+
+      const chartPayload = {
+        ticker: data.ticker || gex.ticker || 'QUANT',
         spot_price: spot,
         zero_flip: flip,
         call_wall: callWall,
         put_wall: putWall,
-        call_put_ratio: data.call_put_ratio || 1.45,
-        expirations: data.expirations || ['2026-09-18', '2026-10-16', '2026-11-20'],
-        strikes: data.strikes || this.generateMockStrikes(spot, callWall, putWall)
+        call_put_ratio: cpRatio,
+        expirations: expirations,
+        strikes: strikes
       };
 
       if (this.quantChartInstance && this.quantChartInstance.destroy) {
