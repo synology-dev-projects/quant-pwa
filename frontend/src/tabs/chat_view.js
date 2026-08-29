@@ -1,4 +1,4 @@
-import { createMessageElement, renderMarkdown } from '../components/message_renderer.js';
+import { createMessageElement, renderMarkdown, initInteractiveTables } from '../components/message_renderer.js';
 import { QuantChart } from '../components/quant_chart.js';
 import { AppState } from '../state.js';
 
@@ -34,6 +34,7 @@ export class ChatView {
       const el = createMessageElement(msg.role, msg.content, msg.metadata, msg.toolUiEvents || [], msg.metrics);
       this.streamContainer.appendChild(el);
     });
+    initInteractiveTables(this.streamContainer);
     this.scrollToBottom();
   }
 
@@ -249,6 +250,10 @@ export class ChatView {
       const now = performance.now();
       const totalMs = this.streamStartTime ? Math.max(1, Math.round(now - this.streamStartTime)) : 0;
       
+      if (this.currentAssistantElement) {
+        initInteractiveTables(this.currentAssistantElement);
+      }
+
       if (this.currentMetrics) {
         this.currentMetrics.total_ms = totalMs;
         this.currentMetrics.tokens = this.tokenCount;

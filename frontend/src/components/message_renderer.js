@@ -206,7 +206,7 @@ function buildTableHtml(tableRows) {
 export function initInteractiveTables(container = document) {
   const wrappers = container.querySelectorAll ? container.querySelectorAll('.quant-table-wrapper') : [];
   wrappers.forEach(wrapper => {
-    if (wrapper.dataset.initialized === 'true') return;
+    if (wrapper.dataset.initialized === 'true' && wrapper._tableController) return;
 
     const tbody = wrapper.querySelector('tbody');
     if (!tbody) return;
@@ -330,16 +330,6 @@ export function initInteractiveTables(container = document) {
       }
       if (pageNumsContainer) {
         pageNumsContainer.innerHTML = renderPageNums(currentPage, totalPages);
-        pageNumsContainer.querySelectorAll('.bb-page-num').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const p = parseInt(btn.dataset.page, 10);
-            if (!isNaN(p) && p !== currentPage) {
-              currentPage = p;
-              applySortAndRender();
-            }
-          });
-        });
       }
 
       // Update Header Sort Icons & Classes
@@ -352,34 +342,85 @@ export function initInteractiveTables(container = document) {
       });
     }
 
-    // Attach Header Click Event Listeners (Tri-State Sort State Machine)
-    thEls.forEach((th, idx) => {
-      th.addEventListener('click', () => {
-        const colIdx = parseInt(th.dataset.col !== undefined ? th.dataset.col : idx, 10);
-        if (sortCol !== colIdx) {
-          // Click 1: New Column -> Descending
-          sortCol = colIdx;
-          sortDir = 'desc';
-        } else if (sortDir === 'desc') {
-          // Click 2: Same Column -> Ascending
-          sortDir = 'asc';
-        } else if (sortDir === 'asc') {
-          // Click 3: Same Column -> Reset to Default Natural Order
-          sortCol = null;
-          sortDir = null;
-        } else {
-          sortCol = colIdx;
-          sortDir = 'desc';
+    // Unified Event Delegation on wrapper
+    wrapper.addEventListener('click', (e) => {
+      const th = e.target.closest ? e.target.closest('th.sortable, th[data-col]') : null;
+      if (th && wrapper.contains(th)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const colIdx = parseInt(th.dataset.col !== undefined ? th.dataset.col : thEls.indexOf(th), 10);
+        handleSortClick(colIdx);
+        return;
+      }
+
+      const prev = e.target.closest ? e.target.closest('.btn-prev') : null;
+      if (prev && wrapper.contains(prev)) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (currentPage > 1) {
+          currentPage--;
+          applySortAndRender();
         }
-        currentPage = 1;
-        applySortAndRender();
+        return;
+      }
+
+      const next = e.target.closest ? e.target.closest('.btn-next') : null;
+      if (next && wrapper.contains(next)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+        if (currentPage < totalPages) {
+          currentPage++;
+          applySortAndRender();
+        }
+        return;
+      }
+
+      const pageNumBtn = e.target.closest ? e.target.closest('.bb-page-num') : null;
+      if (pageNumBtn && wrapper.contains(pageNumBtn)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const p = parseInt(pageNumBtn.dataset.page, 10);
+        if (!isNaN(p) && p !== currentPage) {
+          currentPage = p;
+          applySortAndRender();
+        }
+        return;
+      }
+    });
+
+    function handleSortClick(colIdx) {
+      if (sortCol !== colIdx) {
+        // Click 1: New Column -> Descending
+        sortCol = colIdx;
+        sortDir = 'desc';
+      } else if (sortDir === 'desc') {
+        // Click 2: Same Column -> Ascending
+        sortDir = 'asc';
+      } else if (sortDir === 'asc') {
+        // Click 3: Same Column -> Reset to Default Natural Order
+        sortCol = null;
+        sortDir = null;
+      } else {
+        sortCol = colIdx;
+        sortDir = 'desc';
+      }
+      currentPage = 1;
+      applySortAndRender();
+    }
+
+    // Direct element listeners for non-bubbling / direct dispatch environments
+    thEls.forEach((th, idx) => {
+      th.addEventListener('click', (e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        const colIdx = parseInt(th.dataset.col !== undefined ? th.dataset.col : idx, 10);
+        handleSortClick(colIdx);
       });
     });
 
-    // Attach Pagination Controls
     if (prevBtn) {
       prevBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
+        if (e && e.stopPropagation) e.stopPropagation();
         if (currentPage > 1) {
           currentPage--;
           applySortAndRender();
@@ -389,7 +430,7 @@ export function initInteractiveTables(container = document) {
 
     if (nextBtn) {
       nextBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
+        if (e && e.stopPropagation) e.stopPropagation();
         const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
         if (currentPage < totalPages) {
           currentPage++;
@@ -401,6 +442,13 @@ export function initInteractiveTables(container = document) {
     // Initial render & mark initialized
     applySortAndRender();
     wrapper.dataset.initialized = 'true';
+    wrapper._tableController = {
+      applySortAndRender,
+      getSortCol: () => sortCol,
+      getSortDir: () => sortDir,
+      getCurrentPage: () => currentPage,
+      getTotalRows: () => totalRows
+    };
   });
 }
 
@@ -409,6 +457,16 @@ export const initQuantTables = initInteractiveTables;
 if (typeof window !== 'undefined') {
   window.initInteractiveTables = initInteractiveTables;
   window.initQuantTables = initInteractiveTables;
+}
+
+// Global auto-init capture listener for dynamic or late-rendered tables
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('click', (e) => {
+    const tableWrapper = e.target && e.target.closest ? e.target.closest('.quant-table-wrapper') : null;
+    if (tableWrapper && (!tableWrapper.dataset.initialized || !tableWrapper._tableController)) {
+      initInteractiveTables(tableWrapper.parentElement || document);
+    }
+  }, true);
 }
 
 function parseMarkdownTables(text) {
