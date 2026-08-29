@@ -71,6 +71,7 @@ services:
       - "${FRONTEND_PORT:-8095}:80"
     environment:
       - CONTAINER_PREFIX=${CONTAINER_PREFIX:-prod}
+      - GATEWAY_HOST=quant-gateway-${CONTAINER_PREFIX:-prod}
     depends_on:
       - quant-gateway
     networks:
