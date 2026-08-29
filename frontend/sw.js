@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quant-ai-v22';
+const CACHE_NAME = 'quant-ai-v23';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
