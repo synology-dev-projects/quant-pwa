@@ -1,6 +1,6 @@
 import { AppState } from '../state.js';
 
-export const CLIENT_VERSION = 'v27';
+export const CLIENT_VERSION = 'v28';
 
 export class SettingsModal {
   constructor({ onSettingsChanged, onLockApp, onClearHistory } = {}) {
@@ -15,6 +15,7 @@ export class SettingsModal {
     this.clearHistoryBtn = document.getElementById('clearHistoryBtn');
     this.lockAppBtn = document.getElementById('lockAppBtn');
     this.forceUpdateBtn = document.getElementById('forceUpdateBtn');
+    this.manualResyncLink = document.getElementById('manualResyncLink');
     this.appBuildVersion = document.getElementById('appBuildVersion');
     this.syncStatusText = document.getElementById('syncStatusText');
     this.passcodeInput = document.getElementById('passcodeInput');
@@ -28,6 +29,7 @@ export class SettingsModal {
     if (!this.modal) return;
 
     this.forceUpdateBtn?.addEventListener('click', () => this.handleForceUpdate());
+    this.manualResyncLink?.addEventListener('click', () => this.handleForceUpdate());
 
     // Toggle default state from AppState (defaults to true)
     if (this.diagnosticsToggle) {
@@ -91,22 +93,30 @@ export class SettingsModal {
         const serverVersion = data.version || CLIENT_VERSION;
 
         if (serverVersion === CLIENT_VERSION) {
-          // Up to date state: subtle grey/secondary styling
+          // Up to date state: completely disabled greyed out button
           if (this.syncStatusText) {
             this.syncStatusText.textContent = `Synchronized (${CLIENT_VERSION})`;
           }
           if (this.forceUpdateBtn) {
-            this.forceUpdateBtn.className = 'btn btn-secondary btn-synced';
-            this.forceUpdateBtn.innerHTML = `✓ Up to Date (${CLIENT_VERSION}) · Tap to Re-sync`;
+            this.forceUpdateBtn.disabled = true;
+            this.forceUpdateBtn.className = 'btn btn-synced';
+            this.forceUpdateBtn.innerHTML = `✓ App Up to Date (${CLIENT_VERSION})`;
+          }
+          if (this.manualResyncLink) {
+            this.manualResyncLink.style.display = 'block';
           }
         } else {
-          // Outdated state: prominent glowing danger styling
+          // Outdated state: active glowing danger button
           if (this.syncStatusText) {
             this.syncStatusText.textContent = `Update Available (${serverVersion})`;
           }
           if (this.forceUpdateBtn) {
+            this.forceUpdateBtn.disabled = false;
             this.forceUpdateBtn.className = 'btn btn-danger btn-pulse';
             this.forceUpdateBtn.innerHTML = `⚡ Update Available (${serverVersion}) · Tap to Sync`;
+          }
+          if (this.manualResyncLink) {
+            this.manualResyncLink.style.display = 'none';
           }
         }
         return;
@@ -115,10 +125,14 @@ export class SettingsModal {
       // Fallback
     }
 
-    // Default state if offline
+    // Default state if offline or error
     if (this.forceUpdateBtn) {
-      this.forceUpdateBtn.className = 'btn btn-secondary btn-synced';
-      this.forceUpdateBtn.innerHTML = `✓ App Version ${CLIENT_VERSION} · Tap to Re-sync`;
+      this.forceUpdateBtn.disabled = true;
+      this.forceUpdateBtn.className = 'btn btn-synced';
+      this.forceUpdateBtn.innerHTML = `✓ App Up to Date (${CLIENT_VERSION})`;
+    }
+    if (this.manualResyncLink) {
+      this.manualResyncLink.style.display = 'block';
     }
   }
 

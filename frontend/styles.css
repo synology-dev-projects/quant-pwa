@@ -954,16 +954,29 @@ html, body {
 }
 
 .btn-synced {
-  background: rgba(30, 41, 59, 0.65);
-  color: #94a3b8;
-  border: 1px solid #334155;
-  font-size: 13px;
+  background: #090d16 !important;
+  color: #475569 !important;
+  border: 1px solid #1e293b !important;
+  opacity: 0.55;
+  cursor: default !important;
+  box-shadow: none !important;
+  pointer-events: none;
 }
 
-.btn-synced:hover, .btn-synced:active {
-  background: rgba(51, 65, 85, 0.85);
-  color: #f1f5f9;
-  border-color: #475569;
+.manual-resync-link {
+  text-align: center;
+  font-size: 11px;
+  color: #475569;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  margin-top: -2px;
+  margin-bottom: 2px;
+  transition: color 0.15s ease;
+}
+
+.manual-resync-link:hover {
+  color: #94a3b8;
 }
 
 .btn-pulse {
