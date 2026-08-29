@@ -1,6 +1,6 @@
-import { QuantChart } from '../components/quant_chart.js?v=28';
-import { renderMarkdown, initInteractiveTables } from '../components/message_renderer.js?v=28';
-import { AppState } from '../state.js?v=28';
+import { QuantChart } from '../components/quant_chart.js?v=29';
+import { renderMarkdown, initInteractiveTables } from '../components/message_renderer.js?v=29';
+import { AppState } from '../state.js?v=29';
 
 const QUICK_SUGGESTIONS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'AMD'];
 const RECENT_SEARCHES_KEY = 'quant_cockpit_recent';
@@ -11,7 +11,7 @@ export class CockpitView {
     this.currentTicker = null;
     this.cockpitData = null;
     this.activeFilter = 'all'; // 'all' | 'whales' | 'calls' | 'puts' | 'unusual'
-    this.chartMode = 'gex'; // 'gex' | 'dex'
+    this.chartMode = (typeof localStorage !== 'undefined' && localStorage.getItem('quant_cockpit_chart_mode')) || 'both'; // 'both' | 'gex' | 'dex'
     this.activeAbortController = null;
     this.quantChartInstance = null;
     this.allFlowPrints = [];
@@ -114,10 +114,11 @@ export class CockpitView {
                 <span class="panel-badge-icon">📊</span>
                 <h2 class="panel-title">Interactive Options Exposure</h2>
               </div>
-              <!-- Net GEX | Net DEX Toggle Switch -->
+              <!-- Both | Net GEX | Net DEX Toggle Switch -->
               <div class="gex-dex-toggle" id="gexDexToggle">
-                <button type="button" class="toggle-btn active" data-mode="gex">Net GEX</button>
-                <button type="button" class="toggle-btn" data-mode="dex">Net DEX</button>
+                <button type="button" class="toggle-btn ${this.chartMode === 'both' ? 'active' : ''}" data-mode="both">Both</button>
+                <button type="button" class="toggle-btn ${this.chartMode === 'gex' ? 'active' : ''}" data-mode="gex">Net GEX</button>
+                <button type="button" class="toggle-btn ${this.chartMode === 'dex' ? 'active' : ''}" data-mode="dex">Net DEX</button>
               </div>
             </div>
 
@@ -313,6 +314,9 @@ export class CockpitView {
   setChartMode(mode) {
     if (!mode || this.chartMode === mode) return;
     this.chartMode = mode;
+    try {
+      localStorage.setItem('quant_cockpit_chart_mode', mode);
+    } catch (e) {}
 
     const btns = this.container?.querySelectorAll('#gexDexToggle .toggle-btn') || [];
     btns.forEach(b => {
@@ -321,8 +325,13 @@ export class CockpitView {
 
     const chartSlot = this.container?.querySelector('#cockpitChartSlot');
     if (chartSlot) {
+      chartSlot.classList.toggle('mode-both', mode === 'both');
       chartSlot.classList.toggle('mode-dex', mode === 'dex');
       chartSlot.classList.toggle('mode-gex', mode === 'gex');
+    }
+
+    if (this.quantChartInstance && this.quantChartInstance.setMode) {
+      this.quantChartInstance.setMode(mode);
     }
   }
 
@@ -718,7 +727,7 @@ export class CockpitView {
       if (this.quantChartInstance && this.quantChartInstance.destroy) {
         this.quantChartInstance.destroy();
       }
-      this.quantChartInstance = new QuantChart(chartWrapper, chartPayload);
+      this.quantChartInstance = new QuantChart(chartWrapper, chartPayload, { mode: this.chartMode });
     }
   }
 

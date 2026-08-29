@@ -244,7 +244,7 @@ def health_check():
     return {
         "status": "ok",
         "service": "quant-gateway",
-        "version": "v28",
+        "version": "v29",
         "market": market_meta
     }
 
