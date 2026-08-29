@@ -86,8 +86,8 @@ export class SettingsModal {
     }
 
     try {
-      const gatewayUrl = AppState.getGatewayUrl() || '';
-      const res = await fetch(`${gatewayUrl.replace(/\/$/, '')}/api/health`);
+      // Always query relative /api/health to inspect the local environment's gateway container
+      const res = await fetch('/api/health');
       if (res.ok) {
         const data = await res.json();
         const serverVersion = data.version || CLIENT_VERSION;
@@ -122,7 +122,7 @@ export class SettingsModal {
         return;
       }
     } catch (e) {
-      // Fallback
+      console.warn('Health check version fetch failed:', e);
     }
 
     // Default state if offline or error
@@ -212,12 +212,14 @@ export class SettingsModal {
       }
 
       localStorage.removeItem('quant_cockpit_recent');
+      localStorage.removeItem('quant_gateway_url');
+      sessionStorage.setItem('quant_update_banner', CLIENT_VERSION);
     } catch (e) {
       console.warn('Error during cache purge:', e);
     }
 
     // Stage 2: Sync latest server build
-    this.forceUpdateBtn.innerHTML = '<span class="status-dot dot-live"></span> 02/03 Syncing Latest Server Bundle (v27)...';
+    this.forceUpdateBtn.innerHTML = `<span class="status-dot dot-live"></span> 02/03 Syncing Latest Server Bundle (${CLIENT_VERSION})...`;
     await new Promise((r) => setTimeout(r, 400));
 
     // Stage 3: Verified fresh & reload

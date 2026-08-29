@@ -40,11 +40,27 @@ class App {
     this.initSettingsModal();
     this.initPromptBar();
     this.registerServiceWorker();
+    this.checkUpdateBanner();
 
     // Check 6-hour session authentication
     const isAuthenticated = await this.lockScreen.checkAuthentication();
     if (isAuthenticated) {
       this.onUnlocked();
+    }
+  }
+
+  checkUpdateBanner() {
+    const updatedVer = sessionStorage.getItem('quant_update_banner');
+    if (updatedVer) {
+      sessionStorage.removeItem('quant_update_banner');
+      const toast = document.createElement('div');
+      toast.className = 'update-success-toast';
+      toast.innerHTML = `<span class="status-dot dot-live"></span> <span><b>Quant AI Updated:</b> Build ${updatedVer} is active &amp; verified fresh.</span>`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 400);
+      }, 4000);
     }
   }
 
