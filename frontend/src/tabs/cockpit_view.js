@@ -1,6 +1,6 @@
-import { QuantChart } from '../components/quant_chart.js';
-import { renderMarkdown, initInteractiveTables } from '../components/message_renderer.js';
-import { AppState } from '../state.js';
+import { QuantChart } from '../components/quant_chart.js?v=28';
+import { renderMarkdown, initInteractiveTables } from '../components/message_renderer.js?v=28';
+import { AppState } from '../state.js?v=28';
 
 const QUICK_SUGGESTIONS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'AMD'];
 const RECENT_SEARCHES_KEY = 'quant_cockpit_recent';
