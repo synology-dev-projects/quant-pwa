@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 import pandas as pd
 from fastapi import APIRouter, HTTPException, status, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -177,7 +177,15 @@ async def get_cockpit_data_get(ticker: str):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ticker symbol cannot be empty."
         )
-    return await get_cockpit_full_payload(clean_ticker)
+    payload = await get_cockpit_full_payload(clean_ticker)
+    return JSONResponse(
+        content=payload,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 
 @router.post("/data", summary="Get Ticker Cockpit Data (POST)")
@@ -189,7 +197,15 @@ async def get_cockpit_data_post(req: CockpitRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ticker symbol cannot be empty."
         )
-    return await get_cockpit_full_payload(clean_ticker)
+    payload = await get_cockpit_full_payload(clean_ticker)
+    return JSONResponse(
+        content=payload,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 
 def _build_synthesis_prompt(ticker: str, payload: Dict[str, Any]) -> str:

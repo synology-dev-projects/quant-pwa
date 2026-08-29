@@ -16,6 +16,7 @@ export class CockpitView {
     this.quantChartInstance = null;
     this.allFlowPrints = [];
     this.isStreaming = false;
+    this.dataCache = new Map();
   }
 
   render(container) {
@@ -350,8 +351,33 @@ export class CockpitView {
     }
     this.activeAbortController = new AbortController();
 
-    // 1. Reset UI to loading states
-    this.setLoadingState(cleanTicker);
+    // Instant 0ms memory switch if previously loaded
+    if (this.dataCache.has(cleanTicker)) {
+      const cached = this.dataCache.get(cleanTicker);
+      this.cockpitData = cached;
+      this.renderDataPanels(cached);
+      
+      const badge = this.container?.querySelector('#heroTickerBadge');
+      if (badge) badge.textContent = cleanTicker;
+
+      const liveTag = this.container?.querySelector('#panelLiveTag');
+      if (liveTag) {
+        liveTag.innerHTML = `<span class="status-dot dot-live pulse"></span><span class="tag-text">STREAMING</span>`;
+      }
+
+      const synthBox = this.container?.querySelector('#synthesisMarkdown');
+      if (synthBox) {
+        synthBox.innerHTML = `
+          <div class="cockpit-loading-block">
+            <div class="typing-indicator"><span></span><span></span><span></span></div>
+            <span class="loading-label">Synthesizing quantitative confluence thesis for ${cleanTicker}...</span>
+          </div>
+        `;
+      }
+    } else {
+      // 1. Reset UI to loading states
+      this.setLoadingState(cleanTicker);
+    }
 
     // 2. Concurrently execute instant data call & SSE synthesis stream
     await Promise.allSettled([
@@ -427,15 +453,17 @@ export class CockpitView {
 
     let data = null;
     try {
-      const res = await fetch(`${gatewayBase}/api/cockpit/data`, {
+      const res = await fetch(`${gatewayBase}/api/cockpit/data?_t=${Date.now()}`, {
         method: 'POST',
         headers,
+        cache: 'no-store',
         body: JSON.stringify({ ticker }),
         signal: this.activeAbortController?.signal
       });
 
       if (res.ok) {
         data = await res.json();
+        this.dataCache.set(ticker, data);
       } else {
         data = this.generateFallbackData(ticker);
       }
@@ -463,9 +491,10 @@ export class CockpitView {
     this.isStreaming = true;
 
     try {
-      const res = await fetch(`${gatewayBase}/api/cockpit/synthesis/stream`, {
+      const res = await fetch(`${gatewayBase}/api/cockpit/synthesis/stream?_t=${Date.now()}`, {
         method: 'POST',
         headers,
+        cache: 'no-store',
         body: JSON.stringify({ ticker }),
         signal: this.activeAbortController?.signal
       });
