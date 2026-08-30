@@ -39,14 +39,25 @@ def get_expected_quant_levels_date(ref_dt: Optional[datetime] = None) -> date:
       - If hour < 6 or (hour == 6 and minute < 30) Eastern Time: returns previous market day (Friday if Monday; yesterday if Tue-Fri).
       - If >= 6:30 AM Eastern Time: returns today's date.
     """
-    eastern = ZoneInfo("US/Eastern")
-    if ref_dt is None:
-        now = datetime.now(eastern)
-    else:
-        if ref_dt.tzinfo is None:
-            now = ref_dt.replace(tzinfo=eastern)
+    try:
+        eastern = ZoneInfo("America/New_York")
+        if ref_dt is None:
+            now = datetime.now(eastern)
         else:
-            now = ref_dt.astimezone(eastern)
+            if ref_dt.tzinfo is None:
+                now = ref_dt.replace(tzinfo=eastern)
+            else:
+                now = ref_dt.astimezone(eastern)
+    except Exception:
+        # Fallback timezone offset: UTC-4 (EDT) or system local
+        edt_tz = timezone(timedelta(hours=-4))
+        if ref_dt is None:
+            now = datetime.now(edt_tz)
+        else:
+            if ref_dt.tzinfo is None:
+                now = ref_dt.replace(tzinfo=edt_tz)
+            else:
+                now = ref_dt.astimezone(edt_tz)
 
     weekday = now.weekday()  # 0=Monday, ..., 6=Sunday
     cutoff_time = time(6, 30)
@@ -80,10 +91,10 @@ async def get_quant_levels_status():
     """
     Returns the freshness status of the Quant Levels dataset in PostgreSQL.
     """
-    expected_date = get_expected_quant_levels_date()
-    expected_str = expected_date.strftime("%Y-%m-%d")
-
+    expected_str = datetime.now().strftime("%Y-%m-%d")
     try:
+        expected_date = get_expected_quant_levels_date()
+        expected_str = expected_date.strftime("%Y-%m-%d")
         config = load_config()
         sql_summary = """
         SELECT 
