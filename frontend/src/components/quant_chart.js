@@ -164,7 +164,8 @@ export class QuantChart {
       });
       this.resizeObserver.observe(this.canvasContainer);
     } else {
-      window.addEventListener('resize', () => this.draw());
+      this._onWindowResize = () => this.draw();
+      window.addEventListener('resize', this._onWindowResize);
     }
   }
 
@@ -173,24 +174,52 @@ export class QuantChart {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
+    if (this._onWindowResize) {
+      window.removeEventListener('resize', this._onWindowResize);
+      this._onWindowResize = null;
+    }
+    if (this.canvas) {
+      if (this._onMove) {
+        this.canvas.removeEventListener?.('mousemove', this._onMove);
+        this.canvas.removeEventListener?.('touchstart', this._onMove);
+      }
+      if (this._onLeave) {
+        this.canvas.removeEventListener?.('mouseleave', this._onLeave);
+        this.canvas.removeEventListener?.('touchend', this._onLeave);
+      }
+    }
+    const expandBtn = this.wrapper?.querySelector('.expand-btn');
+    if (expandBtn && this._onExpandClick) {
+      expandBtn.removeEventListener?.('click', this._onExpandClick);
+    }
+    if (this.ctx && this.canvas) {
+      try {
+        this.ctx.clearRect(0, 0, this.canvas.width || 0, this.canvas.height || 0);
+      } catch (e) {}
+    }
+    this.canvas = null;
+    this.ctx = null;
   }
 
   renderFallback() {
+    const ticker = this.data?.ticker || 'QUANT';
     this.container.innerHTML = `
       <div class="quant-chart-card empty">
-        <div class="chart-ticker-badge">${this.data?.ticker || 'OPTIONS'} EXPOSURE</div>
-        <p>No active options chain liquidity available for this ticker.</p>
+        <div class="chart-ticker-badge">${ticker} EXPOSURE</div>
+        <p>No Active Options Chain for ${ticker}</p>
       </div>
     `;
   }
 
   bindEvents() {
-    const expandBtn = this.wrapper.querySelector('.expand-btn');
+    this._onExpandClick = () => this.toggleFullscreen();
+    const expandBtn = this.wrapper?.querySelector('.expand-btn');
     if (expandBtn) {
-      expandBtn.addEventListener('click', () => this.toggleFullscreen());
+      expandBtn.addEventListener('click', this._onExpandClick);
     }
 
-    const onMove = (e) => {
+    this._onMove = (e) => {
+      if (!this.canvas) return;
       const rect = this.canvas.getBoundingClientRect();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -199,16 +228,18 @@ export class QuantChart {
       this.handleHover(x, y);
     };
 
-    const onLeave = () => {
+    this._onLeave = () => {
       this.hoveredStrike = null;
-      this.tooltip.style.display = 'none';
+      if (this.tooltip) this.tooltip.style.display = 'none';
       this.draw();
     };
 
-    this.canvas.addEventListener('mousemove', onMove);
-    this.canvas.addEventListener('mouseleave', onLeave);
-    this.canvas.addEventListener('touchstart', onMove, { passive: true });
-    this.canvas.addEventListener('touchend', onLeave);
+    if (this.canvas) {
+      this.canvas.addEventListener('mousemove', this._onMove);
+      this.canvas.addEventListener('mouseleave', this._onLeave);
+      this.canvas.addEventListener('touchstart', this._onMove, { passive: true });
+      this.canvas.addEventListener('touchend', this._onLeave);
+    }
   }
 
   toggleFullscreen() {

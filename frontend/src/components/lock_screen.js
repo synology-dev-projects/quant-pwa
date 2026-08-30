@@ -16,6 +16,14 @@ export class LockScreen {
   }
 
   init() {
+    // Listen for session expiration events from global CustomEvent and AppState callbacks
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('quant-session-expired', () => this.show());
+    }
+    if (typeof AppState.onSessionExpired === 'function') {
+      AppState.onSessionExpired(() => this.show());
+    }
+
     if (!this.overlay) return;
 
     // Toggle show/hide password
@@ -100,7 +108,10 @@ export class LockScreen {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
-    if (!this.overlay) return;
+    if (!this.overlay) {
+      if (this.onAuthenticated) this.onAuthenticated();
+      return;
+    }
 
     if (immediate) {
       this.overlay.classList.remove('visible');

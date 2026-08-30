@@ -1,4 +1,4 @@
-import { AppState } from './state.js?v=30';
+import { AppState, fetchWithAuth } from './state.js?v=30';
 import { TabManager } from './tabs/tab_manager.js?v=30';
 import { ChatView } from './tabs/chat_view.js?v=30';
 import { CockpitView } from './tabs/cockpit_view.js?v=30';
@@ -24,6 +24,7 @@ class App {
 
     this.diagnosticsModal = new DiagnosticsModal();
     window.quantDiagnostics = this.diagnosticsModal;
+    window.quantApp = this;
 
     this.activeAbortController = null;
     this.tabManager = null;
@@ -98,7 +99,7 @@ class App {
       }
     });
 
-    // Register primary Chat tab
+    // 1. Chat Stream Tab
     this.tabManager.registerTab({
       id: 'chat',
       title: 'Chat Stream',
@@ -106,16 +107,17 @@ class App {
       render: (container) => this.chatView.render(container)
     });
 
-    // Register Cockpit tab
+    // 2. Ticker Cockpit Tab
     this.tabManager.registerTab({
       id: 'cockpit',
       title: 'Cockpit',
-      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="22" y1="12" x2="18" y2="12"></line><line x1="6" y1="12" x2="2" y2="12"></line><line x1="12" y1="6" x2="12" y2="2"></line><line x1="12" y1="22" x2="12" y2="18"></line></svg>`,
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>`,
       render: (container) => this.cockpitView.render(container)
     });
 
-    const activeTab = AppState.getActiveTab() || 'chat';
-    this.tabManager.switchTab(activeTab);
+    // Activate initial tab from localStorage
+    const savedTab = AppState.getActiveTab();
+    this.tabManager.switchTab(savedTab);
   }
 
   initPromptBar() {
@@ -133,21 +135,15 @@ class App {
 
     let models = AVAILABLE_MODELS;
 
-    // Dynamically load available models from Gateway using session token
+    // Dynamically load available models from Gateway using fetchWithAuth
     try {
       const gatewayBase = AppState.getGatewayUrl() || '';
-      const token = AppState.getSessionToken();
-      const res = await fetch(`${gatewayBase}/api/models`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      });
+      const res = await fetchWithAuth(`${gatewayBase}/api/models`);
       if (res.ok) {
         const data = await res.json();
         if (data.models && Array.isArray(data.models)) {
           models = data.models;
         }
-      } else if (res.status === 401) {
-        this.handleUnauthorized('Session expired. Please unlock the app again.');
-        return;
       }
     } catch (e) {
       console.warn('Using fallback models list:', e);
@@ -211,16 +207,14 @@ class App {
     // 2. Prepare payload with sliding window
     const messages = this.chatView.messages;
     const model = AppState.getModel();
-    const token = AppState.getSessionToken();
     const gatewayBase = AppState.getGatewayUrl();
     const streamUrl = `${gatewayBase}/api/chat/stream`;
 
     try {
-      const response = await fetch(streamUrl, {
+      const response = await fetchWithAuth(streamUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           messages: messages.slice(-10),
@@ -230,10 +224,6 @@ class App {
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
-          this.handleUnauthorized('Session expired. Please unlock the app again.');
-          return;
-        }
         throw new Error(`Gateway returned HTTP ${response.status}`);
       }
 

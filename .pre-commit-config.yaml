@@ -26,7 +26,19 @@ repos:
         pass_filenames: false
 
       - id: table-dom-tests
-        name: ?? Vertical Table DOM Tests
+        name: 🎨 Vertical Table DOM Tests
         entry: node frontend/tests/test_vertical_table_ui.js
+        language: system
+        pass_filenames: false
+
+      - id: auth-guard-dom-tests
+        name: 🔐 Auth Guard & Lock Screen Tests
+        entry: node frontend/tests/test_auth_guard.js
+        language: system
+        pass_filenames: false
+
+      - id: layout-wcag-dom-tests
+        name: 📐 Layout Geometry & WCAG Tests
+        entry: node frontend/tests/audit_layout.js
         language: system
         pass_filenames: false

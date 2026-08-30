@@ -8,6 +8,8 @@ const STORAGE_KEYS = {
   SHOW_DIAGNOSTICS: 'quant_show_diagnostics'
 };
 
+const _sessionExpiredCallbacks = new Set();
+
 export const AppState = {
   getSessionToken() {
     return localStorage.getItem(STORAGE_KEYS.SESSION_TOKEN) || '';
@@ -39,6 +41,13 @@ export const AppState = {
   clearSession() {
     localStorage.removeItem(STORAGE_KEYS.SESSION_TOKEN);
     localStorage.removeItem(STORAGE_KEYS.SESSION_EXPIRES_AT);
+  },
+
+  onSessionExpired(callback) {
+    if (typeof callback === 'function') {
+      _sessionExpiredCallbacks.add(callback);
+      return () => _sessionExpiredCallbacks.delete(callback);
+    }
   },
 
   // Legacy helper for backward compatibility
@@ -110,3 +119,57 @@ export const AppState = {
     localStorage.removeItem(STORAGE_KEYS.CHAT_HISTORY);
   }
 };
+
+export async function fetchWithAuth(url, options = {}) {
+  const token = AppState.getSessionToken();
+  let headers = options.headers;
+
+  if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  } else if (Array.isArray(headers)) {
+    const hasAuth = headers.some(([k]) => k.toLowerCase() === 'authorization');
+    headers = [...headers];
+    if (token && !hasAuth) {
+      headers.push(['Authorization', `Bearer ${token}`]);
+    }
+  } else {
+    headers = { ...(headers || {}) };
+    const hasAuth = Object.keys(headers).some(k => k.toLowerCase() === 'authorization');
+    if (token && !hasAuth) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+
+  const mergedOptions = {
+    ...options,
+    headers
+  };
+
+  const res = await fetch(url, mergedOptions);
+
+  if (res.status === 401) {
+    AppState.clearSession();
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      try {
+        const evt = typeof CustomEvent === 'function'
+          ? new CustomEvent('quant-session-expired')
+          : { type: 'quant-session-expired' };
+        window.dispatchEvent(evt);
+      } catch (e) {
+        // Fallback for mock environments
+      }
+    }
+    _sessionExpiredCallbacks.forEach(cb => {
+      try {
+        cb();
+      } catch (err) {
+        console.error('Error in session expired callback:', err);
+      }
+    });
+    throw new Error('SessionExpired: 401 Unauthorized');
+  }
+
+  return res;
+}
