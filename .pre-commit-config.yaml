@@ -1,0 +1,32 @@
+repos:
+  - repo: local
+    hooks:
+      - id: version-parity-check
+        name: ?? Version Parity Check (v1.0.3)
+        entry: python scripts/bump_version.py --check
+        language: system
+        pass_filenames: false
+
+      - id: gateway-pytest
+        name: ?? Gateway Pytest Suite
+        entry: pytest gateway/tests/
+        language: system
+        pass_filenames: false
+
+      - id: frontend-dom-tests
+        name: ?? Frontend DOM Tests
+        entry: node frontend/tests/test_settings_flow_modal.js
+        language: system
+        pass_filenames: false
+
+      - id: cockpit-dom-tests
+        name: ?? Cockpit DOM Tests
+        entry: node frontend/tests/test_cockpit_view.js
+        language: system
+        pass_filenames: false
+
+      - id: table-dom-tests
+        name: ?? Vertical Table DOM Tests
+        entry: node frontend/tests/test_vertical_table_ui.js
+        language: system
+        pass_filenames: false

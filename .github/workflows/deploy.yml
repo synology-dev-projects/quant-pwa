@@ -53,6 +53,17 @@ jobs:
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
           echo "DEPLOY_DIR=$TARGET_PATH" >> $GITHUB_ENV
 
+      # 3.5 Pre-Flight Test Gate
+      - name: Run Pre-Flight Test Gate
+        run: |
+          echo "🧪 Running Pre-Flight Validation Suite..."
+          (python3 scripts/bump_version.py --check || python scripts/bump_version.py --check)
+          export PYTHONPATH="$PWD/gateway:$PWD/../common-lib:$PYTHONPATH"
+          (python3 -m pytest gateway/tests/ -v || python -m pytest gateway/tests/ -v)
+          node frontend/tests/test_settings_flow_modal.js
+          node frontend/tests/test_cockpit_view.js
+          node frontend/tests/test_vertical_table_ui.js
+
       # 4. Sync Project Files to NAS Target Directory
       - name: Sync Project Files to Synology NAS
         run: |
@@ -63,6 +74,7 @@ jobs:
           
           cp -r frontend "$TARGET_PATH/"
           cp -r gateway "$TARGET_PATH/"
+          cp -r scripts "$TARGET_PATH/"
           cp docker-compose.yml "$TARGET_PATH/"
           cp README.md "$TARGET_PATH/"
 
@@ -130,6 +142,12 @@ jobs:
           fi
 
           echo "✅ Deployment Successful & In-Situ Smoke Check Passed on $HOST_IP:${{ env.FRONTEND_PORT }} for ${{ github.ref_name }}!"
+
+      # 7.5 Post-Deployment Smoke Test
+      - name: Run Post-Deployment Smoke Test
+        run: |
+          echo "🔍 Running Post-Deployment Endpoint Smoke Tests..."
+          (python3 scripts/smoke_test.py --host 127.0.0.1 --port ${{ env.FRONTEND_PORT }} || python3 scripts/smoke_test.py --host 192.168.1.68 --port ${{ env.FRONTEND_PORT }} || python scripts/smoke_test.py --host 192.168.1.68 --port ${{ env.FRONTEND_PORT }})
 
       # 8. Clean Up Ephemeral Develop Container on Master Deploy
       - name: Tear Down Ephemeral Develop Container
