@@ -117,8 +117,8 @@ console.log('=================================================================='
 console.log('  PROBING SETTINGS MODAL OPTIONS FLOW FRESHNESS UI (SETTINGS-04)  ');
 console.log('==================================================================\n');
 
-assert.strictEqual(CLIENT_VERSION, 'v30', 'CLIENT_VERSION must be bumped to v30');
-console.log('  ✓ PASS: CLIENT_VERSION is v30');
+assert.strictEqual(CLIENT_VERSION, 'v31', 'CLIENT_VERSION must be bumped to v31');
+console.log('  ✓ PASS: CLIENT_VERSION is v31');
 
 const modal = new SettingsModal();
 

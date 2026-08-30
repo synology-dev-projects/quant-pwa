@@ -1,0 +1,204 @@
+/* ==========================================================================
+   Institutional Bloomberg Terminal Table UI, Tri-State Sorting, and Pagination
+   ========================================================================== */
+
+.quant-table-wrapper {
+    width: 100%;
+    margin: 12px 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #1e293b;
+    background: #080c14;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.quant-table-scroll {
+    overflow-x: auto;
+    width: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: #334155 #080c14;
+}
+
+.quant-table-scroll::-webkit-scrollbar {
+    height: 6px;
+}
+
+.quant-table-scroll::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 3px;
+}
+
+table.quant-terminal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: left;
+    white-space: nowrap;
+}
+
+table.quant-terminal-table th {
+    background-color: #0d131d;
+    color: #94a3b8;
+    font-weight: 700;
+    padding: 8px 12px;
+    border-bottom: 1px solid #1e293b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 10px;
+}
+
+table.quant-terminal-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+table.quant-terminal-table th.sortable:hover {
+    background-color: #1e293b;
+    color: #f1f5f9;
+}
+
+table.quant-terminal-table th .sort-icon {
+    font-size: 9px;
+    margin-left: 4px;
+    color: #64748b;
+}
+
+table.quant-terminal-table th.sort-asc {
+    color: #60a5fa;
+    border-bottom: 2px solid #3b82f6;
+}
+
+table.quant-terminal-table th.sort-asc .sort-icon::after {
+    content: ' ▲';
+    color: #60a5fa;
+}
+
+table.quant-terminal-table th.sort-desc {
+    color: #60a5fa;
+    border-bottom: 2px solid #3b82f6;
+}
+
+table.quant-terminal-table th.sort-desc .sort-icon::after {
+    content: ' ▼';
+    color: #60a5fa;
+}
+
+table.quant-terminal-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid #111827;
+    color: #cbd5e1;
+}
+
+table.quant-terminal-table tr:hover td {
+    background-color: rgba(30, 41, 59, 0.4);
+}
+
+/* Badges & Indicators */
+.badge-order {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+}
+
+.badge-buy-call {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.badge-buy-put {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.whale-badge {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 800;
+    margin-left: 4px;
+}
+
+.unusual-oi-badge {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 800;
+    margin-left: 4px;
+}
+
+/* Bloomberg Pagination Toolbar */
+.bb-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #090d14;
+    border-top: 1px solid #1e293b;
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.bb-page-btn {
+    background: #131b26;
+    color: #94a3b8;
+    border: 1px solid #1e293b;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.bb-page-btn:hover:not(:disabled) {
+    background: #1e293b;
+    color: #f1f5f9;
+    border-color: #334155;
+}
+
+.bb-page-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.bb-page-info {
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 10.5px;
+}
+
+.bb-page-nums {
+    display: flex;
+    gap: 4px;
+}
+
+.bb-page-num {
+    background: transparent;
+    color: #94a3b8;
+    border: 1px solid transparent;
+    padding: 2px 7px;
+    font-size: 10.5px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.bb-page-num.active {
+    background: #1e293b;
+    color: #60a5fa;
+    border-color: #3b82f6;
+    font-weight: 800;
+}
