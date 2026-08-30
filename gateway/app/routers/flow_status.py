@@ -156,7 +156,7 @@ async def trigger_flow_sync(current_user: str = Depends(get_current_user)):
     logger.info(f"User '{current_user}' triggered manual Options Flow sync.")
     
     try:
-        from app.flow_pipeline.runner import run_daily_incremental
+        from common_lib.flow.runner import run_daily_incremental
         config = load_config()
         rows = run_daily_incremental(config)
         return FlowSyncResponse(
