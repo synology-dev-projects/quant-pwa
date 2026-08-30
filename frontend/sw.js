@@ -1,14 +1,8 @@
-const CACHE_NAME = 'quant-ai-v31';
+const CACHE_NAME = 'quant-ai-v32';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './styles.css',
-  './styles/base.css',
-  './styles/animations.css',
-  './styles/chat.css',
-  './styles/cockpit.css',
-  './styles/table.css',
-  './styles/modal.css',
   './manifest.json',
   './src/app.js',
   './src/state.js',
