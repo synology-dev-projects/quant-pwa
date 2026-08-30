@@ -12,6 +12,8 @@ def test_health_check():
     data = response.json()
     assert data["status"] == "ok"
     assert data["service"] == "quant-gateway"
+    assert data["version"] == settings.APP_VERSION
+    assert data["environment"] == settings.ENVIRONMENT
     assert "market" in data
     assert "status" in data["market"]
 
