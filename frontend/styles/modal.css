@@ -1,0 +1,271 @@
+/* ==========================================================================
+   Modals, Settings Drawer, Diagnostics HUD, and Telemetry Waterfall
+   ========================================================================== */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 90dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+    animation: modalFadeIn 0.2s ease-out;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.modal-close-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.modal-close-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-card);
+}
+
+.modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.setting-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.setting-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+
+.setting-input {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    transition: all 0.15s ease;
+}
+
+.setting-input:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 2px var(--accent-blue-glow);
+}
+
+.setting-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+/* Settings Status Rows */
+.status-info-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.status-info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+}
+
+.status-info-label {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.status-info-value {
+    color: var(--text-primary);
+    font-weight: 700;
+    font-family: var(--font-mono);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Flow Status Row (SETTINGS-04) */
+.flow-status-row {
+    border-top: 1px solid rgba(30, 41, 59, 0.4);
+    padding-top: 8px;
+    margin-top: 2px;
+}
+
+.modal-actions {
+    padding: 14px 18px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.btn-primary {
+    background: var(--accent-blue);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: var(--accent-blue-hover);
+}
+
+.btn-secondary {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+}
+
+.btn-danger {
+    background: var(--accent-red);
+    color: #fff;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+.btn-synced {
+    background: #131b26;
+    color: #64748b;
+    border: 1px solid #1e293b;
+    cursor: not-allowed;
+}
+
+/* Diagnostics HUD Waterfall */
+.diagnostics-modal .modal-card {
+    max-width: 680px;
+}
+
+.waterfall-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: #080c14;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.waterfall-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.waterfall-label {
+    width: 130px;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.waterfall-track {
+    flex: 1;
+    height: 14px;
+    background: #111827;
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+
+.waterfall-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.fill-routing { background: #3b82f6; }
+.fill-tool { background: #10b981; }
+.fill-model { background: #8b5cf6; }
+.fill-stream { background: #f59e0b; }
+
+.waterfall-val {
+    width: 60px;
+    color: #cbd5e1;
+    font-weight: 700;
+    font-size: 10.5px;
+    text-align: right;
+    flex-shrink: 0;
+}

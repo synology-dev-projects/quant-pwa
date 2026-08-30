@@ -82,19 +82,19 @@
         <div class="version-info-card" id="versionInfoCard">
           <div class="version-row">
             <span class="version-label">App Build</span>
-            <span class="version-val" id="appBuildVersion">v30 (Production)</span>
+            <span class="version-val" id="appBuildVersion">v31 (Production)</span>
           </div>
           <div class="version-row">
             <span class="version-label">App Status</span>
-            <span class="version-status"><span class="status-dot dot-live" id="appSyncDot"></span> <span id="syncStatusText">Synchronized (v30)</span></span>
+            <span class="version-status"><span class="status-dot dot-live" id="appSyncDot"></span> <span id="syncStatusText">Synchronized (v31)</span></span>
           </div>
           <div class="version-row flow-status-row">
             <span class="version-label">Options Flow</span>
             <span class="version-status" id="flowStatusBadge"><span class="status-dot dot-live" id="flowSyncDot"></span> <span id="flowStatusText">Checking...</span></span>
           </div>
         </div>
-        <div class="settings-actions">
-          <button type="button" id="forceUpdateBtn" class="btn btn-synced" disabled>✓ App Up to Date (v30)</button>
+        <div class="update-action-container">
+          <button id="forceUpdateBtn" class="btn btn-synced" disabled>✓ App Up to Date (v31)</button>
           <div id="manualResyncLink" class="manual-resync-link" title="Wipe local storage and re-download fresh server build">Force manual re-sync</div>
           <button type="button" id="syncFlowBtn" class="btn btn-synced" disabled>✓ Flow Up to Date</button>
           <button type="button" id="lockAppBtn" class="btn btn-warning">Lock App</button>
@@ -280,6 +280,6 @@
   </div>
 
   <!-- Core Module Script -->
-  <script type="module" src="src/app.js?v=30"></script>
+  <script type="module" src="src/app.js?v=31"></script>
 </body>
 </html>
