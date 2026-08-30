@@ -51,6 +51,7 @@ jobs:
           "$NODE_BIN" frontend/tests/test_settings_flow_modal.js
           "$NODE_BIN" frontend/tests/test_cockpit_view.js
           "$NODE_BIN" frontend/tests/test_vertical_table_ui.js
+          "$NODE_BIN" frontend/tests/audit_layout.js
           echo "✅ Stage 1 Pre-Flight Validation Gate Passed Successfully!"
 
       # ========================================================================

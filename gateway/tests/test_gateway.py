@@ -431,4 +431,52 @@ def test_evaluate_synthesis_tier_keywords():
     assert budget == 512
 
 
+def test_lifespan_invokes_ensure_all_schemas():
+    """Verifies gateway lifespan startup invokes ensure_all_schemas for database auto-migration."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
+    from app.main import lifespan
+
+    async def _run():
+        mock_app = MagicMock()
+        with patch("common_lib.database.schemas.ensure_all_schemas") as mock_ensure, \
+             patch("app.main.mcp_client_manager.initialize", new_callable=AsyncMock), \
+             patch("app.main.mcp_client_manager.close", new_callable=AsyncMock), \
+             patch("app.main.run_cache_warmer_loop", new_callable=AsyncMock):
+
+            mock_ensure.return_value = {
+                "unusual_whales_flow_te": "verified",
+                "quant_lvl_data_te": "verified",
+                "ibkr_historical_te": "verified",
+                "chat_history": "verified"
+            }
+
+            async with lifespan(mock_app):
+                pass
+
+            assert mock_ensure.call_count == 1
+
+    asyncio.run(_run())
+
+
+def test_lifespan_gracefully_handles_schema_verification_failure():
+    """Verifies gateway lifespan startup catches schema migration exceptions without aborting startup."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
+    from app.main import lifespan
+
+    async def _run():
+        mock_app = MagicMock()
+        with patch("common_lib.database.schemas.ensure_all_schemas", side_effect=Exception("Database connection timeout")), \
+             patch("app.main.mcp_client_manager.initialize", new_callable=AsyncMock), \
+             patch("app.main.mcp_client_manager.close", new_callable=AsyncMock), \
+             patch("app.main.run_cache_warmer_loop", new_callable=AsyncMock):
+
+            # Should not raise exception
+            async with lifespan(mock_app):
+                pass
+
+    asyncio.run(_run())
+
+
 

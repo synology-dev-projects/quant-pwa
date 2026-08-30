@@ -59,6 +59,13 @@ logging.getLogger().addHandler(_rb_handler)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup: Auto-migrate & verify canonical database schemas
+    try:
+        from common_lib.database.schemas import ensure_all_schemas
+        ensure_all_schemas()
+    except Exception as e:
+        logger.warning(f"Schema verification skipped or failed on startup: {e}")
+
     # Startup: Initialize MCP Client Hub
     await mcp_client_manager.initialize()
     # Startup: Background Market Hours Pre-Cache Warmer (In-Process Engine)
