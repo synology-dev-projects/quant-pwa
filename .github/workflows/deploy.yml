@@ -27,6 +27,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 2.5 Setup Node.js
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       # 3. Configure Branch Environment (Develop vs Master)
       - name: Configure Branch Environment Variables
         run: |
