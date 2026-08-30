@@ -1,6 +1,6 @@
 import { QuantChart } from '../components/quant_chart.js?v=30';
 import { renderMarkdown, initInteractiveTables } from '../components/message_renderer.js?v=30';
-import { AppState } from '../state.js?v=30';
+import { AppState, fetchWithAuth } from '../state.js?v=30';
 
 const QUICK_SUGGESTIONS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'AMD'];
 const RECENT_SEARCHES_KEY = 'quant_cockpit_recent';
@@ -457,17 +457,11 @@ export class CockpitView {
 
   async loadCockpitData(ticker) {
     const gatewayBase = AppState.getGatewayUrl() || '';
-    const token = AppState.getSessionToken() || AppState.getPasscode();
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    };
-
     let data = null;
     try {
-      const res = await fetch(`${gatewayBase}/api/cockpit/data?_t=${Date.now()}`, {
+      const res = await fetchWithAuth(`${gatewayBase}/api/cockpit/data?_t=${Date.now()}`, {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ ticker }),
         signal: this.activeAbortController?.signal
@@ -484,6 +478,10 @@ export class CockpitView {
       }
     } catch (err) {
       if (err.name === 'AbortError') return;
+      if (err.message && err.message.includes('SessionExpired')) {
+        console.warn('Session expired during cockpit data fetch');
+        return;
+      }
       console.warn(`Cockpit data network error for ${ticker}:`, err);
       data = this.generateFallbackData(ticker);
     }
@@ -497,20 +495,14 @@ export class CockpitView {
 
   async streamSynthesis(ticker, precomputedPayload = null) {
     const gatewayBase = AppState.getGatewayUrl() || '';
-    const token = AppState.getSessionToken() || AppState.getPasscode();
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    };
-
     const synthBox = this.container?.querySelector('#synthesisMarkdown');
     let accumulatedText = '';
     this.isStreaming = true;
 
     try {
-      const res = await fetch(`${gatewayBase}/api/cockpit/synthesis/stream?_t=${Date.now()}`, {
+      const res = await fetchWithAuth(`${gatewayBase}/api/cockpit/synthesis/stream?_t=${Date.now()}`, {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
           ticker,
@@ -561,6 +553,10 @@ export class CockpitView {
       }
     } catch (err) {
       if (err.name === 'AbortError') return;
+      if (err.message && err.message.includes('SessionExpired')) {
+        console.warn('Session expired during synthesis stream');
+        return;
+      }
       await this.simulateSynthesisStream(ticker, synthBox);
     } finally {
       this.isStreaming = false;
@@ -692,43 +688,67 @@ export class CockpitView {
     const klCall = this.container.querySelector('#klCallWall');
     const klPut = this.container.querySelector('#klPutWall');
 
-    if (klSpot) klSpot.textContent = `$${spot.toFixed(2)}`;
-    if (klFlip) klFlip.textContent = `$${flip.toFixed(2)}`;
-    if (klCall) klCall.textContent = `$${callWall.toFixed(2)}`;
-    if (klPut) klPut.textContent = `$${putWall.toFixed(2)}`;
+    if (klSpot) klSpot.textContent = spot > 0 ? `$${spot.toFixed(2)}` : '--';
+    if (klFlip) klFlip.textContent = flip > 0 ? `$${flip.toFixed(2)}` : '--';
+    if (klCall) klCall.textContent = callWall > 0 ? `$${callWall.toFixed(2)}` : '--';
+    if (klPut) klPut.textContent = putWall > 0 ? `$${putWall.toFixed(2)}` : '--';
 
-    // Mount QuantChart HTML5 Canvas
+    // Mount QuantChart HTML5 Canvas or Honest Empty State
     const chartSlot = this.container.querySelector('#cockpitChartSlot');
-    if (chartSlot) {
-      chartSlot.innerHTML = '';
-      const chartWrapper = document.createElement('div');
-      chartWrapper.className = 'cockpit-canvas-wrapper';
-      chartSlot.appendChild(chartWrapper);
+    if (!chartSlot) return;
 
-      const strikes = (gex.strikes && gex.strikes.length > 0)
-        ? gex.strikes
-        : (data.strikes || this.generateMockStrikes(spot, callWall, putWall));
+    const strikes = (gex.strikes && Array.isArray(gex.strikes)) ? gex.strikes : (data.strikes || []);
+    const ticker = data.ticker || gex.ticker || this.currentTicker || 'QUANT';
 
-      const expirations = (gex.expirations && gex.expirations.length > 0)
-        ? gex.expirations
-        : (data.expirations || ['Front Expiry', 'Next Expiry']);
-
-      const chartPayload = {
-        ticker: data.ticker || gex.ticker || 'QUANT',
-        spot_price: spot,
-        zero_flip: flip,
-        call_wall: callWall,
-        put_wall: putWall,
-        call_put_ratio: cpRatio,
-        expirations: expirations,
-        strikes: strikes
-      };
-
+    if (strikes.length === 0) {
       if (this.quantChartInstance && this.quantChartInstance.destroy) {
         this.quantChartInstance.destroy();
+        this.quantChartInstance = null;
       }
-      this.quantChartInstance = new QuantChart(chartWrapper, chartPayload, { mode: this.chartMode });
+      chartSlot.innerHTML = `
+        <div class="chart-empty-state">
+          <div class="empty-state-icon">📊</div>
+          <h3>No Active Options Chain / Insufficient Gamma Liquidity for ${ticker}</h3>
+          <p>Real-time options open interest and dealer exposure surfaces are currently unavailable for this asset.</p>
+          <button type="button" class="cockpit-retry-btn" id="cockpitChartRetryBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            <span>Retry Feed</span>
+          </button>
+        </div>
+      `;
+      const retryBtn = chartSlot.querySelector('#cockpitChartRetryBtn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', () => {
+          this.searchTicker(ticker);
+        });
+      }
+      return;
     }
+
+    chartSlot.innerHTML = '';
+    const chartWrapper = document.createElement('div');
+    chartWrapper.className = 'cockpit-canvas-wrapper';
+    chartSlot.appendChild(chartWrapper);
+
+    const expirations = (gex.expirations && gex.expirations.length > 0)
+      ? gex.expirations
+      : (data.expirations || ['Front Expiry', 'Next Expiry']);
+
+    const chartPayload = {
+      ticker: ticker,
+      spot_price: spot,
+      zero_flip: flip,
+      call_wall: callWall,
+      put_wall: putWall,
+      call_put_ratio: cpRatio,
+      expirations: expirations,
+      strikes: strikes
+    };
+
+    if (this.quantChartInstance && this.quantChartInstance.destroy) {
+      this.quantChartInstance.destroy();
+    }
+    this.quantChartInstance = new QuantChart(chartWrapper, chartPayload, { mode: this.chartMode });
   }
 
   renderFlowTable() {
@@ -862,7 +882,6 @@ export class CockpitView {
     const callWall = Math.round(spot * 1.07 * 100) / 100;
     const putWall = Math.round(spot * 0.93 * 100) / 100;
     const zeroFlip = Math.round(spot * 0.99 * 100) / 100;
-    const strikes = this.generateMockStrikes(spot, callWall, putWall);
 
     return {
       ticker: sym,
@@ -875,8 +894,8 @@ export class CockpitView {
         put_wall: putWall,
         call_put_ratio: 1.45,
         gamma_regime: 'LONG GAMMA (+GEX)',
-        expirations: ['2026-08-31', '2026-09-18', '2026-10-16'],
-        strikes: strikes
+        expirations: [],
+        strikes: []
       },
       flow: {
         records: this.generateMockFlowPrints(sym, spot),
@@ -898,41 +917,6 @@ export class CockpitView {
         unusual_oi_count: 3
       }
     };
-  }
-
-  generateMockStrikes(spot, callWall, putWall) {
-    const strikes = [];
-    const step = spot > 300 ? 5 : (spot > 100 ? 2.5 : 1);
-    const minStrike = Math.round((spot * 0.88) / step) * step;
-    const maxStrike = Math.round((spot * 1.12) / step) * step;
-
-    for (let s = minStrike; s <= maxStrike; s += step) {
-      const isCallWall = Math.abs(s - callWall) < step;
-      const isPutWall = Math.abs(s - putWall) < step;
-      const dist = Math.abs(s - spot) / spot;
-      
-      const callGex = (isCallWall ? 85000000 : Math.max(500000, Math.round(35000000 * Math.exp(-dist * 8)))) * (s >= spot ? 1.4 : 0.6);
-      const putGex = (isPutWall ? 78000000 : Math.max(500000, Math.round(30000000 * Math.exp(-dist * 8)))) * (s <= spot ? 1.4 : 0.6);
-      
-      strikes.push({
-        strike: s,
-        call_gex: Math.round(callGex),
-        put_gex: Math.round(putGex),
-        call_dex: Math.round(callGex * 0.75),
-        put_dex: Math.round(putGex * 0.8),
-        exp_gex: {
-          '2026-09-18': { call: Math.round(callGex * 0.6), put: Math.round(putGex * 0.5) },
-          '2026-10-16': { call: Math.round(callGex * 0.3), put: Math.round(putGex * 0.35) },
-          '2026-11-20': { call: Math.round(callGex * 0.1), put: Math.round(putGex * 0.15) }
-        },
-        exp_dex: {
-          '2026-09-18': { call: Math.round(callGex * 0.45), put: Math.round(putGex * 0.4) },
-          '2026-10-16': { call: Math.round(callGex * 0.2), put: Math.round(putGex * 0.3) },
-          '2026-11-20': { call: Math.round(callGex * 0.1), put: Math.round(putGex * 0.1) }
-        }
-      });
-    }
-    return strikes;
   }
 
   generateMockFlowPrints(sym, spot) {

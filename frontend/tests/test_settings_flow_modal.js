@@ -124,11 +124,7 @@ console.log('=================================================================='
 console.log('  PROBING SETTINGS MODAL OPTIONS FLOW FRESHNESS UI (SETTINGS-04)  ');
 console.log('==================================================================\n');
 
-// 1. CLIENT_VERSION Assertion
-assert.strictEqual(CLIENT_VERSION, 'v1.0.3', 'CLIENT_VERSION must be v1.0.3');
-console.log('  ✓ PASS: CLIENT_VERSION is v1.0.3');
-
-// 2. version.json Parity Test
+// 1. version.json Parity Test
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const versionJsonPath = path.resolve(__dirname, '../../version.json');
@@ -144,20 +140,20 @@ global.fetch = async (url) => {
   if (url === '/api/health') {
     return {
       ok: true,
-      json: async () => ({ version: 'v1.0.3', environment: 'staging' })
+      json: async () => ({ version: CLIENT_VERSION, environment: 'staging' })
     };
   }
   return { ok: false };
 };
 
 await modal.checkVersionStatus();
-assert.strictEqual(elements.appBuildVersion.textContent, 'v1.0.3 (Staging)', 'App build shows v1.0.3 (Staging)');
-assert.strictEqual(elements.syncStatusText.textContent, 'Synchronized (v1.0.3)', 'Sync status text is synchronized');
+assert.strictEqual(elements.appBuildVersion.textContent, `${CLIENT_VERSION} (Staging)`, `App build shows ${CLIENT_VERSION} (Staging)`);
+assert.strictEqual(elements.syncStatusText.textContent, `Synchronized (${CLIENT_VERSION})`, 'Sync status text is synchronized');
 assert.strictEqual(elements.forceUpdateBtn.disabled, true, 'Force update button is disabled when in sync');
 assert.strictEqual(elements.forceUpdateBtn.className, 'btn btn-synced', 'Force update button has btn-synced class');
-assert.strictEqual(elements.forceUpdateBtn.innerHTML, '✓ App Up to Date (v1.0.3)', 'Force update button text is up to date');
+assert.strictEqual(elements.forceUpdateBtn.innerHTML, `✓ App Up to Date (${CLIENT_VERSION})`, 'Force update button text is up to date');
 assert.strictEqual(elements.manualResyncLink.style.display, 'block', 'Manual resync link visible when synchronized');
-console.log('  ✓ PASS: Version check with matched v1.0.3 and staging environment renders synchronized state');
+console.log(`  ✓ PASS: Version check with matched ${CLIENT_VERSION} and staging environment renders synchronized state`);
 
 // TEST 1: Fresh State Check
 global.fetch = async (url) => {
@@ -247,12 +243,12 @@ assert.strictEqual(syncFlowBtn.disabled, true, 'Sync button re-disabled after co
 assert.strictEqual(flowStatusText.textContent, 'In Sync (2026-08-28)', 'Status flips to In Sync post-run');
 console.log('  ✓ PASS: Clicking sync button triggers backend sync and flips status to In Sync');
 
-// TEST 4: Update Available Scenario
+// TEST 4: Update Available Scenario (Client version vs newer Server version)
 global.fetch = async (url) => {
   if (url === '/api/health') {
     return {
       ok: true,
-      json: async () => ({ version: 'v1.0.4', environment: 'production' })
+      json: async () => ({ version: 'v9.9.9', environment: 'production' })
     };
   }
   return { ok: false };
@@ -263,11 +259,11 @@ global.window.location.port = '80';
 global.window.location.hostname = 'app.quant.internal';
 
 await modal.checkVersionStatus();
-assert.strictEqual(elements.appBuildVersion.textContent, 'v1.0.3 (Production)', 'App build shows v1.0.3 (Production)');
-assert.strictEqual(elements.syncStatusText.textContent, 'Update Available (v1.0.4)', 'Sync status text reflects update available');
+assert.strictEqual(elements.appBuildVersion.textContent, `${CLIENT_VERSION} (Production)`, `App build shows ${CLIENT_VERSION} (Production)`);
+assert.strictEqual(elements.syncStatusText.textContent, 'Update Available (v9.9.9)', 'Sync status text reflects update available');
 assert.strictEqual(elements.forceUpdateBtn.disabled, false, 'Force update button enabled when update available');
 assert.strictEqual(elements.forceUpdateBtn.className, 'btn btn-danger btn-pulse', 'Force update button has danger-pulse class');
-assert.strictEqual(elements.forceUpdateBtn.innerHTML, '⚡ Update Available (v1.0.4) · Tap to Sync', 'Force update button text reflects server version');
+assert.strictEqual(elements.forceUpdateBtn.innerHTML, '⚡ Update Available (v9.9.9) · Tap to Sync', 'Force update button text reflects server version');
 assert.strictEqual(elements.manualResyncLink.style.display, 'none', 'Manual resync link hidden when update available');
 console.log('  ✓ PASS: Update available scenario correctly updates badge, button and hides resync link');
 

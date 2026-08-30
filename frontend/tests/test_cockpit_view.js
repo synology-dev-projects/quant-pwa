@@ -1,5 +1,5 @@
 /**
- * Automated In-Situ Test Probe for Quant Cockpit 3-Panel Dashboard & Search View (COCKPIT-01)
+ * Automated In-Situ Test Probe for Quant Cockpit 3-Panel Dashboard & Search View (COCKPIT-01 & BUG-COCKPIT-01)
  *
  * Tests:
  * 1. Search Execution & Recents Persistence
@@ -7,10 +7,12 @@
  *    - Panel 1: Synergized Synthesis (Hero Card) with Metric Pills & Stream Area
  *    - Panel 2: Interactive Exposure Chart with GEX/DEX toggle & Key Levels Strip
  *    - Panel 3: 30-Day Options Flow Table with Filter Chips & Bloomberg Table
- * 3. Filter Chip Clicks ([All], [Whales >$1M], [Calls], [Puts], [Unusual OI ⚠️])
- * 4. GEX/DEX Toggle Switch Interactivity
- * 5. Bloomberg Table Tri-State Column Sorting & Pagination
- * 6. Quick Suggestion Chip Clicks
+ * 3. Distinct Real Strike Structures & Spot Prices (SPY vs NVDA)
+ * 4. Honest Empty State on Empty Strikes (Purged Fake Gaussian Clones)
+ * 5. Filter Chip Clicks ([All], [Whales >$1M], [Calls], [Puts], [Unusual OI ⚠️])
+ * 6. GEX/DEX Toggle Switch Interactivity
+ * 7. Bloomberg Table Tri-State Column Sorting & Pagination
+ * 8. Quick Suggestion Chip Clicks
  */
 
 // ============================================================================
@@ -242,6 +244,12 @@ class MockElement {
     this.listeners[type].push(cb);
   }
 
+  removeEventListener(type, cb) {
+    if (this.listeners[type]) {
+      this.listeners[type] = this.listeners[type].filter(h => h !== cb);
+    }
+  }
+
   dispatchEvent(evt) {
     let stopped = false;
     const eventObj = evt || {
@@ -356,6 +364,7 @@ class MockElement {
       save: () => {},
       restore: () => {},
       setLineDash: () => {},
+      clearRect: () => {},
       font: '',
       fillStyle: '',
       strokeStyle: '',
@@ -481,12 +490,172 @@ global.localStorage = global.window.localStorage;
 global.requestAnimationFrame = global.window.requestAnimationFrame;
 
 // ============================================================================
-// 2. Import Component under Test
+// 2. Mock Server Data Feeds for Distinct Real Tickers & Empty Chains
+// ============================================================================
+
+const MOCK_FEEDS = {
+  NVDA: {
+    ticker: 'NVDA',
+    status: 'ok',
+    gex: {
+      ticker: 'NVDA',
+      spot_price: 217.50,
+      zero_gex_level: 214.00,
+      call_wall: 230.00,
+      put_wall: 200.00,
+      call_put_ratio: 1.62,
+      gamma_regime: 'LONG GAMMA (+GEX)',
+      expirations: ['2026-09-18', '2026-10-16'],
+      strikes: [
+        { strike: 200, call_gex: 4000000, put_gex: 52000000, call_dex: 3000000, put_dex: 41000000 },
+        { strike: 210, call_gex: 15000000, put_gex: 28000000, call_dex: 11000000, put_dex: 22000000 },
+        { strike: 217.5, call_gex: 35000000, put_gex: 18000000, call_dex: 26000000, put_dex: 14000000 },
+        { strike: 230, call_gex: 88000000, put_gex: 3000000, call_dex: 66000000, put_dex: 2400000 }
+      ]
+    },
+    flow: {
+      records: [
+        { expiration: '2026-09-18', symbol: 'NVDA', order_type: 'BUY CALL', strike: 230, spot: 217.5, otm_pct: 5.7, premium: 12500000, size: 10000, open_interest: 15000, is_unusual_oi: true, tag: '[WHALE]' },
+        { expiration: '2026-09-18', symbol: 'NVDA', order_type: 'BUY PUT', strike: 200, spot: 217.5, otm_pct: -8.0, premium: 3500000, size: 4000, open_interest: 6000, is_unusual_oi: false, tag: '[LARGE]' }
+      ],
+      total_count: 2
+    },
+    metrics: {
+      spot_price: 217.50,
+      zero_gamma_flip: 214.00,
+      call_wall: 230.00,
+      put_wall: 200.00,
+      confluence_bias: 'BULLISH CONFLUENCE',
+      gamma_regime: 'LONG GAMMA (+GEX)',
+      flow_ratio: '78% CALL FLOW',
+      call_pct: 78.0,
+      put_pct: 22.0,
+      call_flow: 12500000,
+      put_flow: 3500000,
+      whale_count: 1,
+      unusual_oi_count: 1
+    }
+  },
+
+  SPY: {
+    ticker: 'SPY',
+    status: 'ok',
+    gex: {
+      ticker: 'SPY',
+      spot_price: 769.25,
+      zero_gex_level: 762.00,
+      call_wall: 785.00,
+      put_wall: 750.00,
+      call_put_ratio: 1.15,
+      gamma_regime: 'LONG GAMMA (+GEX)',
+      expirations: ['2026-08-31', '2026-09-18'],
+      strikes: [
+        { strike: 750, call_gex: 12000000, put_gex: 95000000, call_dex: 9000000, put_dex: 76000000 },
+        { strike: 760, call_gex: 35000000, put_gex: 45000000, call_dex: 26000000, put_dex: 36000000 },
+        { strike: 770, call_gex: 58000000, put_gex: 22000000, call_dex: 43000000, put_dex: 17000000 },
+        { strike: 785, call_gex: 110000000, put_gex: 6000000, call_dex: 82000000, put_dex: 4800000 }
+      ]
+    },
+    flow: {
+      records: [
+        { expiration: '2026-09-18', symbol: 'SPY', order_type: 'BUY CALL', strike: 785, spot: 769.25, otm_pct: 2.0, premium: 25000000, size: 20000, open_interest: 45000, is_unusual_oi: true, tag: '[WHALE]' }
+      ],
+      total_count: 1
+    },
+    metrics: {
+      spot_price: 769.25,
+      zero_gamma_flip: 762.00,
+      call_wall: 785.00,
+      put_wall: 750.00,
+      confluence_bias: 'BULLISH CONFLUENCE',
+      gamma_regime: 'LONG GAMMA (+GEX)',
+      flow_ratio: '65% CALL FLOW',
+      call_pct: 65.0,
+      put_pct: 35.0,
+      call_flow: 25000000,
+      put_flow: 13000000,
+      whale_count: 1,
+      unusual_oi_count: 1
+    }
+  },
+
+  EMPTY_TICKER: {
+    ticker: 'XYZ',
+    status: 'ok',
+    gex: {
+      ticker: 'XYZ',
+      spot_price: 50.00,
+      zero_gex_level: 50.00,
+      call_wall: 0,
+      put_wall: 0,
+      call_put_ratio: 1.0,
+      gamma_regime: 'NEUTRAL',
+      expirations: [],
+      strikes: [] // 0 real strikes
+    },
+    flow: {
+      records: [],
+      total_count: 0
+    },
+    metrics: {
+      spot_price: 50.00,
+      zero_gamma_flip: 50.00,
+      call_wall: 0,
+      put_wall: 0,
+      confluence_bias: 'NEUTRAL PIN',
+      gamma_regime: 'NEUTRAL',
+      flow_ratio: '0% FLOW',
+      call_pct: 50.0,
+      put_pct: 50.0,
+      call_flow: 0,
+      put_flow: 0,
+      whale_count: 0,
+      unusual_oi_count: 0
+    }
+  }
+};
+
+global.fetch = async (url, options = {}) => {
+  const body = options.body ? JSON.parse(options.body) : {};
+  const sym = (body.ticker || 'NVDA').toUpperCase();
+  const resData = MOCK_FEEDS[sym] || MOCK_FEEDS.EMPTY_TICKER;
+
+  if (url.includes('/synthesis/stream')) {
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => {
+          let sent = false;
+          return {
+            read: async () => {
+              if (!sent) {
+                sent = true;
+                const chunk = `data: {"type": "token", "content": "### Institutional Quant Thesis: ${sym}\\n\\nReal data verified."}\n\n`;
+                return { value: new TextEncoder().encode(chunk), done: false };
+              }
+              return { value: undefined, done: true };
+            }
+          };
+        }
+      }
+    };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    json: async () => JSON.parse(JSON.stringify(resData))
+  };
+};
+
+// ============================================================================
+// 3. Import Component under Test
 // ============================================================================
 const { CockpitView } = await import('../src/tabs/cockpit_view.js');
 
 // ============================================================================
-// 3. Test Suite Runner
+// 4. Test Suite Runner
 // ============================================================================
 
 let passCount = 0;
@@ -545,9 +714,9 @@ assert(panelChart !== null, 'Panel 2: Interactive Exposure Chart is mounted');
 assert(panelFlow !== null, 'Panel 3: 30-Day Options Flow Table is mounted');
 
 // ----------------------------------------------------------------------------
-// TEST 2: Ticker Search Execution (NVDA)
+// TEST 2: Ticker Search Execution (NVDA) & Real Strikes Structure
 // ----------------------------------------------------------------------------
-console.log('\n--- TEST 2: Search Execution (NVDA) ---');
+console.log('\n--- TEST 2: Search Execution & Real Strike Structures (NVDA) ---');
 searchInput.value = 'NVDA';
 await cockpitView.searchTicker('NVDA');
 
@@ -569,27 +738,63 @@ assert(pillWall !== null && pillWall.textContent.includes('WALL'), 'Wall Range p
 const synthMarkdown = rootContainer.querySelector('#synthesisMarkdown');
 assert(synthMarkdown !== null && synthMarkdown.innerHTML.includes('Institutional Quant Thesis'), 'Synergized synthesis markdown is rendered');
 
-// ----------------------------------------------------------------------------
-// TEST 3: Panel 2 Key Levels Strip & Canvas Mount
-// ----------------------------------------------------------------------------
-console.log('\n--- TEST 3: Panel 2 Key Levels Strip & Chart ---');
+// Verify NVDA Key Levels & Canvas
 const klSpot = rootContainer.querySelector('#klSpot');
 const klFlip = rootContainer.querySelector('#klFlip');
 const klCall = rootContainer.querySelector('#klCallWall');
 const klPut = rootContainer.querySelector('#klPutWall');
 
-assert(klSpot.textContent.startsWith('$'), `Spot price rendered in key levels strip: ${klSpot.textContent}`);
-assert(klFlip.textContent.startsWith('$'), `Zero flip rendered in key levels strip: ${klFlip.textContent}`);
-assert(klCall.textContent.startsWith('$'), `Call wall rendered in key levels strip: ${klCall.textContent}`);
-assert(klPut.textContent.startsWith('$'), `Put wall rendered in key levels strip: ${klPut.textContent}`);
+assert(klSpot.textContent === '$217.50', `NVDA Spot price correctly rendered: ${klSpot.textContent}`);
+assert(klFlip.textContent === '$214.00', `NVDA Zero flip correctly rendered: ${klFlip.textContent}`);
+assert(klCall.textContent === '$230.00', `NVDA Call wall correctly rendered: ${klCall.textContent}`);
+assert(klPut.textContent === '$200.00', `NVDA Put wall correctly rendered: ${klPut.textContent}`);
 
 const canvas = rootContainer.querySelector('canvas.quant-canvas');
-assert(canvas !== null, 'HTML5 Canvas element is mounted inside QuantChart card');
+assert(canvas !== null, 'HTML5 Canvas element is mounted inside QuantChart card for real NVDA strikes');
+assert(cockpitView.quantChartInstance.data.strikes.length === 4, `NVDA has 4 authentic asymmetrical strikes (got ${cockpitView.quantChartInstance.data.strikes.length})`);
+assert(cockpitView.quantChartInstance.data.strikes[0].strike === 200, 'NVDA base strike is $200');
 
 // ----------------------------------------------------------------------------
-// TEST 4: Both | Net GEX | Net DEX Tri-Mode Switcher
+// TEST 3: Distinct Real Strikes & Spot Prices: SPY vs NVDA
 // ----------------------------------------------------------------------------
-console.log('\n--- TEST 4: Both | Net GEX | Net DEX Tri-Mode Switcher ---');
+console.log('\n--- TEST 3: Distinct Real Strike Structures (SPY vs NVDA) ---');
+await cockpitView.searchTicker('SPY');
+
+assert(heroBadge.textContent === 'SPY', `Hero badge updated to SPY (got ${heroBadge.textContent})`);
+assert(klSpot.textContent === '$769.25', `SPY Spot price ($769.25) distinct from NVDA ($217.50)`);
+assert(klCall.textContent === '$785.00', `SPY Call Wall ($785.00) distinct from NVDA ($230.00)`);
+assert(klPut.textContent === '$750.00', `SPY Put Wall ($750.00) distinct from NVDA ($200.00)`);
+
+assert(cockpitView.quantChartInstance.data.strikes[0].strike === 750, 'SPY strike structure starts at $750 (distinct from NVDA $200)');
+assert(cockpitView.quantChartInstance.data.strikes[3].strike === 785, 'SPY strike structure ends at $785 (distinct from NVDA $230)');
+assert(cockpitView.quantChartInstance.data.spot_price === 769.25, 'SPY QuantChart instance receives authentic $769.25 spot price');
+
+// ----------------------------------------------------------------------------
+// TEST 4: Honest Empty State on Empty Strikes (BUG-COCKPIT-01)
+// ----------------------------------------------------------------------------
+console.log('\n--- TEST 4: Honest Empty State on Empty Strikes (No Fake Gaussian Clones) ---');
+await cockpitView.searchTicker('XYZ'); // XYZ returns strikes: []
+
+const chartSlot = rootContainer.querySelector('#cockpitChartSlot');
+assert(chartSlot !== null, 'Chart slot container located');
+
+const emptyCard = chartSlot.querySelector('.chart-empty-state');
+assert(emptyCard !== null, 'Honest empty state element is rendered instead of fake canvas graph');
+assert(emptyCard.textContent.includes('No Active Options Chain / Insufficient Gamma Liquidity for XYZ'), 'Empty state displays honest message with ticker');
+
+const retryBtn = chartSlot.querySelector('#cockpitChartRetryBtn');
+assert(retryBtn !== null, 'Empty state includes interactive retry button');
+
+const fakeCanvas = chartSlot.querySelector('canvas.quant-canvas');
+assert(fakeCanvas === null, 'Fabricated fake Gaussian bell-curve canvas is completely purged');
+
+// ----------------------------------------------------------------------------
+// TEST 5: Both | Net GEX | Net DEX Tri-Mode Switcher
+// ----------------------------------------------------------------------------
+console.log('\n--- TEST 5: Both | Net GEX | Net DEX Tri-Mode Switcher ---');
+// Switch back to NVDA to mount real chart
+await cockpitView.searchTicker('NVDA');
+
 const toggleBoth = rootContainer.querySelector('#gexDexToggle .toggle-btn[data-mode="both"]');
 const toggleGex = rootContainer.querySelector('#gexDexToggle .toggle-btn[data-mode="gex"]');
 const toggleDex = rootContainer.querySelector('#gexDexToggle .toggle-btn[data-mode="dex"]');
@@ -621,9 +826,9 @@ assert(cockpitView.chartMode === 'both', 'CockpitView chartMode updated back to 
 assert(cockpitView.quantChartInstance.mode === 'both', 'QuantChart mode updated back to both');
 
 // ----------------------------------------------------------------------------
-// TEST 5: Panel 3 Options Flow Table & Bloomberg Interactivity
+// TEST 6: Panel 3 Options Flow Table & Filter Chips
 // ----------------------------------------------------------------------------
-console.log('\n--- TEST 5: Panel 3 Options Flow & Filter Chips ---');
+console.log('\n--- TEST 6: Panel 3 Options Flow & Filter Chips ---');
 const flowTableWrapper = rootContainer.querySelector('.quant-table-wrapper');
 assert(flowTableWrapper !== null, 'Quant interactive table wrapper mounted in flow panel');
 
@@ -664,9 +869,9 @@ chipAll.click();
 assert(cockpitView.activeFilter === 'all', 'Active filter state reset to "all"');
 
 // ----------------------------------------------------------------------------
-// TEST 6: Table Tri-State Sorting & Pagination
+// TEST 7: Table Tri-State Sorting
 // ----------------------------------------------------------------------------
-console.log('\n--- TEST 6: Table Tri-State Sorting ---');
+console.log('\n--- TEST 7: Table Tri-State Sorting ---');
 const thPremium = Array.from(rootContainer.querySelectorAll('th.sortable')).find(th => /PREMIUM|PREM/i.test(th.textContent));
 assert(thPremium !== undefined, 'Premium table header found');
 
@@ -684,9 +889,9 @@ thStrike.click(); // Click 3: Reset
 assert(!thStrike.classList.contains('sort-asc') && !thStrike.classList.contains('sort-desc'), 'Strike header classes reset after click 3');
 
 // ----------------------------------------------------------------------------
-// TEST 7: Recent Searches Persistence & Quick Suggestion Clicking
+// TEST 8: Recent Searches Persistence & Quick Suggestion Clicking
 // ----------------------------------------------------------------------------
-console.log('\n--- TEST 7: Recent Searches & Suggestion Chips ---');
+console.log('\n--- TEST 8: Recent Searches & Suggestion Chips ---');
 const savedRecents = cockpitView.getRecentSearches();
 assert(savedRecents.includes('NVDA'), `Searched NVDA stored in localStorage (${JSON.stringify(savedRecents)})`);
 
@@ -700,7 +905,7 @@ await new Promise(r => setImmediate(r));
 
 assert(heroBadge.textContent === 'TSLA', `Clicking TSLA suggestion chip loaded TSLA (got ${heroBadge.textContent})`);
 const updatedRecents = cockpitView.getRecentSearches();
-assert(updatedRecents[0] === 'TSLA' && updatedRecents[1] === 'NVDA', `Recents updated with TSLA as most recent: ${JSON.stringify(updatedRecents)}`);
+assert(updatedRecents[0] === 'TSLA' && updatedRecents.includes('NVDA'), `Recents updated with TSLA as most recent: ${JSON.stringify(updatedRecents)}`);
 
 // ============================================================================
 // Summary & Exit

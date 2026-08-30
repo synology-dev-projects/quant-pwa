@@ -1,3 +1,5 @@
+import { AppState } from '../state.js';
+
 export class TabManager {
   constructor(tabBarContainer, contentContainer, onTabChange = null) {
     this.tabBarContainer = tabBarContainer;
@@ -36,6 +38,18 @@ export class TabManager {
 
   switchTab(tabId) {
     if (!this.tabs.has(tabId) || this.activeTabId === tabId) return;
+
+    if (AppState.isSessionExpired()) {
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        try {
+          const evt = typeof CustomEvent === 'function'
+            ? new CustomEvent('quant-session-expired')
+            : { type: 'quant-session-expired' };
+          window.dispatchEvent(evt);
+        } catch (e) {}
+      }
+      return;
+    }
 
     this.activeTabId = tabId;
 
