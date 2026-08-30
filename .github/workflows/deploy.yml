@@ -50,6 +50,7 @@ jobs:
             echo "COMPOSE_PROFILE_CMD=--profile production" >> $GITHUB_ENV
           fi
           
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
           echo "DEPLOY_DIR=$TARGET_PATH" >> $GITHUB_ENV
 
       # 4. Sync Project Files to NAS Target Directory
@@ -81,8 +82,11 @@ jobs:
           echo "GEXDEX_API_KEY=${{ secrets.GEXDEX_API_KEY }}" >> "$ENV_FILE"
           echo "PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}" >> "$ENV_FILE"
           echo "CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" >> "$ENV_FILE"
-          echo "MAX_SLIDING_WINDOW_MESSAGES=12" >> "$ENV_FILE"
-          echo "COMMON_LIB_PATH=/volume2/homes/rachardv/git-repos/master/common-lib/common_lib" >> "$ENV_FILE"
+          if [ -d "/volume2/homes/rachardv/git-repos/${{ env.BRANCH_NAME }}/common-lib/common_lib" ]; then
+            echo "COMMON_LIB_PATH=/volume2/homes/rachardv/git-repos/${{ env.BRANCH_NAME }}/common-lib/common_lib" >> "$ENV_FILE"
+          else
+            echo "COMMON_LIB_PATH=/volume2/homes/rachardv/git-repos/master/common-lib/common_lib" >> "$ENV_FILE"
+          fi
           echo "COMMON_CONFIG_PATH=/volume2/homes/rachardv/git-repos/master/common_config" >> "$ENV_FILE"
           
           chmod 600 "$ENV_FILE"

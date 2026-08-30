@@ -1,6 +1,6 @@
 import { AppState } from '../state.js';
 
-export const CLIENT_VERSION = 'v1.0.1';
+export const CLIENT_VERSION = 'v1.0.2';
 
 export class SettingsModal {
   constructor({ onSettingsChanged, onLockApp, onClearHistory } = {}) {
@@ -17,11 +17,15 @@ export class SettingsModal {
     this.forceUpdateBtn = document.getElementById('forceUpdateBtn');
     this.manualResyncLink = document.getElementById('manualResyncLink');
     this.syncFlowBtn = document.getElementById('syncFlowBtn');
+    this.syncLevelsBtn = document.getElementById('syncLevelsBtn');
     this.appBuildVersion = document.getElementById('appBuildVersion');
     this.syncStatusText = document.getElementById('syncStatusText');
     this.flowStatusText = document.getElementById('flowStatusText');
     this.flowSyncDot = document.getElementById('flowSyncDot');
     this.flowStatusBadge = document.getElementById('flowStatusBadge');
+    this.levelsStatusText = document.getElementById('levelsStatusText');
+    this.levelsSyncDot = document.getElementById('levelsSyncDot');
+    this.levelsStatusBadge = document.getElementById('levelsStatusBadge');
     this.passcodeInput = document.getElementById('passcodeInput');
     this.gatewayUrlInput = document.getElementById('gatewayUrlInput');
     this.diagnosticsToggle = document.getElementById('diagnosticsToggle');
@@ -35,6 +39,7 @@ export class SettingsModal {
     this.forceUpdateBtn?.addEventListener('click', () => this.handleForceUpdate());
     this.manualResyncLink?.addEventListener('click', () => this.handleForceUpdate());
     this.syncFlowBtn?.addEventListener('click', () => this.handleSyncFlow());
+    this.syncLevelsBtn?.addEventListener('click', () => this.handleSyncQuantLevels());
 
     // Toggle default state from AppState (defaults to true)
     if (this.diagnosticsToggle) {
@@ -83,6 +88,7 @@ export class SettingsModal {
     }
     this.checkVersionStatus();
     this.checkFlowStatus();
+    this.checkQuantLevelsStatus();
     this.modal.classList.add('open');
   }
 
@@ -230,8 +236,92 @@ export class SettingsModal {
       }
     } catch (err) {
       console.error('Flow sync error:', err);
-      alert(`Network error during sync: ${err.message}`);
+      if (typeof alert === 'function') alert(`Network error during sync: ${err.message}`);
       await this.checkFlowStatus();
+    }
+  }
+
+  async checkQuantLevelsStatus() {
+    if (!this.levelsStatusText) return;
+
+    try {
+      const res = await fetch('/api/quant-levels/status');
+      if (res.ok) {
+        const data = await res.json();
+        const isFresh = Boolean(data.is_fresh);
+        const latestRecordDate = data.latest_record_date;
+        const expectedDate = data.expected_date;
+        const displayDate = latestRecordDate || expectedDate;
+
+        if (isFresh) {
+          if (this.levelsStatusText) this.levelsStatusText.textContent = `In Sync (${displayDate})`;
+          if (this.levelsSyncDot) this.levelsSyncDot.className = 'status-dot dot-live';
+          if (this.syncLevelsBtn) {
+            this.syncLevelsBtn.disabled = true;
+            this.syncLevelsBtn.className = 'btn btn-synced';
+            this.syncLevelsBtn.innerHTML = `✓ Quant Levels Up to Date (${displayDate})`;
+          }
+        } else {
+          if (this.levelsStatusText) this.levelsStatusText.textContent = `Stale (Missing ${expectedDate})`;
+          if (this.levelsSyncDot) this.levelsSyncDot.className = 'status-dot dot-stale';
+          if (this.syncLevelsBtn) {
+            this.syncLevelsBtn.disabled = false;
+            this.syncLevelsBtn.className = 'btn btn-danger btn-pulse';
+            this.syncLevelsBtn.innerHTML = `⚡ Sync Quant Levels (${expectedDate}) · Tap to Run`;
+          }
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn('Quant levels status fetch failed:', e);
+    }
+
+    if (this.levelsSyncDot) this.levelsSyncDot.className = 'status-dot dot-stale';
+    if (this.levelsStatusText) this.levelsStatusText.textContent = 'Status Unavailable';
+    if (this.syncLevelsBtn) {
+      this.syncLevelsBtn.disabled = false;
+      this.syncLevelsBtn.className = 'btn btn-warning';
+      this.syncLevelsBtn.innerHTML = '⚡ Sync Quant Levels';
+    }
+  }
+
+  async handleSyncQuantLevels() {
+    if (!this.syncLevelsBtn) return;
+    const originalHtml = this.syncLevelsBtn.innerHTML;
+    this.syncLevelsBtn.disabled = true;
+    this.syncLevelsBtn.className = 'btn btn-synced';
+    this.syncLevelsBtn.innerHTML = '<span class="status-dot dot-fast"></span> ⏳ Ingesting Quant Levels...';
+
+    try {
+      const token = AppState.getSessionToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch('/api/quant-levels/sync', {
+        method: 'POST',
+        headers: headers
+      });
+
+      if (res.ok) {
+        this.syncLevelsBtn.innerHTML = '<span class="status-dot dot-live"></span> Ingestion Complete! Verifying DB...';
+        await new Promise((r) => setTimeout(r, 600));
+        await this.checkQuantLevelsStatus();
+        this.showToast('✓ Quant Levels Ingestion Completed Successfully!');
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (typeof alert === 'function') {
+          alert(`Sync failed: ${errData.detail || errData.message || 'Error executing pipeline'}`);
+        }
+        await this.checkQuantLevelsStatus();
+      }
+    } catch (err) {
+      console.error('Quant levels sync error:', err);
+      if (typeof alert === 'function') {
+        alert(`Network error during sync: ${err.message}`);
+      }
+      await this.checkQuantLevelsStatus();
     }
   }
 

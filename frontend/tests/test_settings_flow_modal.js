@@ -1,4 +1,7 @@
 import { strict as assert } from 'assert';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // 1. Lightweight Mock DOM Environment
 class MockClassList {
@@ -74,11 +77,15 @@ const elements = {
   forceUpdateBtn: new MockElement('button', 'forceUpdateBtn'),
   manualResyncLink: new MockElement('div', 'manualResyncLink'),
   syncFlowBtn: new MockElement('button', 'syncFlowBtn'),
+  syncLevelsBtn: new MockElement('button', 'syncLevelsBtn'),
   appBuildVersion: new MockElement('span', 'appBuildVersion'),
   syncStatusText: new MockElement('span', 'syncStatusText'),
   flowStatusText: new MockElement('span', 'flowStatusText'),
   flowSyncDot: new MockElement('span', 'flowSyncDot'),
   flowStatusBadge: new MockElement('span', 'flowStatusBadge'),
+  levelsStatusText: new MockElement('span', 'levelsStatusText'),
+  levelsSyncDot: new MockElement('span', 'levelsSyncDot'),
+  levelsStatusBadge: new MockElement('span', 'levelsStatusBadge'),
   passcodeInput: new MockElement('input', 'passcodeInput'),
   gatewayUrlInput: new MockElement('input', 'gatewayUrlInput'),
   diagnosticsToggle: new MockElement('input', 'diagnosticsToggle')
@@ -117,8 +124,18 @@ console.log('=================================================================='
 console.log('  PROBING SETTINGS MODAL OPTIONS FLOW FRESHNESS UI (SETTINGS-04)  ');
 console.log('==================================================================\n');
 
-assert.strictEqual(CLIENT_VERSION, 'v1.0.1', 'CLIENT_VERSION must be v1.0.1');
-console.log('  ✓ PASS: CLIENT_VERSION is v1.0.1');
+// 1. CLIENT_VERSION Assertion
+assert.strictEqual(CLIENT_VERSION, 'v1.0.2', 'CLIENT_VERSION must be v1.0.2');
+console.log('  ✓ PASS: CLIENT_VERSION is v1.0.2');
+
+// 2. version.json Parity Test
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const versionJsonPath = path.resolve(__dirname, '../../version.json');
+const versionJson = JSON.parse(fs.readFileSync(versionJsonPath, 'utf8'));
+
+assert.strictEqual(CLIENT_VERSION, versionJson.version, 'CLIENT_VERSION must match version.json');
+console.log(`  ✓ PASS: CLIENT_VERSION (${CLIENT_VERSION}) matches version.json (${versionJson.version})`);
 
 const modal = new SettingsModal();
 
@@ -127,20 +144,20 @@ global.fetch = async (url) => {
   if (url === '/api/health') {
     return {
       ok: true,
-      json: async () => ({ version: 'v1.0.1', environment: 'staging' })
+      json: async () => ({ version: 'v1.0.2', environment: 'staging' })
     };
   }
   return { ok: false };
 };
 
 await modal.checkVersionStatus();
-assert.strictEqual(elements.appBuildVersion.textContent, 'v1.0.1 (Staging)', 'App build shows v1.0.1 (Staging)');
-assert.strictEqual(elements.syncStatusText.textContent, 'Synchronized (v1.0.1)', 'Sync status text is synchronized');
+assert.strictEqual(elements.appBuildVersion.textContent, 'v1.0.2 (Staging)', 'App build shows v1.0.2 (Staging)');
+assert.strictEqual(elements.syncStatusText.textContent, 'Synchronized (v1.0.2)', 'Sync status text is synchronized');
 assert.strictEqual(elements.forceUpdateBtn.disabled, true, 'Force update button is disabled when in sync');
 assert.strictEqual(elements.forceUpdateBtn.className, 'btn btn-synced', 'Force update button has btn-synced class');
-assert.strictEqual(elements.forceUpdateBtn.innerHTML, '✓ App Up to Date (v1.0.1)', 'Force update button text is up to date');
+assert.strictEqual(elements.forceUpdateBtn.innerHTML, '✓ App Up to Date (v1.0.2)', 'Force update button text is up to date');
 assert.strictEqual(elements.manualResyncLink.style.display, 'block', 'Manual resync link visible when synchronized');
-console.log('  ✓ PASS: Version check with matched v1.0.1 and staging environment renders synchronized state');
+console.log('  ✓ PASS: Version check with matched v1.0.2 and staging environment renders synchronized state');
 
 // TEST 1: Fresh State Check
 global.fetch = async (url) => {
@@ -158,7 +175,7 @@ global.fetch = async (url) => {
   if (url === '/api/health') {
     return {
       ok: true,
-      json: async () => ({ version: 'v1.0.1', environment: 'staging' })
+      json: async () => ({ version: 'v1.0.2', environment: 'staging' })
     };
   }
   return { ok: false };
@@ -235,7 +252,7 @@ global.fetch = async (url) => {
   if (url === '/api/health') {
     return {
       ok: true,
-      json: async () => ({ version: 'v1.0.2', environment: 'production' })
+      json: async () => ({ version: 'v1.0.3', environment: 'production' })
     };
   }
   return { ok: false };
@@ -246,13 +263,104 @@ global.window.location.port = '80';
 global.window.location.hostname = 'app.quant.internal';
 
 await modal.checkVersionStatus();
-assert.strictEqual(elements.appBuildVersion.textContent, 'v1.0.1 (Production)', 'App build shows v1.0.1 (Production)');
-assert.strictEqual(elements.syncStatusText.textContent, 'Update Available (v1.0.2)', 'Sync status text reflects update available');
+assert.strictEqual(elements.appBuildVersion.textContent, 'v1.0.2 (Production)', 'App build shows v1.0.2 (Production)');
+assert.strictEqual(elements.syncStatusText.textContent, 'Update Available (v1.0.3)', 'Sync status text reflects update available');
 assert.strictEqual(elements.forceUpdateBtn.disabled, false, 'Force update button enabled when update available');
 assert.strictEqual(elements.forceUpdateBtn.className, 'btn btn-danger btn-pulse', 'Force update button has danger-pulse class');
-assert.strictEqual(elements.forceUpdateBtn.innerHTML, '⚡ Update Available (v1.0.2) · Tap to Sync', 'Force update button text reflects server version');
+assert.strictEqual(elements.forceUpdateBtn.innerHTML, '⚡ Update Available (v1.0.3) · Tap to Sync', 'Force update button text reflects server version');
 assert.strictEqual(elements.manualResyncLink.style.display, 'none', 'Manual resync link hidden when update available');
 console.log('  ✓ PASS: Update available scenario correctly updates badge, button and hides resync link');
+
+// TEST 5: Fresh Quant Levels State Check
+global.fetch = async (url) => {
+  if (url === '/api/quant-levels/status') {
+    return {
+      ok: true,
+      json: async () => ({
+        status: 'synced',
+        is_fresh: true,
+        latest_record_date: '2026-08-29',
+        expected_date: '2026-08-29'
+      })
+    };
+  }
+  return { ok: false };
+};
+
+await modal.checkQuantLevelsStatus();
+
+const syncLevelsBtn = elements.syncLevelsBtn;
+const levelsStatusText = elements.levelsStatusText;
+const levelsSyncDot = elements.levelsSyncDot;
+
+assert.strictEqual(levelsStatusText.textContent, 'In Sync (2026-08-29)', 'Quant Levels text reflects fresh state');
+assert.strictEqual(syncLevelsBtn.disabled, true, 'Sync levels button is disabled when in sync');
+assert.strictEqual(syncLevelsBtn.className, 'btn btn-synced', 'Sync levels button has btn-synced class');
+assert.strictEqual(syncLevelsBtn.innerHTML, '✓ Quant Levels Up to Date (2026-08-29)', 'Sync levels button text is up to date');
+assert.strictEqual(levelsSyncDot.className, 'status-dot dot-live', 'Levels dot is live green');
+console.log('  ✓ PASS: Fresh Quant Levels DB state renders disabled button and live dot');
+
+// TEST 6: Stale Quant Levels State Check
+global.fetch = async (url) => {
+  if (url === '/api/quant-levels/status') {
+    return {
+      ok: true,
+      json: async () => ({
+        status: 'stale',
+        is_fresh: false,
+        latest_record_date: '2026-08-26',
+        expected_date: '2026-08-29'
+      })
+    };
+  }
+  return { ok: false };
+};
+
+await modal.checkQuantLevelsStatus();
+
+assert.strictEqual(levelsStatusText.textContent, 'Stale (Missing 2026-08-29)', 'Quant levels text reflects stale state with missing expected date');
+assert.strictEqual(syncLevelsBtn.disabled, false, 'Sync levels button is enabled when stale');
+assert.strictEqual(syncLevelsBtn.className, 'btn btn-danger btn-pulse', 'Sync levels button has active danger pulse class');
+assert.strictEqual(syncLevelsBtn.innerHTML, '⚡ Sync Quant Levels (2026-08-29) · Tap to Run', 'Sync levels button prompts user to run sync');
+assert.strictEqual(levelsSyncDot.className, 'status-dot dot-stale', 'Levels dot is red stale');
+console.log('  ✓ PASS: Stale Quant Levels DB state renders enabled danger-pulse button and red dot');
+
+// TEST 7: Click Sync Quant Levels Button when Stale
+let levelsSyncTriggered = false;
+let authHeaderReceived = null;
+global.fetch = async (url, opts) => {
+  if (url === '/api/quant-levels/sync' && opts?.method === 'POST') {
+    levelsSyncTriggered = true;
+    authHeaderReceived = opts?.headers?.Authorization || opts?.headers?.authorization;
+    return {
+      ok: true,
+      json: async () => ({ status: 'ok', message: 'Quant levels sync complete' })
+    };
+  }
+  if (url === '/api/quant-levels/status') {
+    return {
+      ok: true,
+      json: async () => ({
+        status: 'synced',
+        is_fresh: true,
+        latest_record_date: '2026-08-29',
+        expected_date: '2026-08-29'
+      })
+    };
+  }
+  return { ok: false };
+};
+
+// Simulate active session token in AppState
+const { AppState } = await import('../src/state.js');
+AppState.setSessionToken('mock-jwt-token-12345');
+
+await modal.handleSyncQuantLevels();
+assert.strictEqual(levelsSyncTriggered, true, 'Quant Levels Sync API was dispatched upon button click');
+assert.strictEqual(authHeaderReceived, 'Bearer mock-jwt-token-12345', 'Bearer session token was included in headers');
+assert.strictEqual(syncLevelsBtn.disabled, true, 'Sync levels button re-disabled after completion');
+assert.strictEqual(levelsStatusText.textContent, 'In Sync (2026-08-29)', 'Quant levels status flips to In Sync post-run');
+console.log('  ✓ PASS: Clicking sync levels button triggers backend sync and flips status to In Sync');
 
 console.log('\n==================================================================');
 console.log('  SETTINGS MODAL TESTS PASSED (100% COVERAGE)                     ');

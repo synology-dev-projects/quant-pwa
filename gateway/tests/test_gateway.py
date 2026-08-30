@@ -17,6 +17,19 @@ def test_health_check():
     assert "market" in data
     assert "status" in data["market"]
 
+def test_version_parity_with_version_json():
+    """Verifies that gateway settings.APP_VERSION strictly matches root version.json."""
+    from pathlib import Path
+    import json
+
+    version_file = Path(__file__).resolve().parent.parent.parent / "version.json"
+    assert version_file.exists(), f"version.json not found at {version_file}"
+    with open(version_file, "r", encoding="utf-8") as f:
+        version_data = json.load(f)
+
+    assert settings.APP_VERSION == version_data["version"]
+    assert settings.APP_VERSION == "v1.0.2"
+
 def test_auth_rejection_missing_header():
     response = client.get("/api/models")
     assert response.status_code == 401
