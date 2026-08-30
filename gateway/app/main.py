@@ -24,7 +24,7 @@ from app.core.auth import (
 )
 
 from contextlib import asynccontextmanager
-from app.mcp import mcp_router, mcp_client_manager
+from app.mcp import mcp_router, mcp_client_manager, mcp_sse_endpoint, mcp_post_message
 from app.routers.cockpit import router as cockpit_router
 from app.routers.flow_status import router as flow_status_router
 from app.routers.quant_levels_status import router as quant_levels_status_router
@@ -100,6 +100,10 @@ app.add_middleware(
 
 # Mount Model Context Protocol (MCP) Router
 app.include_router(mcp_router)
+
+# Root aliases for MCP endpoints
+app.add_api_route("/sse", mcp_sse_endpoint, methods=["GET", "POST"], tags=["MCP Server"], include_in_schema=False)
+app.add_api_route("/messages", mcp_post_message, methods=["GET", "POST"], tags=["MCP Server"], include_in_schema=False)
 
 # Mount Ticker Cockpit Router (Protected by 6-Hour Session Token Auth)
 app.include_router(

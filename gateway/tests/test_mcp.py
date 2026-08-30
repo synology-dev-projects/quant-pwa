@@ -125,3 +125,143 @@ def test_mcp_resources_and_prompts():
     prompt_list = client.post("/mcp/messages", json={"jsonrpc": "2.0", "id": 6, "method": "prompts/list"})
     assert prompt_list.status_code == 200
     assert len(prompt_list.json()["result"]["prompts"]) >= 1
+
+
+@pytest.mark.anyio
+async def test_mcp_sse_get():
+    """Verifies GET /mcp/sse initiates SSE stream with endpoint announcement."""
+    from fastapi import Request
+    from app.mcp.server import mcp_sse_endpoint
+    scope = {"type": "http", "method": "GET", "path": "/mcp/sse", "headers": []}
+    req = Request(scope)
+    resp = await mcp_sse_endpoint(req)
+    assert resp.status_code == 200
+    assert resp.media_type == "text/event-stream"
+    gen = resp.body_iterator
+    first_chunk = await anext(gen)
+    assert "event: endpoint" in first_chunk
+    assert "/mcp/messages?session_id=" in first_chunk
+    await gen.aclose()
+
+
+def test_mcp_sse_post():
+    """Verifies POST /mcp/sse handles direct JSON-RPC payload."""
+    req = {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "ping",
+        "params": {}
+    }
+    response = client.post("/mcp/sse", json=req)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["jsonrpc"] == "2.0"
+    assert data["id"] == 10
+    assert data["result"] == {}
+
+
+def test_mcp_messages_get():
+    """Verifies GET /mcp/messages returns status metadata JSON."""
+    response = client.get("/mcp/messages")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["service"] == "quant-ai-mcp"
+    assert data["protocolVersion"] == "2024-11-05"
+    assert data["status"] == "active"
+    assert "MCP JSON-RPC 2.0" in data["message"]
+
+
+def test_mcp_messages_post():
+    """Verifies POST /mcp/messages handles standard JSON-RPC payload."""
+    req = {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "ping",
+        "params": {}
+    }
+    response = client.post("/mcp/messages", json=req)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["jsonrpc"] == "2.0"
+    assert data["id"] == 11
+    assert data["result"] == {}
+
+
+def test_mcp_root_get():
+    """Verifies GET /mcp returns server discovery JSON."""
+    response = client.get("/mcp")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "quant-ai-gateway"
+    assert data["protocolVersion"] == "2024-11-05"
+    assert data["endpoints"]["sse"] == "/mcp/sse"
+    assert data["endpoints"]["messages"] == "/mcp/messages"
+
+
+def test_mcp_root_post():
+    """Verifies POST /mcp executes direct JSON-RPC request."""
+    req = {
+        "jsonrpc": "2.0",
+        "id": 20,
+        "method": "tools/list",
+        "params": {}
+    }
+    response = client.post("/mcp", json=req)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["jsonrpc"] == "2.0"
+    assert data["id"] == 20
+    assert "tools" in data["result"]
+
+
+@pytest.mark.anyio
+async def test_root_sse_get():
+    """Verifies GET /sse root alias initiates SSE stream."""
+    from fastapi import Request
+    from app.mcp.server import mcp_sse_endpoint
+    scope = {"type": "http", "method": "GET", "path": "/sse", "headers": []}
+    req = Request(scope)
+    resp = await mcp_sse_endpoint(req)
+    assert resp.status_code == 200
+    assert resp.media_type == "text/event-stream"
+    gen = resp.body_iterator
+    first_chunk = await anext(gen)
+    assert "event: endpoint" in first_chunk
+    assert "/mcp/messages?session_id=" in first_chunk
+    await gen.aclose()
+
+
+def test_root_sse_post():
+    """Verifies POST /sse root alias executes JSON-RPC request."""
+    req = {
+        "jsonrpc": "2.0",
+        "id": 30,
+        "method": "ping",
+        "params": {}
+    }
+    response = client.post("/sse", json=req)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["jsonrpc"] == "2.0"
+    assert data["id"] == 30
+    assert data["result"] == {}
+
+
+def test_root_messages_post():
+    """Verifies POST /messages root alias executes JSON-RPC request."""
+    req = {
+        "jsonrpc": "2.0",
+        "id": 40,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test-root", "version": "1.0"}
+        }
+    }
+    response = client.post("/messages", json=req)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["jsonrpc"] == "2.0"
+    assert data["id"] == 40
+    assert data["result"]["serverInfo"]["name"] == "quant-ai-gateway"
