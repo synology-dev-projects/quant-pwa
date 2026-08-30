@@ -5,6 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings:
+    # Application & Environment Metadata
+    APP_VERSION: str = os.getenv("APP_VERSION", "v1.0.1")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "production")
+
     # Security & Passcode / Session Auth
     APP_PASSCODE: str = os.getenv("APP_PASSCODE", "RichQuantDemo")
     SESSION_EXPIRY_HOURS: int = int(os.getenv("SESSION_EXPIRY_HOURS", "6"))

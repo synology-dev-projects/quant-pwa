@@ -1,6 +1,6 @@
 import { AppState } from '../state.js';
 
-export const CLIENT_VERSION = 'v31';
+export const CLIENT_VERSION = 'v1.0.1';
 
 export class SettingsModal {
   constructor({ onSettingsChanged, onLockApp, onClearHistory } = {}) {
@@ -88,7 +88,12 @@ export class SettingsModal {
 
   async checkVersionStatus() {
     if (this.appBuildVersion) {
-      this.appBuildVersion.textContent = `${CLIENT_VERSION} (Production)`;
+      const isStaging = (typeof window !== 'undefined' && window.location && (
+        window.location.port === '8096' ||
+        (window.location.hostname && (window.location.hostname.includes('staging') || window.location.hostname.includes('develop')))
+      ));
+      const initialLabel = isStaging ? '(Staging)' : '(Production)';
+      this.appBuildVersion.textContent = `${CLIENT_VERSION} ${initialLabel}`;
     }
 
     try {
@@ -96,6 +101,17 @@ export class SettingsModal {
       if (res.ok) {
         const data = await res.json();
         const serverVersion = data.version || CLIENT_VERSION;
+        const serverEnv = data.environment || '';
+        const isStaging = (typeof window !== 'undefined' && window.location && (
+          window.location.port === '8096' ||
+          serverEnv.toLowerCase() === 'staging' ||
+          (window.location.hostname && (window.location.hostname.includes('staging') || window.location.hostname.includes('develop')))
+        ));
+        const label = isStaging ? '(Staging)' : '(Production)';
+
+        if (this.appBuildVersion) {
+          this.appBuildVersion.textContent = `${CLIENT_VERSION} ${label}`;
+        }
 
         if (serverVersion === CLIENT_VERSION) {
           if (this.syncStatusText) {
@@ -132,6 +148,9 @@ export class SettingsModal {
       this.forceUpdateBtn.disabled = true;
       this.forceUpdateBtn.className = 'btn btn-synced';
       this.forceUpdateBtn.innerHTML = `✓ App Up to Date (${CLIENT_VERSION})`;
+    }
+    if (this.syncStatusText) {
+      this.syncStatusText.textContent = `Synchronized (${CLIENT_VERSION})`;
     }
     if (this.manualResyncLink) {
       this.manualResyncLink.style.display = 'block';
