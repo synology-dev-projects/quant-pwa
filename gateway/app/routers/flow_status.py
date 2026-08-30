@@ -157,8 +157,11 @@ async def trigger_flow_sync(current_user: str = Depends(get_current_user)):
     
     try:
         from common_lib.flow.runner import run_daily_incremental
+        from app.tools.flow_tool import clear_flow_cache
         config = load_config()
         rows = run_daily_incremental(config)
+        evicted = clear_flow_cache()
+        logger.info(f"Options Flow cache cleared ({evicted} entries evicted) following manual sync.")
         return FlowSyncResponse(
             status="ok",
             message=f"Options Flow sync completed successfully. Ingested {rows} records.",
