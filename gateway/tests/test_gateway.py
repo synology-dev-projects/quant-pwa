@@ -434,6 +434,7 @@ def test_evaluate_synthesis_tier_keywords():
 def test_lifespan_invokes_ensure_all_schemas():
     """Verifies gateway lifespan startup invokes ensure_all_schemas for database auto-migration."""
     import asyncio
+    import common_lib.database.schemas
     from unittest.mock import patch, AsyncMock
     from app.main import lifespan
 
@@ -462,6 +463,7 @@ def test_lifespan_invokes_ensure_all_schemas():
 def test_lifespan_gracefully_handles_schema_verification_failure():
     """Verifies gateway lifespan startup catches schema migration exceptions without aborting startup."""
     import asyncio
+    import common_lib.database.schemas
     from unittest.mock import patch, AsyncMock
     from app.main import lifespan
 
