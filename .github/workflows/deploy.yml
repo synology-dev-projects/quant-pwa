@@ -151,7 +151,7 @@ jobs:
           docker compose build
           
           echo "🧪 Running Containerized Gateway Pytest Gate..."
-          docker compose run --rm gateway pytest tests/ -v
+          docker compose run --rm quant-gateway pytest tests/ -v
           
           echo "🚀 Starting containers..."
           docker compose ${{ env.COMPOSE_PROFILE_CMD }} up -d --force-recreate
