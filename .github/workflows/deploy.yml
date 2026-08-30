@@ -60,9 +60,20 @@ jobs:
           (python3 scripts/bump_version.py --check || python scripts/bump_version.py --check)
 
           echo "🎨 Running Frontend DOM Test Suites..."
-          node frontend/tests/test_settings_flow_modal.js
-          node frontend/tests/test_cockpit_view.js
-          node frontend/tests/test_vertical_table_ui.js
+          NODE_BIN="node"
+          for candidate in \
+            /opt/hostedtoolcache/node/*/x64/bin/node \
+            /usr/local/bin/node; do
+            if [ -x "$candidate" ]; then
+              NODE_BIN="$candidate"
+              break
+            fi
+          done
+
+          echo "Using Node binary: $NODE_BIN"
+          "$NODE_BIN" frontend/tests/test_settings_flow_modal.js
+          "$NODE_BIN" frontend/tests/test_cockpit_view.js
+          "$NODE_BIN" frontend/tests/test_vertical_table_ui.js
 
       # 4. Sync Project Files to NAS Target Directory
       - name: Sync Project Files to Synology NAS
