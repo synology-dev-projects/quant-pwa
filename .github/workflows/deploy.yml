@@ -14,58 +14,29 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      # 1. Clean Runner Workspace
-      - name: Clean Runner Workspace
-        run: |
-          echo "🧹 Cleaning runner workspace..."
-          rm -rf ./*
-          rm -rf ./.??* 2>/dev/null || true
-
-      # 2. Checkout Code
-      - name: Checkout Code
+      # ========================================================================
+      # STAGE 1: Pre-Flight Validation Gate
+      # ========================================================================
+      - name: "Stage 1 [Setup]: Checkout Repository"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          clean: true
 
-      # 2.5 Setup Node.js
-      - name: Set up Node.js 20
+      - name: "Stage 1 [Setup]: Set up Node.js 20"
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # 3. Configure Branch Environment (Develop vs Master)
-      - name: Configure Branch Environment Variables
+      - name: "Stage 1: Pre-Flight Validation Gate"
         run: |
-          SYNOLOGY_ROOT_PATH="/volume2/homes/rachardv/git-repos"
-          BRANCH_NAME="${{ github.ref_name }}"
-          TARGET_PATH="${SYNOLOGY_ROOT_PATH}/${BRANCH_NAME}/quant-pwa"
-          
-          if [ "$BRANCH_NAME" == "develop" ] || [ "$BRANCH_NAME" == "develop2" ]; then
-            echo "🌿 Deploying to: DEVELOP/DEVELOP2 (Local Home Wi-Fi Only)"
-            echo "CONTAINER_PREFIX=dev" >> $GITHUB_ENV
-            echo "FRONTEND_PORT=8096" >> $GITHUB_ENV
-            echo "POSTGRES_PORT=5436" >> $GITHUB_ENV
-            echo "COMPOSE_PROJECT_NAME=quant-pwa-dev" >> $GITHUB_ENV
-            echo "COMPOSE_PROFILE_CMD=" >> $GITHUB_ENV
-          else
-            echo "🚀 Deploying to: MASTER / PRODUCTION (Public Internet + Cloudflare Tunnel)"
-            echo "CONTAINER_PREFIX=prod" >> $GITHUB_ENV
-            echo "FRONTEND_PORT=8095" >> $GITHUB_ENV
-            echo "POSTGRES_PORT=5435" >> $GITHUB_ENV
-            echo "COMPOSE_PROJECT_NAME=quant-pwa-prod" >> $GITHUB_ENV
-            echo "COMPOSE_PROFILE_CMD=--profile production" >> $GITHUB_ENV
-          fi
-          
-          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
-          echo "DEPLOY_DIR=$TARGET_PATH" >> $GITHUB_ENV
+          echo "🧹 Cleaning any stale runner workspace artifacts..."
+          rm -rf ./.??* 2>/dev/null || true
 
-      # 3.5 Pre-Flight Test Gate (Host Verification)
-      - name: Run Pre-Flight Test Gate
-        run: |
-          echo "🧪 Running Pre-Flight Validation Suite..."
+          echo "🔍 [1/2] Running Version Parity Check..."
           (python3 scripts/bump_version.py --check || python scripts/bump_version.py --check)
 
-          echo "🎨 Running Frontend DOM Test Suites..."
+          echo "🎨 [2/2] Running Frontend DOM Test Suites..."
           NODE_BIN="node"
           for candidate in \
             /opt/hostedtoolcache/node/*/x64/bin/node \
@@ -80,12 +51,47 @@ jobs:
           "$NODE_BIN" frontend/tests/test_settings_flow_modal.js
           "$NODE_BIN" frontend/tests/test_cockpit_view.js
           "$NODE_BIN" frontend/tests/test_vertical_table_ui.js
+          echo "✅ Stage 1 Pre-Flight Validation Gate Passed Successfully!"
 
-      # 4. Sync Project Files to NAS Target Directory
-      - name: Sync Project Files to Synology NAS
+      # ========================================================================
+      # STAGE 2: Prepare Synology Deployment Directory & Secrets
+      # ========================================================================
+      - name: "Stage 2: Prepare Synology Deployment Directory & Secrets"
         run: |
-          TARGET_PATH="${{ env.DEPLOY_DIR }}"
-          echo "📂 Syncing files to: $TARGET_PATH"
+          SYNOLOGY_ROOT_PATH="/volume2/homes/rachardv/git-repos"
+          BRANCH_NAME="${{ github.ref_name }}"
+          TARGET_PATH="${SYNOLOGY_ROOT_PATH}/${BRANCH_NAME}/quant-pwa"
+          
+          # 1. Configure Branch Environment (Develop vs Master)
+          if [ "$BRANCH_NAME" == "develop" ] || [ "$BRANCH_NAME" == "develop2" ]; then
+            echo "🌿 Deploying to: DEVELOP/DEVELOP2 (Local Home Wi-Fi Only)"
+            CONTAINER_PREFIX="dev"
+            FRONTEND_PORT="8096"
+            POSTGRES_PORT="5436"
+            COMPOSE_PROJECT_NAME="quant-pwa-dev"
+            COMPOSE_PROFILE_CMD=""
+            ENVIRONMENT="staging"
+          else
+            echo "🚀 Deploying to: MASTER / PRODUCTION (Public Internet + Cloudflare Tunnel)"
+            CONTAINER_PREFIX="prod"
+            FRONTEND_PORT="8095"
+            POSTGRES_PORT="5435"
+            COMPOSE_PROJECT_NAME="quant-pwa-prod"
+            COMPOSE_PROFILE_CMD="--profile production"
+            ENVIRONMENT="production"
+          fi
+          
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          echo "DEPLOY_DIR=$TARGET_PATH" >> $GITHUB_ENV
+          echo "CONTAINER_PREFIX=$CONTAINER_PREFIX" >> $GITHUB_ENV
+          echo "FRONTEND_PORT=$FRONTEND_PORT" >> $GITHUB_ENV
+          echo "POSTGRES_PORT=$POSTGRES_PORT" >> $GITHUB_ENV
+          echo "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME" >> $GITHUB_ENV
+          echo "COMPOSE_PROFILE_CMD=$COMPOSE_PROFILE_CMD" >> $GITHUB_ENV
+          echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
+          
+          # 2. Sync Project Files to NAS Target Directory
+          echo "📂 Syncing project files to: $TARGET_PATH"
           mkdir -p "$TARGET_PATH"
           rm -rf "$TARGET_PATH"/*
           
@@ -100,17 +106,15 @@ jobs:
           sudo chown -R 1026:100 "$TARGET_PATH"
           chmod -R 775 "$TARGET_PATH"
 
-      # 5. Generate Runtime .env Secrets
-      - name: Generate Runtime .env Secrets
-        run: |
-          ENV_FILE="${{ env.DEPLOY_DIR }}/.env"
+          # 3. Generate Runtime .env Secrets
+          ENV_FILE="${TARGET_PATH}/.env"
           echo "🔒 Generating secure .env file at $ENV_FILE..."
           
-          echo "CONTAINER_PREFIX=${{ env.CONTAINER_PREFIX }}" >> "$ENV_FILE"
+          echo "CONTAINER_PREFIX=${CONTAINER_PREFIX}" > "$ENV_FILE"
           echo "GATEWAY_PORT=8000" >> "$ENV_FILE"
-          echo "FRONTEND_PORT=${{ env.FRONTEND_PORT }}" >> "$ENV_FILE"
-          echo "POSTGRES_PORT=${{ env.POSTGRES_PORT }}" >> "$ENV_FILE"
-          echo "COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }}" >> "$ENV_FILE"
+          echo "FRONTEND_PORT=${FRONTEND_PORT}" >> "$ENV_FILE"
+          echo "POSTGRES_PORT=${POSTGRES_PORT}" >> "$ENV_FILE"
+          echo "COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}" >> "$ENV_FILE"
           echo "APP_PASSCODE=${{ secrets.APP_PASSCODE }}" >> "$ENV_FILE"
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> "$ENV_FILE"
           echo "DEFAULT_GEMINI_MODEL=gemini-3.5-flash-lite" >> "$ENV_FILE"
@@ -121,10 +125,10 @@ jobs:
           echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> "$ENV_FILE"
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> "$ENV_FILE"
           echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> "$ENV_FILE"
-          echo "DATABASE_URL=postgresql://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@quant-db-${{ env.CONTAINER_PREFIX }}:5432/${{ secrets.POSTGRES_DB }}" >> "$ENV_FILE"
-          echo "ENVIRONMENT=${{ env.CONTAINER_PREFIX == 'prod' && 'production' || 'staging' }}" >> "$ENV_FILE"
-          if [ -d "/volume2/homes/rachardv/git-repos/${{ env.BRANCH_NAME }}/common-lib/common_lib" ]; then
-            echo "COMMON_LIB_PATH=/volume2/homes/rachardv/git-repos/${{ env.BRANCH_NAME }}/common-lib/common_lib" >> "$ENV_FILE"
+          echo "DATABASE_URL=postgresql://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@quant-db-${CONTAINER_PREFIX}:5432/${{ secrets.POSTGRES_DB }}" >> "$ENV_FILE"
+          echo "ENVIRONMENT=${ENVIRONMENT}" >> "$ENV_FILE"
+          if [ -d "/volume2/homes/rachardv/git-repos/${BRANCH_NAME}/common-lib/common_lib" ]; then
+            echo "COMMON_LIB_PATH=/volume2/homes/rachardv/git-repos/${BRANCH_NAME}/common-lib/common_lib" >> "$ENV_FILE"
           else
             echo "COMMON_LIB_PATH=/volume2/homes/rachardv/git-repos/master/common-lib/common_lib" >> "$ENV_FILE"
           fi
@@ -133,31 +137,44 @@ jobs:
           chmod 600 "$ENV_FILE"
           sudo chown 1026:100 "$ENV_FILE"
 
-      # 6. Ensure External Docker Network Exists
-      - name: Ensure Shared Docker Network Exists
-        run: |
+          # 4. Ensure Shared Docker Network Exists
+          echo "🌐 Verifying shared Docker network (quant-system-network)..."
           docker network inspect quant-system-network >/dev/null 2>&1 || \
           docker network create quant-system-network
+          
+          echo "✅ Stage 2 Synology Deployment Directory & Secrets Prepared Successfully!"
 
-      # 7. Build & Deploy Docker Stack
-      - name: Deploy Docker Stack
+      # ========================================================================
+      # STAGE 3: Docker Build & Containerized Pytest Gate
+      # ========================================================================
+      - name: "Stage 3: Docker Build & Containerized Pytest Gate"
         run: |
           cd "${{ env.DEPLOY_DIR }}"
           echo "🐳 Force-removing any conflicting containers for prefix ${{ env.CONTAINER_PREFIX }}..."
           docker rm -f quant-db-${{ env.CONTAINER_PREFIX }} quant-gateway-${{ env.CONTAINER_PREFIX }} quant-frontend-${{ env.CONTAINER_PREFIX }} quant-cloudflared-${{ env.CONTAINER_PREFIX }} 2>/dev/null || true
           
-          echo "🐳 Launching Docker Compose stack (${{ env.COMPOSE_PROJECT_NAME }})..."
+          echo "🐳 Pre-cleaning Docker Compose stack (${{ env.COMPOSE_PROJECT_NAME }})..."
           docker compose down --remove-orphans || true
+          
+          echo "🏗️ Building Docker images..."
           docker compose build
           
           echo "🧪 Running Containerized Gateway Pytest Gate..."
           docker compose run --rm quant-gateway pytest tests/ -v
+          echo "✅ Stage 3 Docker Build & Containerized Pytest Gate Passed!"
+
+      # ========================================================================
+      # STAGE 4: Launch Containers & Execute Live Smoke Probes
+      # ========================================================================
+      - name: "Stage 4: Launch Containers & Execute Live Smoke Probes"
+        run: |
+          cd "${{ env.DEPLOY_DIR }}"
           
-          echo "🚀 Starting containers..."
+          echo "🚀 Starting containers (${{ env.COMPOSE_PROJECT_NAME }})..."
           docker compose ${{ env.COMPOSE_PROFILE_CMD }} up -d --force-recreate
           sleep 5
           
-          echo "📡 Verifying Gateway & Frontend boot on port ${{ env.FRONTEND_PORT }}..."
+          echo "📡 Verifying Gateway & Frontend readiness on port ${{ env.FRONTEND_PORT }}..."
           HOST_IP=""
           for i in {1..15}; do
             for candidate in "192.168.1.68" "172.17.0.1" "127.0.0.1"; do
@@ -178,31 +195,23 @@ jobs:
             exit 1
           fi
 
-          echo "HOST_IP=$HOST_IP" >> $GITHUB_ENV
-          echo "✅ Deployment Successful & Gateway Ready on $HOST_IP:${{ env.FRONTEND_PORT }} for ${{ github.ref_name }}!"
-
-      # 7.5 Post-Deployment Smoke Test
-      - name: Run Post-Deployment Smoke Test
-        run: |
-          echo "🔍 Running Post-Deployment Endpoint Smoke Tests..."
+          echo "🔍 Running 14-Endpoint Post-Deployment Smoke Test Suite against http://${HOST_IP}:${{ env.FRONTEND_PORT }}..."
           PY_BIN="python3"
           command -v python3 >/dev/null 2>&1 || PY_BIN="python"
           
-          TARGET_HOST="${{ env.HOST_IP }}"
-          [ -z "$TARGET_HOST" ] && TARGET_HOST="192.168.1.68"
-          
-          echo "🧪 Executing smoke probes against http://$TARGET_HOST:${{ env.FRONTEND_PORT }}..."
-          "$PY_BIN" scripts/smoke_test.py --host "$TARGET_HOST" --port ${{ env.FRONTEND_PORT }}
+          "$PY_BIN" scripts/smoke_test.py --host "$HOST_IP" --port ${{ env.FRONTEND_PORT }}
+          echo "✅ All 14 Live Smoke Probes Passed Successfully on $HOST_IP:${{ env.FRONTEND_PORT }}!"
 
-      # 8. Clean Up Ephemeral Develop Container on Master Deploy
-      - name: Tear Down Ephemeral Develop Container
-        if: github.ref_name == 'master'
-        run: |
-          echo "🧹 Tearing down old develop containers to free Synology NAS compute..."
-          docker rm -f quant-db-dev quant-gateway-dev quant-frontend-dev quant-cloudflared-dev 2>/dev/null || true
-          DEV_DIR="/volume2/homes/rachardv/git-repos/develop/quant-pwa"
-          if [ -d "$DEV_DIR" ]; then
-            cd "$DEV_DIR"
-            docker compose -p quant-pwa-dev down --remove-orphans 2>/dev/null || true
+          # Clean Up Ephemeral Develop Container on Master Deploy
+          if [ "${{ github.ref_name }}" == "master" ]; then
+            echo "🧹 Master deploy detected: Tearing down old develop containers to free Synology NAS compute..."
+            docker rm -f quant-db-dev quant-gateway-dev quant-frontend-dev quant-cloudflared-dev 2>/dev/null || true
+            DEV_DIR="/volume2/homes/rachardv/git-repos/develop/quant-pwa"
+            if [ -d "$DEV_DIR" ]; then
+              cd "$DEV_DIR"
+              docker compose -p quant-pwa-dev down --remove-orphans 2>/dev/null || true
+            fi
+            echo "✨ Ephemeral develop containers cleanly removed."
           fi
-          echo "✨ Develop containers cleanly removed."
+          
+          echo "🎉 Stage 4 Launch & Smoke Probing Complete for ${{ github.ref_name }}!"
