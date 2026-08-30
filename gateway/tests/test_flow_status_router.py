@@ -94,9 +94,11 @@ def test_trigger_flow_sync_unauthorized():
     assert response.status_code == 401
 
 
+@patch("app.tools.flow_tool.clear_flow_cache")
 @patch("common_lib.flow.runner.run_daily_incremental")
-def test_trigger_flow_sync_authorized(mock_run):
+def test_trigger_flow_sync_authorized(mock_run, mock_clear_cache):
     mock_run.return_value = 51
+    mock_clear_cache.return_value = 4
 
     token, _ = create_session_token()
     headers = {"Authorization": f"Bearer {token}"}
@@ -105,3 +107,4 @@ def test_trigger_flow_sync_authorized(mock_run):
     data = response.json()
     assert data["status"] == "ok"
     assert data["rows_upserted"] == 51
+    assert mock_clear_cache.call_count == 1

@@ -10,15 +10,19 @@ from app.tools.flow_tool import (
     _format_dollar_amount,
     format_pure_flow_table,
     _FLOW_MEMORY_CACHE,
+    _LAST_EXECUTED_FLOW_RESULT,
+    clear_flow_cache,
     CACHE_TTL_SECONDS
 )
 
 
 @pytest.fixture(autouse=True)
-def clear_flow_cache():
+def reset_flow_caches():
     _FLOW_MEMORY_CACHE.clear()
+    _LAST_EXECUTED_FLOW_RESULT.clear()
     yield
     _FLOW_MEMORY_CACHE.clear()
+    _LAST_EXECUTED_FLOW_RESULT.clear()
 
 
 def test_tool_registry_includes_flow_tool():
@@ -238,3 +242,16 @@ def test_agent_system_instruction_slash_commands():
     assert "/flow" in SYSTEM_INSTRUCTION_BASE
     assert "get_unusual_flow(date=" in SYSTEM_INSTRUCTION_BASE
     assert "Bloomberg Terminal Markdown Table" in SYSTEM_INSTRUCTION_BASE
+
+
+def test_clear_flow_cache():
+    from app.tools.flow_tool import _FLOW_MEMORY_CACHE, _LAST_EXECUTED_FLOW_RESULT, clear_flow_cache
+    clear_flow_cache()
+    _FLOW_MEMORY_CACHE["TEST_KEY_1"] = (time.time(), "test_table_1")
+    _LAST_EXECUTED_FLOW_RESULT["TEST_KEY_2"] = (time.time(), "test_table_2")
+
+    evicted = clear_flow_cache()
+    assert evicted == 2
+    assert len(_FLOW_MEMORY_CACHE) == 0
+    assert len(_LAST_EXECUTED_FLOW_RESULT) == 0
+

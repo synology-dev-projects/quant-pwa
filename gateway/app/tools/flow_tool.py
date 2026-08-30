@@ -8,8 +8,11 @@ import pandas as pd
 
 from app.tools.registry import register_tool, record_tool_metric
 
+import threading
+
 logger = logging.getLogger("quant.gateway.tools.flow")
 
+_FLOW_CACHE_LOCK = threading.Lock()
 _FLOW_MEMORY_CACHE: Dict[str, Tuple[float, str]] = {}
 _LAST_EXECUTED_FLOW_RESULT: Dict[str, Tuple[float, str]] = {}
 CACHE_TTL_SECONDS = 300
@@ -19,21 +22,35 @@ MAX_FLOW_CACHE_ENTRIES = 1024
 def get_last_flow_table() -> Optional[str]:
     """Returns the most recently executed flow table result across threads (within 30s window)."""
     now = time.time()
-    if _LAST_EXECUTED_FLOW_RESULT:
-        latest_key = max(_LAST_EXECUTED_FLOW_RESULT.keys(), key=lambda k: _LAST_EXECUTED_FLOW_RESULT[k][0])
-        ts, table = _LAST_EXECUTED_FLOW_RESULT[latest_key]
-        if now - ts < 30.0:
-            return table
+    with _FLOW_CACHE_LOCK:
+        if _LAST_EXECUTED_FLOW_RESULT:
+            latest_key = max(_LAST_EXECUTED_FLOW_RESULT.keys(), key=lambda k: _LAST_EXECUTED_FLOW_RESULT[k][0])
+            ts, table = _LAST_EXECUTED_FLOW_RESULT[latest_key]
+            if now - ts < 30.0:
+                return table
     return None
 
 
+def clear_flow_cache() -> int:
+    """
+    Thread-safely clears all in-memory options flow caches and returns count of evicted entries.
+    """
+    with _FLOW_CACHE_LOCK:
+        count = len(_FLOW_MEMORY_CACHE) + len(_LAST_EXECUTED_FLOW_RESULT)
+        _FLOW_MEMORY_CACHE.clear()
+        _LAST_EXECUTED_FLOW_RESULT.clear()
+    logger.info(f"Cleared {count} entries from Options Flow in-memory cache.")
+    return count
+
+
 def _store_flow_cache(cache_key: str, summary: str) -> None:
-    """Stores summary in memory cache with bounded capacity eviction."""
-    if len(_FLOW_MEMORY_CACHE) >= MAX_FLOW_CACHE_ENTRIES:
-        sorted_keys = sorted(_FLOW_MEMORY_CACHE.keys(), key=lambda k: _FLOW_MEMORY_CACHE[k][0])
-        for k in sorted_keys[:max(1, MAX_FLOW_CACHE_ENTRIES // 5)]:
-            _FLOW_MEMORY_CACHE.pop(k, None)
-    _FLOW_MEMORY_CACHE[cache_key] = (time.time(), summary)
+    """Stores summary in memory cache with bounded capacity eviction and thread synchronization."""
+    with _FLOW_CACHE_LOCK:
+        if len(_FLOW_MEMORY_CACHE) >= MAX_FLOW_CACHE_ENTRIES:
+            sorted_keys = sorted(_FLOW_MEMORY_CACHE.keys(), key=lambda k: _FLOW_MEMORY_CACHE[k][0])
+            for k in sorted_keys[:max(1, MAX_FLOW_CACHE_ENTRIES // 5)]:
+                _FLOW_MEMORY_CACHE.pop(k, None)
+        _FLOW_MEMORY_CACHE[cache_key] = (time.time(), summary)
 
 
 def _format_dollar_amount(val: Any) -> str:
