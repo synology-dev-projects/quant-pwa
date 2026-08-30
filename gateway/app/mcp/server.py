@@ -359,14 +359,24 @@ async def handle_rpc_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
-@router.get("/sse", summary="MCP Server-Sent Events Transport")
+@router.api_route("/sse", methods=["GET", "POST"], summary="MCP Server-Sent Events Transport")
 async def mcp_sse_endpoint(request: Request):
     """
     MCP 2024-11-05 SSE Transport Endpoint.
-    Initiates SSE stream and returns the endpoint URI for posting JSON-RPC messages.
+    Initiates SSE stream on GET and handles JSON-RPC on POST for dual-transport compatibility.
     """
+    if request.method == "POST":
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+        response_payload = await handle_rpc_request(body)
+        if response_payload:
+            return JSONResponse(content=response_payload, status_code=200)
+        return JSONResponse(content={"status": "ok"}, status_code=200)
+
     session_id = str(uuid.uuid4())
-    queue = asyncio.Queue()
+    queue = asyncio.Queue(maxsize=256)
     _active_sessions[session_id] = queue
 
     logger.info(f"New MCP SSE client connected. session_id={session_id}")
@@ -402,7 +412,7 @@ async def mcp_sse_endpoint(request: Request):
     )
 
 
-@router.post("/messages", summary="MCP JSON-RPC Message Transport")
+@router.api_route("/messages", methods=["GET", "POST"], summary="MCP JSON-RPC Message Transport")
 async def mcp_post_message(
     request: Request,
     session_id: Optional[str] = Query(None)
@@ -410,7 +420,19 @@ async def mcp_post_message(
     """
     Receives JSON-RPC messages from MCP clients.
     Dispatches request and pushes the response either to the client's SSE stream or directly as JSON.
+    Returns status metadata on GET requests.
     """
+    if request.method == "GET":
+        return JSONResponse(
+            content={
+                "service": "quant-ai-mcp",
+                "protocolVersion": PROTOCOL_VERSION,
+                "status": "active",
+                "message": "MCP JSON-RPC 2.0 message endpoint. Send POST requests with jsonrpc payload."
+            },
+            status_code=200
+        )
+
     try:
         body = await request.json()
     except Exception:
@@ -424,6 +446,36 @@ async def mcp_post_message(
         return JSONResponse(content={"status": "accepted"}, status_code=202)
 
     # If no active SSE session_id specified, return direct HTTP response
+    if response_payload:
+        return JSONResponse(content=response_payload, status_code=200)
+    return JSONResponse(content={"status": "ok"}, status_code=200)
+
+
+@router.api_route("", methods=["GET", "POST"], summary="MCP Root Discovery & JSON-RPC")
+@router.api_route("/", methods=["GET", "POST"], summary="MCP Root Discovery & JSON-RPC")
+async def mcp_root(request: Request):
+    """
+    MCP Server Discovery on GET and direct JSON-RPC handler on POST.
+    """
+    if request.method == "GET":
+        return JSONResponse(
+            content={
+                "name": "quant-ai-gateway",
+                "protocolVersion": PROTOCOL_VERSION,
+                "endpoints": {
+                    "sse": "/mcp/sse",
+                    "messages": "/mcp/messages"
+                }
+            },
+            status_code=200
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    response_payload = await handle_rpc_request(body)
     if response_payload:
         return JSONResponse(content=response_payload, status_code=200)
     return JSONResponse(content={"status": "ok"}, status_code=200)
