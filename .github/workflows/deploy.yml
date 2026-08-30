@@ -53,19 +53,11 @@ jobs:
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
           echo "DEPLOY_DIR=$TARGET_PATH" >> $GITHUB_ENV
 
-      # 3.5 Pre-Flight Test Gate
+      # 3.5 Pre-Flight Test Gate (Host Verification)
       - name: Run Pre-Flight Test Gate
         run: |
           echo "🧪 Running Pre-Flight Validation Suite..."
           (python3 scripts/bump_version.py --check || python scripts/bump_version.py --check)
-          
-          # Ensure Gateway test dependencies are available on the runner
-          echo "📦 Setting up Gateway Test Dependencies..."
-          python3 -m pip install -q --upgrade pip
-          python3 -m pip install -q -r gateway/requirements.txt pytest pytest-asyncio httpx pytz
-          
-          export PYTHONPATH="$PWD/gateway:$PWD/../common-lib:$PYTHONPATH"
-          python3 -m pytest gateway/tests/ -v
 
           echo "🎨 Running Frontend DOM Test Suites..."
           node frontend/tests/test_settings_flow_modal.js
@@ -84,17 +76,24 @@ jobs:
           cp -r gateway "$TARGET_PATH/"
           cp -r scripts "$TARGET_PATH/"
           cp docker-compose.yml "$TARGET_PATH/"
-          cp README.md "$TARGET_PATH/"
+          cp version.json "$TARGET_PATH/"
+          [ -f .pre-commit-config.yaml ] && cp .pre-commit-config.yaml "$TARGET_PATH/"
+          
+          echo "🔒 Setting permissions for user 1026 (rachardv)..."
+          sudo chown -R 1026:100 "$TARGET_PATH"
+          chmod -R 775 "$TARGET_PATH"
 
-      # 5. Inject Runtime .env Secrets
+      # 5. Generate Runtime .env Secrets
       - name: Generate Runtime .env Secrets
         run: |
           ENV_FILE="${{ env.DEPLOY_DIR }}/.env"
-          echo "🔐 Generating secure .env file at $ENV_FILE..."
+          echo "🔒 Generating secure .env file at $ENV_FILE..."
           
-          echo "CONTAINER_PREFIX=${{ env.CONTAINER_PREFIX }}" > "$ENV_FILE"
+          echo "CONTAINER_PREFIX=${{ env.CONTAINER_PREFIX }}" >> "$ENV_FILE"
+          echo "GATEWAY_PORT=8000" >> "$ENV_FILE"
           echo "FRONTEND_PORT=${{ env.FRONTEND_PORT }}" >> "$ENV_FILE"
           echo "POSTGRES_PORT=${{ env.POSTGRES_PORT }}" >> "$ENV_FILE"
+          echo "COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }}" >> "$ENV_FILE"
           echo "APP_PASSCODE=${{ secrets.APP_PASSCODE }}" >> "$ENV_FILE"
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> "$ENV_FILE"
           echo "DEFAULT_GEMINI_MODEL=gemini-3.5-flash-lite" >> "$ENV_FILE"
@@ -102,6 +101,11 @@ jobs:
           echo "GEXDEX_API_KEY=${{ secrets.GEXDEX_API_KEY }}" >> "$ENV_FILE"
           echo "PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}" >> "$ENV_FILE"
           echo "CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" >> "$ENV_FILE"
+          echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> "$ENV_FILE"
+          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> "$ENV_FILE"
+          echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> "$ENV_FILE"
+          echo "DATABASE_URL=postgresql://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@quant-db-${{ env.CONTAINER_PREFIX }}:5432/${{ secrets.POSTGRES_DB }}" >> "$ENV_FILE"
+          echo "ENVIRONMENT=${{ env.CONTAINER_PREFIX == 'prod' && 'production' || 'staging' }}" >> "$ENV_FILE"
           if [ -d "/volume2/homes/rachardv/git-repos/${{ env.BRANCH_NAME }}/common-lib/common_lib" ]; then
             echo "COMMON_LIB_PATH=/volume2/homes/rachardv/git-repos/${{ env.BRANCH_NAME }}/common-lib/common_lib" >> "$ENV_FILE"
           else
@@ -110,12 +114,13 @@ jobs:
           echo "COMMON_CONFIG_PATH=/volume2/homes/rachardv/git-repos/master/common_config" >> "$ENV_FILE"
           
           chmod 600 "$ENV_FILE"
+          sudo chown 1026:100 "$ENV_FILE"
 
-      # 6. Ensure Shared Docker Network Exists
+      # 6. Ensure External Docker Network Exists
       - name: Ensure Shared Docker Network Exists
         run: |
-          echo "🌐 Ensuring quant-system-network exists..."
-          docker network create quant-system-network 2>/dev/null || true
+          docker network inspect quant-system-network >/dev/null 2>&1 || \
+          docker network create quant-system-network
 
       # 7. Build & Deploy Docker Stack
       - name: Deploy Docker Stack
@@ -127,6 +132,11 @@ jobs:
           echo "🐳 Launching Docker Compose stack (${{ env.COMPOSE_PROJECT_NAME }})..."
           docker compose down --remove-orphans || true
           docker compose build
+          
+          echo "🧪 Running Containerized Gateway Pytest Gate..."
+          docker compose run --rm gateway pytest tests/ -v
+          
+          echo "🚀 Starting containers..."
           docker compose ${{ env.COMPOSE_PROFILE_CMD }} up -d --force-recreate
           sleep 5
           
