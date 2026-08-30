@@ -94,7 +94,7 @@ def test_trigger_flow_sync_unauthorized():
     assert response.status_code == 401
 
 
-@patch("app.flow_pipeline.runner.run_daily_incremental")
+@patch("common_lib.flow.runner.run_daily_incremental")
 def test_trigger_flow_sync_authorized(mock_run):
     mock_run.return_value = 51
 
