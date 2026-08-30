@@ -157,32 +157,42 @@ jobs:
           docker compose ${{ env.COMPOSE_PROFILE_CMD }} up -d --force-recreate
           sleep 5
           
-          echo "📡 Verifying Frontend boot on port ${{ env.FRONTEND_PORT }}..."
+          echo "📡 Verifying Gateway & Frontend boot on port ${{ env.FRONTEND_PORT }}..."
           HOST_IP=""
-          for i in {1..12}; do
-            for candidate in "127.0.0.1" "172.17.0.1" "192.168.1.68"; do
-              if curl -s --connect-timeout 2 "http://${candidate}:${{ env.FRONTEND_PORT }}/" >/dev/null 2>&1; then
+          for i in {1..15}; do
+            for candidate in "192.168.1.68" "172.17.0.1" "127.0.0.1"; do
+              if curl -s --connect-timeout 2 "http://${candidate}:${{ env.FRONTEND_PORT }}/api/health" | grep -q '"status":"ok"'; then
                 HOST_IP="$candidate"
+                echo "✅ Gateway is fully responsive at http://${HOST_IP}:${{ env.FRONTEND_PORT }}/api/health!"
                 break 2
               fi
             done
-            echo "⏳ Waiting for Frontend to respond on port ${{ env.FRONTEND_PORT }} (attempt $i/12)..."
+            echo "⏳ Waiting for Gateway to initialize on port ${{ env.FRONTEND_PORT }} (attempt $i/15)..."
             sleep 2
           done
           
           if [ -z "$HOST_IP" ]; then
-            echo "❌ Frontend failed to respond on port ${{ env.FRONTEND_PORT }}."
+            echo "❌ Gateway failed to respond with status:ok on port ${{ env.FRONTEND_PORT }}."
+            docker logs quant-gateway-${{ env.CONTAINER_PREFIX }} --tail 50
             docker logs quant-frontend-${{ env.CONTAINER_PREFIX }} --tail 30
             exit 1
           fi
 
-          echo "✅ Deployment Successful & In-Situ Smoke Check Passed on $HOST_IP:${{ env.FRONTEND_PORT }} for ${{ github.ref_name }}!"
+          echo "HOST_IP=$HOST_IP" >> $GITHUB_ENV
+          echo "✅ Deployment Successful & Gateway Ready on $HOST_IP:${{ env.FRONTEND_PORT }} for ${{ github.ref_name }}!"
 
       # 7.5 Post-Deployment Smoke Test
       - name: Run Post-Deployment Smoke Test
         run: |
           echo "🔍 Running Post-Deployment Endpoint Smoke Tests..."
-          (python3 scripts/smoke_test.py --host 127.0.0.1 --port ${{ env.FRONTEND_PORT }} || python3 scripts/smoke_test.py --host 192.168.1.68 --port ${{ env.FRONTEND_PORT }} || python scripts/smoke_test.py --host 192.168.1.68 --port ${{ env.FRONTEND_PORT }})
+          PY_BIN="python3"
+          command -v python3 >/dev/null 2>&1 || PY_BIN="python"
+          
+          TARGET_HOST="${{ env.HOST_IP }}"
+          [ -z "$TARGET_HOST" ] && TARGET_HOST="192.168.1.68"
+          
+          echo "🧪 Executing smoke probes against http://$TARGET_HOST:${{ env.FRONTEND_PORT }}..."
+          "$PY_BIN" scripts/smoke_test.py --host "$TARGET_HOST" --port ${{ env.FRONTEND_PORT }}
 
       # 8. Clean Up Ephemeral Develop Container on Master Deploy
       - name: Tear Down Ephemeral Develop Container
