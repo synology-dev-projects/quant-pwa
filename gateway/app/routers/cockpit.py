@@ -1,6 +1,7 @@
 import json
 import logging
 import asyncio
+import math
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 import pandas as pd
@@ -14,6 +15,21 @@ from app.engine.service import gexdex_service, get_strike_distribution
 logger = logging.getLogger("quant.gateway.cockpit")
 
 router = APIRouter(tags=["Cockpit"])
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively replaces NaN, Inf, and -Inf with None / 0.0 to ensure 100% JSON compliance."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    elif isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_sanitize_for_json(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(_sanitize_for_json(item) for item in obj)
+    return obj
 
 
 class CockpitRequest(BaseModel):
@@ -112,14 +128,16 @@ def _format_flow_records(flow_df: Optional[pd.DataFrame]) -> List[Dict[str, Any]
     if flow_df is None or not isinstance(flow_df, pd.DataFrame) or flow_df.empty:
         return []
 
-    df_clean = flow_df.where(pd.notna(flow_df), None).copy()
+    # Replace all NaN, Inf, -Inf with None safely
+    df_clean = flow_df.astype(object).where(pd.notna(flow_df), None).copy()
     for col in df_clean.columns:
-        if pd.api.types.is_datetime64_any_dtype(df_clean[col]):
-            df_clean[col] = df_clean[col].dt.strftime("%Y-%m-%d %H:%M:%S")
+        if pd.api.types.is_datetime64_any_dtype(flow_df[col]):
+            df_clean[col] = flow_df[col].dt.strftime("%Y-%m-%d %H:%M:%S")
         elif col in ("TRADE_DATE", "EXPIRATION_DATE", "CREATED_AT"):
             df_clean[col] = df_clean[col].astype(str)
 
-    return df_clean.to_dict(orient="records")
+    records = df_clean.to_dict(orient="records")
+    return _sanitize_for_json(records)
 
 
 async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> Dict[str, Any]:
@@ -158,7 +176,7 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
     metrics = _calculate_cockpit_metrics(gex_data, flow_df)
     flow_records = _format_flow_records(flow_df)
 
-    return {
+    raw_payload = {
         "ticker": clean_ticker,
         "status": "ok",
         "gex": gex_data,
@@ -168,6 +186,7 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
         },
         "metrics": metrics
     }
+    return _sanitize_for_json(raw_payload)
 
 
 @router.get("/data", summary="Get Ticker Cockpit Data (GET)")
