@@ -19,6 +19,7 @@ router = APIRouter(tags=["Cockpit"])
 class CockpitRequest(BaseModel):
     ticker: str = Field(..., description="Stock ticker symbol (e.g. NVDA, SPY, AAPL)")
     payload: Optional[Dict[str, Any]] = Field(None, description="Optional pre-computed Cockpit payload to prevent duplicate recalculation")
+    force_refresh: Optional[bool] = Field(False, description="Bypass in-memory cache and force fresh data fetch")
 
 
 def _fetch_postgres_flow_sync(symbol: str, lookback_days: int = 30, limit: int = 500) -> pd.DataFrame:
@@ -121,7 +122,7 @@ def _format_flow_records(flow_df: Optional[pd.DataFrame]) -> List[Dict[str, Any]
     return df_clean.to_dict(orient="records")
 
 
-async def get_cockpit_full_payload(ticker: str) -> Dict[str, Any]:
+async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> Dict[str, Any]:
     """Concurrently fetches GEX/DEX data and Postgres 30-Day Flow data, returning assembled cockpit payload."""
     clean_ticker = str(ticker).strip().upper().replace("$", "")
     if not clean_ticker:
@@ -131,7 +132,7 @@ async def get_cockpit_full_payload(ticker: str) -> Dict[str, Any]:
         )
 
     # Concurrently execute full strike distribution calculation and DB options flow query
-    gex_task = asyncio.create_task(asyncio.to_thread(get_strike_distribution, clean_ticker))
+    gex_task = asyncio.create_task(asyncio.to_thread(get_strike_distribution, clean_ticker, 50, 25, force_refresh))
     flow_task = asyncio.create_task(asyncio.to_thread(_fetch_postgres_flow_sync, clean_ticker, 30, 500))
 
     gex_result, flow_result = await asyncio.gather(gex_task, flow_task, return_exceptions=True)
@@ -170,7 +171,7 @@ async def get_cockpit_full_payload(ticker: str) -> Dict[str, Any]:
 
 
 @router.get("/data", summary="Get Ticker Cockpit Data (GET)")
-async def get_cockpit_data_get(ticker: str):
+async def get_cockpit_data_get(ticker: str, force_refresh: bool = False):
     """Retrieves complete multi-source Ticker Cockpit data via GET."""
     clean_ticker = (ticker or "").strip().upper().replace("$", "")
     if not clean_ticker:
@@ -178,7 +179,7 @@ async def get_cockpit_data_get(ticker: str):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ticker symbol cannot be empty."
         )
-    payload = await get_cockpit_full_payload(clean_ticker)
+    payload = await get_cockpit_full_payload(clean_ticker, force_refresh=force_refresh)
     return JSONResponse(
         content=payload,
         headers={
@@ -198,7 +199,7 @@ async def get_cockpit_data_post(req: CockpitRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ticker symbol cannot be empty."
         )
-    payload = await get_cockpit_full_payload(clean_ticker)
+    payload = await get_cockpit_full_payload(clean_ticker, force_refresh=bool(req.force_refresh))
     return JSONResponse(
         content=payload,
         headers={
