@@ -579,6 +579,48 @@ const MOCK_FEEDS = {
     }
   },
 
+  POWL: {
+    ticker: 'POWL',
+    status: 'ok',
+    gex: {
+      ticker: 'POWL',
+      spot_price: 179.73,
+      zero_gex_level: 172.80,
+      call_wall: 190.00,
+      put_wall: 180.00,
+      call_put_ratio: 2.10,
+      gamma_regime: 'Positive (Long Gamma / Volatility Dampening)',
+      expirations: ['2026-09-18', '2026-10-16'],
+      strikes: [
+        { strike: 160, call_gex: 1500000, put_gex: 8500000, call_dex: 1200000, put_dex: 6800000 },
+        { strike: 170, call_gex: 4500000, put_gex: 9500000, call_dex: 3600000, put_dex: 7600000 },
+        { strike: 180, call_gex: 18500000, put_gex: 12500000, call_dex: 14800000, put_dex: 10000000 },
+        { strike: 190, call_gex: 22000000, put_gex: 2100000, call_dex: 17600000, put_dex: 1680000 }
+      ]
+    },
+    flow: {
+      records: [
+        { expiration: '2026-09-18', symbol: 'POWL', order_type: 'BUY CALL', strike: 180, spot: 179.73, otm_pct: 0.15, premium: 12500000, size: 8000, open_interest: 15000, is_unusual_oi: true, tag: '[WHALE]' }
+      ],
+      total_count: 1
+    },
+    metrics: {
+      spot_price: 179.73,
+      zero_gamma_flip: 172.80,
+      call_wall: 190.00,
+      put_wall: 180.00,
+      confluence_bias: 'BULLISH CONFLUENCE',
+      gamma_regime: 'Positive (Long Gamma / Volatility Dampening)',
+      flow_ratio: '100% CALL FLOW',
+      call_pct: 100.0,
+      put_pct: 0.0,
+      call_flow: 25300000,
+      put_flow: 0,
+      whale_count: 3,
+      unusual_oi_count: 0
+    }
+  },
+
   EMPTY_TICKER: {
     ticker: 'XYZ',
     status: 'ok',
@@ -906,6 +948,20 @@ await new Promise(r => setImmediate(r));
 assert(heroBadge.textContent === 'TSLA', `Clicking TSLA suggestion chip loaded TSLA (got ${heroBadge.textContent})`);
 const updatedRecents = cockpitView.getRecentSearches();
 assert(updatedRecents[0] === 'TSLA' && updatedRecents.includes('NVDA'), `Recents updated with TSLA as most recent: ${JSON.stringify(updatedRecents)}`);
+
+// ----------------------------------------------------------------------------
+// TEST 9: POWL Loading & Force Refresh Retry Bypass
+// ----------------------------------------------------------------------------
+console.log('\n--- TEST 9: POWL Loading & Force Refresh Retry ---');
+await cockpitView.searchTicker('POWL', true);
+
+assert(heroBadge.textContent === 'POWL', `Hero badge displays searched ticker POWL (got ${heroBadge.textContent})`);
+assert(klSpot.textContent === '$179.73', `POWL Spot price correctly rendered: ${klSpot.textContent}`);
+assert(klCall.textContent === '$190.00', `POWL Call wall correctly rendered: ${klCall.textContent}`);
+assert(klPut.textContent === '$180.00', `POWL Put wall correctly rendered: ${klPut.textContent}`);
+assert(cockpitView.quantChartInstance !== null, 'QuantChart instance successfully mounted for POWL');
+assert(cockpitView.quantChartInstance.data.strikes.length === 4, `POWL has 4 strikes rendered in QuantChart (got ${cockpitView.quantChartInstance.data.strikes.length})`);
+assert(cockpitView.quantChartInstance.data.spot_price === 179.73, 'POWL QuantChart receives $179.73 spot price');
 
 // ============================================================================
 // Summary & Exit

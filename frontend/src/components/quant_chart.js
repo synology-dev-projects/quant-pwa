@@ -427,20 +427,43 @@ export class QuantChart {
     }
   }
 
-  _drawRefLines(ctx, lefts, rights, paddingTop, chartH) {
+  getYForStrike(strikeVal, paddingTop, chartH) {
+    if (!this.strikesList || this.strikesList.length === 0 || typeof strikeVal !== 'number' || isNaN(strikeVal)) {
+      return null;
+    }
     const n = this.strikesList.length;
-    if (n === 0) return;
     const minStrike = this.strikesList[0].strike;
     const maxStrike = this.strikesList[n - 1].strike;
 
-    const getYForStrike = (strikeVal) => {
-      if (strikeVal < minStrike || strikeVal > maxStrike) return null;
-      const ratio = (strikeVal - minStrike) / (maxStrike - minStrike);
-      return paddingTop + (1 - ratio) * chartH;
-    };
+    if (strikeVal < minStrike || strikeVal > maxStrike) return null;
+
+    const rowStep = chartH / n;
+
+    // Piecewise strike search to handle non-uniform strike spacing accurately
+    let k = 0;
+    while (k < n - 1 && this.strikesList[k + 1].strike <= strikeVal) {
+      k++;
+    }
+
+    let fractionalIdx = k;
+    if (k < n - 1) {
+      const s0 = this.strikesList[k].strike;
+      const s1 = this.strikesList[k + 1].strike;
+      const span = s1 - s0;
+      if (span > 0) {
+        fractionalIdx = k + (strikeVal - s0) / span;
+      }
+    }
+
+    return paddingTop + (n - 1 - fractionalIdx) * rowStep + rowStep / 2;
+  }
+
+  _drawRefLines(ctx, lefts, rights, paddingTop, chartH) {
+    const n = this.strikesList ? this.strikesList.length : 0;
+    if (n === 0) return;
 
     const drawRefLine = (strikeVal, color, label) => {
-      const y = getYForStrike(strikeVal);
+      const y = this.getYForStrike(strikeVal, paddingTop, chartH);
       if (y === null) return;
 
       ctx.save();

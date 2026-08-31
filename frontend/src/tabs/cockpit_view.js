@@ -347,7 +347,7 @@ export class CockpitView {
     this.renderFlowTable();
   }
 
-  async searchTicker(ticker) {
+  async searchTicker(ticker, forceRefresh = false) {
     const cleanTicker = String(ticker || '').trim().toUpperCase();
     if (!cleanTicker) return;
 
@@ -360,9 +360,9 @@ export class CockpitView {
     }
     this.activeAbortController = new AbortController();
 
-    // Instant 0ms memory switch if valid cached data exists
+    // Instant 0ms memory switch if valid cached data exists and forceRefresh is false
     const cached = this.dataCache.get(cleanTicker);
-    if (cached && cached.gex && Array.isArray(cached.gex.strikes) && cached.gex.strikes.length > 0 && cached.gex.spot_price > 0) {
+    if (!forceRefresh && cached && cached.gex && Array.isArray(cached.gex.strikes) && cached.gex.strikes.length > 0 && cached.gex.spot_price > 0) {
       this.cockpitData = cached;
       this.renderDataPanels(cached);
       
@@ -384,13 +384,16 @@ export class CockpitView {
         `;
       }
     } else {
+      if (forceRefresh) {
+        this.dataCache.delete(cleanTicker);
+      }
       // 1. Reset UI to loading states
       this.setLoadingState(cleanTicker);
     }
 
     // 2. Sequential Single-Payload Pipeline:
     // First, retrieve the calculated GEX + Flow data (1 server calculation)
-    const data = await this.loadCockpitData(cleanTicker);
+    const data = await this.loadCockpitData(cleanTicker, forceRefresh);
 
     // Second, stream the quantitative thesis passing the pre-computed payload (0ms backend calculation)
     if (this.currentTicker === cleanTicker) {
@@ -455,15 +458,15 @@ export class CockpitView {
     }
   }
 
-  async loadCockpitData(ticker) {
+  async loadCockpitData(ticker, forceRefresh = false) {
     const gatewayBase = AppState.getGatewayUrl() || '';
     let data = null;
     try {
-      const res = await fetchWithAuth(`${gatewayBase}/api/cockpit/data?_t=${Date.now()}`, {
+      const res = await fetchWithAuth(`${gatewayBase}/api/cockpit/data?force_refresh=${forceRefresh}&_t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ ticker }),
+        body: JSON.stringify({ ticker, force_refresh: forceRefresh }),
         signal: this.activeAbortController?.signal
       });
 
@@ -719,7 +722,7 @@ export class CockpitView {
       const retryBtn = chartSlot.querySelector('#cockpitChartRetryBtn');
       if (retryBtn) {
         retryBtn.addEventListener('click', () => {
-          this.searchTicker(ticker);
+          this.searchTicker(ticker, true);
         });
       }
       return;
