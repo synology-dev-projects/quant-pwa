@@ -28,6 +28,7 @@ from app.mcp import mcp_router, mcp_client_manager, mcp_sse_endpoint, mcp_post_m
 from app.routers.cockpit import router as cockpit_router
 from app.routers.flow_status import router as flow_status_router
 from app.routers.quant_levels_status import router as quant_levels_status_router
+from app.routers.scanner import router as scanner_router
 from app.tools.gexdex_tool import run_cache_warmer_loop
 from app.engine.service import gexdex_service
 
@@ -130,6 +131,10 @@ app.include_router(
     quant_levels_status_router,
     prefix="/api/quant-levels"
 )
+
+# Mount Market Confluence Scanner Router
+app.include_router(scanner_router)
+
 
 
 def verify_app_passcode(authorization: Optional[str] = Header(None)) -> str:

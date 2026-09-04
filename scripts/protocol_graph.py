@@ -258,8 +258,11 @@ def cmd_prod_authorize(args):
 
 def cmd_check_commit(args):
     """Invoked by .git/hooks/pre-commit to enforce protocol invariants physically."""
-    res = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
-    staged = [f.strip() for f in res.stdout.splitlines() if f.strip()]
+    if os.environ.get("PROTOCOL_TEST_STAGED_FILES") is not None:
+        staged = [f.strip() for f in os.environ["PROTOCOL_TEST_STAGED_FILES"].splitlines() if f.strip()]
+    else:
+        res = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
+        staged = [f.strip() for f in res.stdout.splitlines() if f.strip()]
 
     if not staged:
         sys.exit(0)

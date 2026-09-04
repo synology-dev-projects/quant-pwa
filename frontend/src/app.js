@@ -2,6 +2,7 @@ import { AppState, fetchWithAuth } from './state.js?v=30';
 import { TabManager } from './tabs/tab_manager.js?v=30';
 import { ChatView } from './tabs/chat_view.js?v=30';
 import { CockpitView } from './tabs/cockpit_view.js?v=30';
+import { RadarView } from './tabs/radar_view.js?v=30';
 import { PromptInput } from './components/prompt_input.js?v=30';
 import { Lightbox } from './components/lightbox.js?v=30';
 import { LockScreen } from './components/lock_screen.js?v=30';
@@ -19,6 +20,7 @@ class App {
   constructor() {
     this.chatView = new ChatView();
     this.cockpitView = new CockpitView();
+    this.radarView = new RadarView();
     this.lightbox = new Lightbox();
     window.quantLightbox = this.lightbox;
 
@@ -81,6 +83,9 @@ class App {
     if (AppState.getActiveTab() === 'cockpit' && this.cockpitView && this.cockpitView.currentTicker) {
       this.cockpitView.searchTicker(this.cockpitView.currentTicker);
     }
+    if (AppState.getActiveTab() === 'radar' && this.radarView) {
+      this.radarView.loadScanData();
+    }
 
     // Load initial chat history
     const history = AppState.getHistory();
@@ -95,24 +100,32 @@ class App {
     this.tabManager = new TabManager(tabBar, tabContent, (tabId) => {
       AppState.setActiveTab(tabId);
       if (promptContainer) {
-        promptContainer.style.display = tabId === 'cockpit' ? 'none' : 'block';
+        promptContainer.style.display = (tabId === 'cockpit' || tabId === 'radar') ? 'none' : 'block';
       }
     });
 
-    // 1. Chat Stream Tab
-    this.tabManager.registerTab({
-      id: 'chat',
-      title: 'Chat Stream',
-      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
-      render: (container) => this.chatView.render(container)
-    });
-
-    // 2. Ticker Cockpit Tab
+    // 1. Ticker Cockpit Tab
     this.tabManager.registerTab({
       id: 'cockpit',
       title: 'Cockpit',
       iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>`,
       render: (container) => this.cockpitView.render(container)
+    });
+
+    // 2. Confluence Radar Tab
+    this.tabManager.registerTab({
+      id: 'radar',
+      title: 'Confluence Radar',
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path><path d="M12 6a6 6 0 0 1 6 6"></path><circle cx="12" cy="12" r="2"></circle></svg>`,
+      render: (container) => this.radarView.render(container)
+    });
+
+    // 3. Chat Stream Tab
+    this.tabManager.registerTab({
+      id: 'chat',
+      title: 'Chat Stream',
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
+      render: (container) => this.chatView.render(container)
     });
 
     // Activate initial tab from localStorage

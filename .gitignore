@@ -1,4 +1,4 @@
-﻿# Virtual Environments
+# Virtual Environments
 .venv/
 venv/
 ENV/
@@ -19,3 +19,4 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+.protocol_state.json
