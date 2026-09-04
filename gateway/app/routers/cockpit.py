@@ -252,8 +252,8 @@ def _build_synthesis_prompt(ticker: str, payload: Dict[str, Any]) -> str:
 
     prints_block = "\n".join(top_prints) if top_prints else "  • No major institutional whale prints recorded."
 
-    return f"""You are Quant AI's institutional Options Microstructure & Unusual Flow Market Strategist.
-Analyze the following real-time options microstructure and institutional order flow data for {ticker}:
+    return f"""You are Quant AI's Quantitative Market Microstructure Analyst.
+Provide an ultra-short, highly digestible analysis of the following options microstructure and flow data for {ticker}:
 
 [OPTIONS MICROSTRUCTURE (GEX/DEX)]
 • Spot Price: ${metrics.get('spot_price', 0.0):.2f}
@@ -275,19 +275,14 @@ Analyze the following real-time options microstructure and institutional order f
 [HIGH-CONVICTION PRINTS]
 {prints_block}
 
-Demand format: Deliver the institutional 3-Tier Tactical Playbook in crisp GitHub Markdown:
+STRICT CONSTRAINTS:
+1. NEVER GIVE TRADE ADVICE: Absolutely NEVER recommend trades, buy/sell actions, entry/exit targets, or financial advice. Provide purely objective quantitative data analysis.
+2. ADHD-FRIENDLY BREVITY: Output EXACTLY 3 short, punchy bullet points under the heading below. Maximum 1-2 concise sentences per bullet. Bold key numbers and levels. Zero fluff.
 
-### 1. Core Confluence Thesis
-Synthesize the interaction between the Gamma Regime ({metrics.get('gamma_regime')}) and 30-day directional flow sentiment ({metrics.get('confluence_bias')}). Explain market maker inventory obligations (long vs short gamma) and whether volatility is dampened or amplified.
-
-### 2. Microstructure Alignment
-Evaluate institutional order flow (whale sweeps and unusual OI) relative to structural volatility landmarks (Call Wall at ${metrics.get('call_wall')}, Put Wall at ${metrics.get('put_wall')}, and Zero Gamma Flip at ${metrics.get('zero_gamma_flip')}). Highlight pin risk, squeeze potential, or cascade vulnerability.
-
-### 3. Tactical Action Playbook
-Provide concrete institutional execution parameters:
-- **Key Triggers & Levels**: Specific breakout and breakdown trigger prices.
-- **Pin vs Breakout Scenarios**: Target price zones if pinned vs expansion targets if outer walls breach.
-- **Trade Invalidation**: Exact price level where this confluence thesis is invalidated.
+### Microstructure Snapshot
+• **Regime & Volatility**: [1-2 punchy sentences on Gamma Regime ({metrics.get('gamma_regime')}), Spot vs Zero Flip (${metrics.get('zero_gamma_flip')}), and whether volatility is dampened or amplified]
+• **Key Structural Walls**: [1 sentence on Call Wall (${metrics.get('call_wall')}) overhead supply and Put Wall (${metrics.get('put_wall')}) downside cushion]
+• **Institutional Flow**: [1 sentence on 30-day Call/Put split ({metrics.get('call_pct')}%), whale count ({metrics.get('whale_count')}), and flow sentiment ({metrics.get('confluence_bias')})]
 """
 
 
@@ -304,22 +299,12 @@ def _generate_deterministic_synthesis(ticker: str, payload: Dict[str, Any]) -> s
     put_pct = metrics.get("put_pct", 0.0)
     vol = metrics.get("total_30d_flow_volume", 0.0)
     whales = metrics.get("whale_count", 0)
-    unusual_oi = metrics.get("unusual_oi_count", 0)
 
-    return f"""### 1. Core Confluence Thesis
-- **Gamma Regime**: {regime}. Spot price (${spot:.2f}) trades relative to the Zero Gamma Flip level at ${zg:.2f}.
-- **Flow Momentum**: 30-Day institutional volume stands at ${vol:,.2f} with {call_pct:.1f}% Call flow vs {put_pct:.1f}% Put flow, establishing a **{bias}** setup.
-- **Dealer Inventory**: Market maker hedging profiles indicate structured positioning across dominant expirations.
-
-### 2. Microstructure Alignment
-- **Call Wall Resistance**: ${cw:.2f} marks upper dealer gamma supply and key upside resistance.
-- **Put Wall Support**: ${pw:.2f} provides downside dealer gamma insulation.
-- **Institutional Conviction**: {whales} whale prints (> $1M) and {unusual_oi} unusual OI flags align with current volatility corridors.
-
-### 3. Tactical Action Playbook
-- **Key Triggers & Levels**: Upward breakout trigger above ${cw:.2f}; downside volatility trigger below ${zg:.2f} targeting ${pw:.2f}.
-- **Pin vs Breakout Scenarios**: High probability of range pinning between ${pw:.2f} and ${cw:.2f} into dominant expiration.
-- **Trade Invalidation**: Thesis invalidates on a sustained daily candle close outside the ${pw:.2f} – ${cw:.2f} range.
+    vol_state = "dampened" if spot >= zg else "amplified"
+    return f"""### Microstructure Snapshot
+• **Regime & Volatility**: **{regime}**. Spot (${spot:.2f}) trades {'above' if spot >= zg else 'below'} Zero Flip (${zg:.2f}), indicating **{vol_state}** realized volatility.
+• **Key Structural Walls**: **Call Wall at ${cw:.2f}** marks upper dealer gamma supply; **Put Wall at ${pw:.2f}** provides structural downside cushion.
+• **Institutional Flow**: **{call_pct:.1f}% Call vs {put_pct:.1f}% Put** across ${vol:,.2f} total volume with **{whales} whale prints**, establishing a **{bias}** profile.
 """
 
 

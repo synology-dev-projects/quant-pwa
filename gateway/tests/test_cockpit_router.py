@@ -267,20 +267,23 @@ def test_cockpit_synthesis_stream_deterministic_fallback(auth_header, mock_gex_d
             for line in body.splitlines()
             if line.startswith("data: {") and "content" in json.loads(line[6:])
         )
-        assert "Core Confluence Thesis" in assembled_text
-        assert "Microstructure Alignment" in assembled_text
-        assert "Tactical Action Playbook" in assembled_text
+        assert "Microstructure Snapshot" in assembled_text
+        assert "Regime & Volatility" in assembled_text
+        assert "Key Structural Walls" in assembled_text
+        assert "Institutional Flow" in assembled_text
+        assert "Tactical Action Playbook" not in assembled_text
+        assert "Trade Invalidation" not in assembled_text
 
 
 def test_cockpit_synthesis_stream_with_gemini(auth_header, mock_gex_data, mock_flow_df, monkeypatch):
     monkeypatch.setattr(settings, "GEMINI_API_KEY", "fake-gemini-key")
 
     mock_chunk1 = MagicMock()
-    mock_chunk1.text = "### 1. Core Confluence Thesis\nNVDA displays strong bullish gamma confluence. "
+    mock_chunk1.text = "### Microstructure Snapshot\n• **Regime & Volatility**: Positive Gamma dampened. "
     mock_chunk2 = MagicMock()
-    mock_chunk2.text = "### 2. Microstructure Alignment\nWhale sweeps align with $140 Call Wall. "
+    mock_chunk2.text = "• **Key Structural Walls**: $140 Call Wall ceiling, $120 Put Wall floor. "
     mock_chunk3 = MagicMock()
-    mock_chunk3.text = "### 3. Tactical Action Playbook\nBreakout trigger above $140.00."
+    mock_chunk3.text = "• **Institutional Flow**: 92% Calls with 1 whale sweep."
 
     async def fake_async_stream(*args, **kwargs):
         for chk in [mock_chunk1, mock_chunk2, mock_chunk3]:
@@ -312,9 +315,32 @@ def test_cockpit_synthesis_stream_with_gemini(auth_header, mock_gex_data, mock_f
             for line in body.splitlines()
             if line.startswith("data: {") and "content" in json.loads(line[6:])
         )
-        assert "Core Confluence Thesis" in assembled_text
-        assert "Microstructure Alignment" in assembled_text
-        assert "Tactical Action Playbook" in assembled_text
+        assert "Microstructure Snapshot" in assembled_text
+        assert "Regime & Volatility" in assembled_text
+        assert "Key Structural Walls" in assembled_text
+        assert "Institutional Flow" in assembled_text
+        assert "Tactical Action Playbook" not in assembled_text
+
+
+def test_synthesis_prompt_zero_trade_advice_and_adhd_brevity():
+    fake_payload = {
+        "metrics": {
+            "spot_price": 100.0,
+            "zero_gamma_flip": 98.0,
+            "call_wall": 105.0,
+            "put_wall": 95.0,
+            "gamma_regime": "Positive",
+            "confluence_bias": "BULLISH CONFLUENCE",
+            "call_pct": 75.0,
+            "whale_count": 2
+        },
+        "flow": {"records": []}
+    }
+    prompt = _build_synthesis_prompt("AAPL", fake_payload)
+    assert "NEVER GIVE TRADE ADVICE" in prompt
+    assert "ADHD-FRIENDLY BREVITY" in prompt
+    assert "### Microstructure Snapshot" in prompt
+    assert "Tactical Action Playbook" not in prompt
 
 
 def test_stream_cockpit_synthesis_with_precomputed_payload(auth_header, mock_gex_data, mock_flow_df):

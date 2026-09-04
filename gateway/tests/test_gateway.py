@@ -287,12 +287,14 @@ from google.genai import types
 
 
 def test_system_instruction_compressed():
-    """Verifies that SYSTEM_INSTRUCTION_BASE is compressed, token-dense, and preserves NO_IMAGE_SYNTAX."""
-    assert "You are Quant AI, an institutional Options & Quantitative Market Strategist." in SYSTEM_INSTRUCTION_BASE
+    """Verifies that SYSTEM_INSTRUCTION_BASE is compressed, token-dense, and preserves zero trade advice and ADHD brevity directives."""
+    assert "You are Quant AI, an institutional Quantitative Options & Market Microstructure Analyst." in SYSTEM_INSTRUCTION_BASE
+    assert "NEVER GIVE TRADE ADVICE" in SYSTEM_INSTRUCTION_BASE
+    assert "ADHD-FRIENDLY BREVITY" in SYSTEM_INSTRUCTION_BASE
     assert "get_gexdex" in SYSTEM_INSTRUCTION_BASE
     assert "STRICT COMPLETENESS" in SYSTEM_INSTRUCTION_BASE
-    # Check concise token-dense length (< 1500 chars / ~300 tokens)
-    assert len(SYSTEM_INSTRUCTION_BASE) < 1500
+    # Check concise token-dense length (< 1600 chars / ~350 tokens)
+    assert len(SYSTEM_INSTRUCTION_BASE) < 1600
 
 
 def test_detect_query_thinking_budget_single_ticker():
