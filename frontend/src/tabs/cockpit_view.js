@@ -808,8 +808,10 @@ export class CockpitView {
   }
 
   buildFlowTableMarkdown(prints) {
-    const headers = ['EXP', 'SYMBOL', 'TYPE', 'STRIKE', 'SPOT', '%OTM', 'PREMIUM', 'SIZE', 'OI', 'TAG'];
+    const headers = ['DATE', 'EXP', 'SYMBOL', 'TYPE', 'STRIKE', 'SPOT', '%OTM', 'PREMIUM', 'SIZE', 'OI', 'TAG'];
     const rows = prints.map(p => {
+      const rawDate = p.TRADE_DATE || p.trade_date || p.DATE || p.date || '';
+      const date = rawDate ? String(rawDate).slice(0, 10) : '-';
       const exp = p.EXPIRATION_DATE || p.EXPIRATION || p.expiration || p.exp || '2026-09-18';
       const sym = p.SYMBOL || p.symbol || p.ticker || this.currentTicker || 'QUANT';
       const type = String(p.ORDER_ACTION || p.ORDER_TYPE || p.order_type || p.type || 'BUY CALL').replace(/_/g, ' ').toUpperCase();
@@ -847,7 +849,7 @@ export class CockpitView {
         else tag = '-';
       }
 
-      return `| ${exp} | ${sym} | ${type} | ${strike} | ${spot} | ${otm} | ${prem} | ${size} | ${oi} | ${tag} |`;
+      return `| ${date} | ${exp} | ${sym} | ${type} | ${strike} | ${spot} | ${otm} | ${prem} | ${size} | ${oi} | ${tag} |`;
     });
 
     const headerLine = `| ${headers.join(' | ')} |`;
