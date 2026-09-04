@@ -673,7 +673,7 @@ global.fetch = async (url, options = {}) => {
             read: async () => {
               if (!sent) {
                 sent = true;
-                const chunk = `data: {"type": "token", "content": "### Institutional Quant Thesis: ${sym}\\n\\nReal data verified."}\n\n`;
+                const chunk = `data: {"type": "token", "content": "### Microstructure Snapshot\\n• **Regime & Volatility**: Positive Gamma dampened.\\n• **Key Structural Walls**: Call Wall $230.00, Put Wall $200.00.\\n• **Institutional Flow**: 92% Calls with 1 whale sweep."}\n\n`;
                 return { value: new TextEncoder().encode(chunk), done: false };
               }
               return { value: undefined, done: true };
@@ -778,7 +778,8 @@ assert(pillFlow !== null && pillFlow.textContent.includes('FLOW'), '30D Flow Rat
 assert(pillWall !== null && pillWall.textContent.includes('WALL'), 'Wall Range pill rendered');
 
 const synthMarkdown = rootContainer.querySelector('#synthesisMarkdown');
-assert(synthMarkdown !== null && synthMarkdown.innerHTML.includes('Institutional Quant Thesis'), 'Synergized synthesis markdown is rendered');
+assert(synthMarkdown !== null && synthMarkdown.innerHTML.includes('Microstructure Snapshot'), 'Synergized synthesis snapshot markdown is rendered');
+assert(!synthMarkdown.innerHTML.includes('Tactical Playbook'), 'Zero trade advice enforced in synthesis output');
 
 // Verify NVDA Key Levels & Canvas
 const klSpot = rootContainer.querySelector('#klSpot');

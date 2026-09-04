@@ -289,10 +289,11 @@ def format_pure_flow_table(df: Optional[pd.DataFrame], date_label: str = "") -> 
     else:
         df_sorted = df
 
-    headers = ["Symbol", "Order Action", "Strike", "OTM %", "Expiration", "Open Interest", "Premium"]
+    headers = ["Trade Date", "Symbol", "Order Action", "Strike", "OTM %", "Expiration", "Open Interest", "Premium"]
     rows = []
 
     for _, row in df_sorted.iterrows():
+        t_date = str(row.get("TRADE_DATE", "") or "-")[:10]
         sym = str(row.get("SYMBOL", "")).upper()
         
         # Action formatting (e.g. BUY CALL, SELL PUT, BUY PUT, SELL CALL)
@@ -340,7 +341,7 @@ def format_pure_flow_table(df: Optional[pd.DataFrame], date_label: str = "") -> 
         prem_val = row.get("PREMIUM", 0.0)
         prem_str = _format_dollar_amount(prem_val)
 
-        rows.append(f"| **{sym}** | {action_str} | {strike_str} | {otm_str} | {exp_str} | {oi_str} | {prem_str} |")
+        rows.append(f"| {t_date} | **{sym}** | {action_str} | {strike_str} | {otm_str} | {exp_str} | {oi_str} | {prem_str} |")
 
     header_line = "| " + " | ".join(headers) + " |"
     separator_line = "| " + " | ".join([":---"] * len(headers)) + " |"

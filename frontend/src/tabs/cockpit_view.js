@@ -573,26 +573,21 @@ export class CockpitView {
   async simulateSynthesisStream(ticker, synthBox) {
     if (!synthBox) return;
 
-    const confluenceBias = this.cockpitData?.confluence_bias || 'BULLISH CONFLUENCE';
+    const confluenceBias = this.cockpitData?.confluence_bias || 'NEUTRAL PIN';
     const spot = this.cockpitData?.spot_price || 135.00;
     const callWall = this.cockpitData?.call_wall || (spot * 1.08);
     const putWall = this.cockpitData?.put_wall || (spot * 0.92);
     const zeroFlip = this.cockpitData?.zero_flip || (spot * 0.98);
+    const regime = this.cockpitData?.gamma_regime || 'Positive Gamma (+GEX)';
+    const metrics = this.cockpitData?.metrics || {};
+    const callPct = metrics.call_pct !== undefined ? metrics.call_pct : 65.0;
+    const whales = metrics.whale_count !== undefined ? metrics.whale_count : 2;
 
     const thesisMarkdown = `
-### Institutional Quant Thesis: ${ticker}
-**Executive Bias:** \`${confluenceBias}\` | **Current Spot:** \`$${spot.toFixed(2)}\`
-
-1. **Gamma Structure & Volatility Regime**:
-   * **Call Wall:** \`$${callWall.toFixed(2)}\` represents primary institutional overhead resistance and dealer short gamma pin.
-   * **Put Wall:** \`$${putWall.toFixed(2)}\` provides bedrock structural downside cushion.
-   * **Zero Gamma Flip:** \`$${zeroFlip.toFixed(2)}\`. Price action is currently positioned in the **Positive Gamma Regime (+GEX)**, suppressing realized volatility and dampening intraday retracements.
-
-2. **30-Day Flow Confluence**:
-   * Multi-week sweep telemetry reveals aggressive institutional call accumulation with heavy concentration at the **$${callWall.toFixed(0)}** strike.
-   * Unusual Open Interest spikes (\`⚠️\`) confirm multi-session positioning rather than intraday day-trading churning.
-
-> **Tactical Playbook**: Favor long delta continuation setups on pullbacks toward the **$${zeroFlip.toFixed(2)}** flip zone, targeting initial rotation into the **$${callWall.toFixed(2)}** Call Wall.
+### Microstructure Snapshot
+• **Regime & Volatility**: **${regime}**. Spot (**$${spot.toFixed(2)}**) trades ${spot >= zeroFlip ? 'above' : 'below'} Zero Flip (**$${zeroFlip.toFixed(2)}**), indicating ${spot >= zeroFlip ? 'dampened' : 'elevated'} intraday volatility.
+• **Key Structural Walls**: **Call Wall at $${callWall.toFixed(2)}** marks primary overhead dealer supply; **Put Wall at $${putWall.toFixed(2)}** acts as structural downside cushion.
+• **Institutional Flow**: **${callPct.toFixed(0)}% Calls** with **${whales} whale prints** (> $1M), establishing a **${confluenceBias}** microstructure profile.
     `.trim();
 
     synthBox.innerHTML = renderMarkdown(thesisMarkdown);
@@ -808,8 +803,10 @@ export class CockpitView {
   }
 
   buildFlowTableMarkdown(prints) {
-    const headers = ['EXP', 'SYMBOL', 'TYPE', 'STRIKE', 'SPOT', '%OTM', 'PREMIUM', 'SIZE', 'OI', 'TAG'];
+    const headers = ['DATE', 'EXP', 'SYMBOL', 'TYPE', 'STRIKE', 'SPOT', '%OTM', 'PREMIUM', 'SIZE', 'OI', 'TAG'];
     const rows = prints.map(p => {
+      const rawDate = p.TRADE_DATE || p.trade_date || p.DATE || p.date || '';
+      const date = rawDate ? String(rawDate).slice(0, 10) : '-';
       const exp = p.EXPIRATION_DATE || p.EXPIRATION || p.expiration || p.exp || '2026-09-18';
       const sym = p.SYMBOL || p.symbol || p.ticker || this.currentTicker || 'QUANT';
       const type = String(p.ORDER_ACTION || p.ORDER_TYPE || p.order_type || p.type || 'BUY CALL').replace(/_/g, ' ').toUpperCase();
@@ -847,7 +844,7 @@ export class CockpitView {
         else tag = '-';
       }
 
-      return `| ${exp} | ${sym} | ${type} | ${strike} | ${spot} | ${otm} | ${prem} | ${size} | ${oi} | ${tag} |`;
+      return `| ${date} | ${exp} | ${sym} | ${type} | ${strike} | ${spot} | ${otm} | ${prem} | ${size} | ${oi} | ${tag} |`;
     });
 
     const headerLine = `| ${headers.join(' | ')} |`;
