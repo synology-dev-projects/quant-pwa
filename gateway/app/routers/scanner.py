@@ -126,7 +126,9 @@ def get_latest_confluence_scan(_: str = Depends(get_current_user)) -> Dict[str, 
                 viability_score
             FROM daily_confluence_scans
             WHERE scan_date = :s_date
+              AND (rank IS NOT NULL OR play_type IS NOT NULL OR confluence_status IN ('CONFIRMED_BULL', 'CONFIRMED_BEAR', 'VOLATILITY_PIN'))
             ORDER BY rank ASC NULLS LAST, viability_score DESC NULLS LAST, confluence_score DESC, total_flow_premium DESC
+            LIMIT 10
         """)
 
         with engine.connect() as conn:
@@ -256,7 +258,9 @@ def get_confluence_scan_by_date(
                 viability_score
             FROM daily_confluence_scans
             WHERE scan_date = :s_date
+              AND (rank IS NOT NULL OR play_type IS NOT NULL OR confluence_status IN ('CONFIRMED_BULL', 'CONFIRMED_BEAR', 'VOLATILITY_PIN'))
             ORDER BY rank ASC NULLS LAST, viability_score DESC NULLS LAST, confluence_score DESC, total_flow_premium DESC
+            LIMIT 10
         """)
 
         with engine.connect() as conn:

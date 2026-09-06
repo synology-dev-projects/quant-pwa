@@ -304,6 +304,8 @@ export class RadarView {
     if (!tbody || !this.currentData) return;
 
     let rows = Array.isArray(this.currentData.rows) ? [...this.currentData.rows] : [];
+    // Strict Zero-Noise filter: only show qualifying plays (ranked or valid play type)
+    rows = rows.filter(r => r.rank != null || r.play_type != null || r.confluence_status === 'CONFIRMED_BULL' || r.confluence_status === 'CONFIRMED_BEAR');
 
     // Filter
     if (this.activeFilter === 'BULL_SPRING') {
