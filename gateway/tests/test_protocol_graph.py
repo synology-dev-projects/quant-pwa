@@ -10,9 +10,22 @@ SCRIPT_PATH = WORKSPACE_ROOT / "scripts" / "protocol_graph.py"
 STATE_FILE = WORKSPACE_ROOT / ".protocol_state.json"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def preserve_external_state():
+    """Preserve developer's active protocol state across the test session."""
+    backup = None
+    if STATE_FILE.exists():
+        backup = STATE_FILE.read_bytes()
+    yield
+    if backup is not None:
+        STATE_FILE.write_bytes(backup)
+    elif STATE_FILE.exists():
+        STATE_FILE.unlink()
+
+
 @pytest.fixture(autouse=True)
-def cleanup_protocol_state():
-    """Ensure state file is cleaned up before and after tests."""
+def clean_state_per_test():
+    """Ensure test isolation between individual test runs."""
     if STATE_FILE.exists():
         STATE_FILE.unlink()
     yield
@@ -20,9 +33,9 @@ def cleanup_protocol_state():
         STATE_FILE.unlink()
 
 
-def run_protocol_cli(*args):
+def run_protocol_cli(*args, env=None):
     cmd = [sys.executable, str(SCRIPT_PATH)] + list(args)
-    return subprocess.run(cmd, cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
+    return subprocess.run(cmd, cwd=str(WORKSPACE_ROOT), capture_output=True, text=True, env=env)
 
 
 def test_protocol_graph_start_and_status():
@@ -138,5 +151,7 @@ def test_protocol_graph_reset():
 
 def test_check_commit_gate_when_no_staged_app_files(monkeypatch):
     # When no files or only docs are staged, check-commit passes with 0
-    res = run_protocol_cli("check-commit")
+    env = os.environ.copy()
+    env["PROTOCOL_TEST_STAGED_FILES"] = "README.md\ndocs/architecture.md"
+    res = run_protocol_cli("check-commit", env=env)
     assert res.returncode == 0
