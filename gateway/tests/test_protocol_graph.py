@@ -155,3 +155,139 @@ def test_check_commit_gate_when_no_staged_app_files(monkeypatch):
     env["PROTOCOL_TEST_STAGED_FILES"] = "README.md\ndocs/architecture.md"
     res = run_protocol_cli("check-commit", env=env)
     assert res.returncode == 0
+
+
+def test_staging_bug_spawns_child_and_suspends_parent():
+    run_protocol_cli("start", "--type", "feature", "--name", "parent-feature")
+    run_protocol_cli("plan-approve")
+    run_protocol_cli("audit")
+    
+    # Feature is now at PHASE_5_STAGING
+    res_bug = run_protocol_cli("staging-bug", "--name", "radar-empty-staging")
+    assert res_bug.returncode == 0
+    assert "[INTERCEPT] STAGING DEFECT SUB-WORKFLOW INITIALIZED" in res_bug.stdout
+    assert "PHASE_1_RED_GATE" in res_bug.stdout
+
+    with open(STATE_FILE, "r", encoding="utf-8") as f:
+        state = json.load(f)
+    assert state["workflow_type"] == "bug"
+    assert state["task_name"] == "radar-empty-staging"
+    assert state["active_node"] == "PHASE_1_RED_GATE"
+    assert state["parent_workflow"] is not None
+    assert state["parent_workflow"]["task_name"] == "parent-feature"
+    assert state["parent_workflow"]["active_node"] == "PHASE_5_STAGING"
+
+    # Status shows nested defect layout
+    res_status = run_protocol_cli("status")
+    assert res_status.returncode == 0
+    assert "NESTED STAGING DEFECT" in res_status.stdout
+    assert "parent-feature" in res_status.stdout
+
+
+def test_staging_bug_blocks_prod_authorize():
+    run_protocol_cli("start", "--type", "feature", "--name", "feature-x")
+    run_protocol_cli("plan-approve")
+    run_protocol_cli("audit")
+    run_protocol_cli("staging-bug", "--name", "bug-y")
+
+    res_prod = run_protocol_cli("prod-authorize")
+    assert res_prod.returncode == 1
+    assert "PROD BLOCKED" in res_prod.stderr
+    assert "Cannot authorize production while nested staging defect" in res_prod.stderr
+
+
+def test_staging_bug_pre_commit_enforces_red_green_gates():
+    run_protocol_cli("start", "--type", "feature", "--name", "feature-z")
+    run_protocol_cli("plan-approve")
+    run_protocol_cli("audit")
+    run_protocol_cli("staging-bug", "--name", "bug-z")
+
+    env = os.environ.copy()
+    env["PROTOCOL_TEST_STAGED_FILES"] = "gateway/app/main.py"
+    res_commit = run_protocol_cli("check-commit", env=env)
+    assert res_commit.returncode == 1
+    assert "RED reproduction gate not verified" in res_commit.stderr
+
+
+def test_staging_bug_lifecycle_and_parent_restoration(tmp_path):
+    run_protocol_cli("start", "--type", "feature", "--name", "radar-tab3")
+    run_protocol_cli("plan-approve")
+    run_protocol_cli("audit")
+    run_protocol_cli("staging-bug", "--name", "radar-fetch-fix")
+
+    # 1. RED Gate
+    test_file = tmp_path / "test_reproduce_radar.py"
+    test_file.write_text("def test_radar_bug():\n    assert False, 'Expected fetch fail'\n", encoding="utf-8")
+
+    res_red = run_protocol_cli("red", "--test", str(test_file))
+    assert res_red.returncode == 0
+    assert "RED GATE PASSED" in res_red.stdout
+
+    # 2. GREEN Gate
+    test_file.write_text("def test_radar_bug():\n    assert True\n", encoding="utf-8")
+    res_green = run_protocol_cli("green")
+    assert res_green.returncode == 0
+    assert "GREEN GATE PASSED" in res_green.stdout
+
+    # 3. Audit Gate
+    env = os.environ.copy()
+    env["PROTOCOL_TEST_AUDIT_DIFF"] = f"{test_file.name}\ngateway/app/main.py"
+    res_audit = run_protocol_cli("audit", env=env)
+    assert res_audit.returncode == 0
+
+    # 4. Staging Verify on Child -> Pops & Restores Parent
+    res_v = run_protocol_cli("staging-verify")
+    assert res_v.returncode == 0
+    assert "[RESOLVED] STAGING DEFECT COMPLETED & VERIFIED" in res_v.stdout
+    assert "radar-tab3" in res_v.stdout
+
+    with open(STATE_FILE, "r", encoding="utf-8") as f:
+        restored = json.load(f)
+    assert restored["workflow_type"] == "feature"
+    assert restored["task_name"] == "radar-tab3"
+    assert restored["active_node"] == "PHASE_5_STAGING"
+    assert restored["parent_workflow"] is None
+    assert any("STAGING_DEFECT_RESOLVED" in a["event"] for a in restored["audit_trail"])
+
+    # 5. Parent completes staging & prod authorize
+    res_v2 = run_protocol_cli("staging-verify")
+    assert res_v2.returncode == 0
+    assert "PHASE_6_PRODUCTION_GATE" in res_v2.stdout
+
+    res_prod = run_protocol_cli("prod-authorize")
+    assert res_prod.returncode == 0
+    assert "Authorized" in res_prod.stdout
+
+
+def test_staging_bug_cancel_restores_parent():
+    run_protocol_cli("start", "--type", "feature", "--name", "feature-alpha")
+    run_protocol_cli("plan-approve")
+    run_protocol_cli("audit")
+    run_protocol_cli("staging-bug", "--name", "bug-accidental")
+
+    res_cancel = run_protocol_cli("cancel-bug")
+    assert res_cancel.returncode == 0
+    assert "Staging defect cancelled" in res_cancel.stdout
+
+    with open(STATE_FILE, "r", encoding="utf-8") as f:
+        state = json.load(f)
+    assert state["task_name"] == "feature-alpha"
+    assert state["parent_workflow"] is None
+
+
+def test_start_bug_auto_intercepts_at_staging():
+    run_protocol_cli("start", "--type", "feature", "--name", "feature-beta")
+    run_protocol_cli("plan-approve")
+    run_protocol_cli("audit")
+    
+    # Run start --type bug instead of staging-bug
+    res_auto = run_protocol_cli("start", "--type", "bug", "--name", "defect-beta")
+    assert res_auto.returncode == 0
+    assert "Automatically intercepting as a Nested Staging Defect" in res_auto.stdout
+
+    with open(STATE_FILE, "r", encoding="utf-8") as f:
+        state = json.load(f)
+    assert state["workflow_type"] == "bug"
+    assert state["task_name"] == "defect-beta"
+    assert state["parent_workflow"]["task_name"] == "feature-beta"
+

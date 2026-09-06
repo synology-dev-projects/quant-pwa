@@ -23,3 +23,7 @@
    - Never push directly or automatically to the master branch.
    - Deploy to develop2 (Staging, port 8096) for live interactive verification first.
    - Promotion to master strictly requires explicit human authorization (push to prod).
+
+6. **Staging Defect Intercept Mandate**:
+   - If an issue or defect is discovered on Staging (`:8096`) or at the Production Gate, you MUST immediately spawn a nested defect workflow (`python scripts/protocol_graph.py staging-bug --name "<issue>"`).
+   - Never apply unverified or ad-hoc patches while a feature is at staging. All defects must satisfy the RED/GREEN/AUDIT gates and be verified on staging before production promotion is unlocked.
