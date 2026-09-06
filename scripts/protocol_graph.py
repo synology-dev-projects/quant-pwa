@@ -53,6 +53,14 @@ def cmd_start(args):
     workflow_type = args.type
     name = args.name or "unnamed-task"
 
+    current = get_current_state()
+    # Auto-intercept if active feature workflow is sitting at Staging or Prod Gate
+    if current and current.get("active_node") in ["PHASE_5_STAGING", "PHASE_6_PRODUCTION_GATE"] and not current.get("parent_workflow") and workflow_type == "bug":
+        print(f"[INFO] Active workflow '{current.get('task_name')}' detected at {current.get('active_node')}.")
+        print("       Automatically intercepting as a Nested Staging Defect sub-workflow...")
+        cmd_staging_bug(args)
+        return
+
     if workflow_type == "bug":
         active_node = "PHASE_0_INTAKE"
     elif workflow_type == "feature":
@@ -61,12 +69,13 @@ def cmd_start(args):
         active_node = "PHASE_0_POLISH"
 
     state = {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "workflow_id": f"WF-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}",
         "workflow_type": workflow_type,
         "task_name": name,
         "active_node": active_node,
         "reproduction_test": None,
+        "parent_workflow": None,
         "guards": {
             "plan_approved": False,
             "red_state_verified": False,
@@ -86,20 +95,97 @@ def cmd_start(args):
     print(f"   Node:   {state['active_node']}")
 
 
+def cmd_staging_bug(args):
+    name = args.name or "staging-defect"
+    current = get_current_state()
+    if not current:
+        print("[ERROR] No active workflow. 'staging-bug' requires an active workflow deployed to staging.", file=sys.stderr)
+        sys.exit(1)
+
+    if current.get("parent_workflow"):
+        print(f"[ERROR] Already in a nested staging defect workflow: '{current.get('task_name')}'. Resolve it first.", file=sys.stderr)
+        sys.exit(1)
+
+    valid_nodes = ["PHASE_5_STAGING", "PHASE_6_PRODUCTION_GATE"]
+    if current.get("active_node") not in valid_nodes:
+        print(f"[ERROR] 'staging-bug' can only be initialized from Staging/Production Gate ({', '.join(valid_nodes)}). Current node: {current.get('active_node')}", file=sys.stderr)
+        sys.exit(1)
+
+    # Snapshot parent workflow
+    parent_snapshot = dict(current)
+
+    defect_state = {
+        "schema_version": "1.1.0",
+        "workflow_id": f"DEFECT-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}",
+        "workflow_type": "bug",
+        "task_name": name,
+        "active_node": "PHASE_1_RED_GATE",
+        "reproduction_test": None,
+        "parent_workflow": parent_snapshot,
+        "guards": {
+            "plan_approved": True,
+            "red_state_verified": False,
+            "green_state_verified": False,
+            "adversarial_audit_passed": False,
+            "staging_verified": False,
+            "production_authorized": False
+        },
+        "audit_trail": [
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "event": "STAGING_DEFECT_SPAWNED",
+                "node": "PHASE_1_RED_GATE",
+                "details": f"Spawned staging defect '{name}' intercepting parent workflow '{parent_snapshot.get('task_name')}' ({parent_snapshot.get('workflow_id')})"
+            }
+        ]
+    }
+    save_state(defect_state)
+    print("==================================================================")
+    print("  [INTERCEPT] STAGING DEFECT SUB-WORKFLOW INITIALIZED")
+    print("==================================================================")
+    print(f"   Defect ID:       {defect_state['workflow_id']}")
+    print(f"   Defect Task:     {defect_state['task_name']}")
+    print("   Active Node:     PHASE_1_RED_GATE (TDD Invariant Active)")
+    print(f"   Parent Workflow: {parent_snapshot.get('task_name')} (SUSPENDED at {parent_snapshot.get('active_node')})")
+    print("   Next Action:     Write reproduction test and run: python scripts/protocol_graph.py red --test <path>")
+    print("==================================================================")
+
+
+def cmd_cancel_bug(args):
+    state = get_current_state()
+    if not state or not state.get("parent_workflow"):
+        print("[ERROR] No active nested staging defect to cancel.", file=sys.stderr)
+        sys.exit(1)
+    parent = state["parent_workflow"]
+    append_audit(parent, "STAGING_DEFECT_CANCELLED", f"Child defect '{state.get('task_name')}' was cancelled.")
+    save_state(parent)
+    print(f"[OK] Staging defect cancelled. Parent workflow '{parent.get('task_name')}' restored.")
+
+
 def cmd_status(args):
     state = get_current_state()
     if not state:
         print("[INFO] No active protocol workflow. Run 'python scripts/protocol_graph.py start --help'.")
         return
 
+    parent = state.get("parent_workflow")
     print("==================================================================")
-    print(f"  QUANT PROTOCOL STATE GRAPH DASHBOARD ({state['workflow_id']})")
-    print("==================================================================")
-    print(f"Workflow Type:    {state.get('workflow_type', '').upper()}")
-    print(f"Task Name:        {state.get('task_name', '')}")
-    print(f"Active Node:      {state.get('active_node', '')}")
-    print(f"Reproduction Test:{state.get('reproduction_test') or '[None Registered]'}")
-    print("\nGuards & Checkpoints:")
+    if parent:
+        print("  QUANT PROTOCOL STATE GRAPH: NESTED STAGING DEFECT")
+        print(f"  Defect ID:       {state['workflow_id']}")
+        print(f"  Defect Task:     {state.get('task_name', '')}")
+        print(f"  Active Node:     {state.get('active_node', '')}")
+        print(f"  Reproduction:    {state.get('reproduction_test') or '[None Registered]'}")
+        print(f"  Parent Workflow: {parent.get('task_name')} ({parent.get('workflow_id')})")
+        print(f"  Parent Status:   SUSPENDED at {parent.get('active_node')}")
+    else:
+        print(f"  QUANT PROTOCOL STATE GRAPH DASHBOARD ({state['workflow_id']})")
+        print(f"Workflow Type:    {state.get('workflow_type', '').upper()}")
+        print(f"Task Name:        {state.get('task_name', '')}")
+        print(f"Active Node:      {state.get('active_node', '')}")
+        print(f"Reproduction Test:{state.get('reproduction_test') or '[None Registered]'}")
+    print("------------------------------------------------------------------")
+    print("Guards & Checkpoints:")
     for k, v in state.get("guards", {}).items():
         status_icon = "[PASS]" if v else "[WAIT]"
         print(f"  {status_icon} {k:<40}: {v}")
@@ -209,16 +295,20 @@ def cmd_audit(args):
         print("[ERROR] No active workflow.", file=sys.stderr)
         sys.exit(1)
 
-    res = subprocess.run(["git", "diff", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
-    modified_files = [f.strip() for f in res.stdout.splitlines() if f.strip()]
+    if os.environ.get("PROTOCOL_TEST_AUDIT_DIFF") is not None:
+        all_diff = os.environ.get("PROTOCOL_TEST_AUDIT_DIFF")
+        modified_files = [f.strip() for f in all_diff.splitlines() if f.strip()]
+    else:
+        res = subprocess.run(["git", "diff", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
+        res_staged = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
+        all_diff = res.stdout + "\n" + res_staged.stdout
+        modified_files = [f.strip() for f in res.stdout.splitlines() if f.strip()]
 
     print(f"[AUDIT] Checking {len(modified_files)} modified files...")
     if state["workflow_type"] == "bug":
         repro_test = state.get("reproduction_test")
         if repro_test:
             repro_name = Path(repro_test).name
-            res_staged = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
-            all_diff = res.stdout + "\n" + res_staged.stdout
             if repro_name not in all_diff:
                 print(f"[ERROR] AUDIT FAILED: Reproduction test ({repro_test}) is not present in diff.", file=sys.stderr)
                 sys.exit(1)
@@ -236,6 +326,34 @@ def cmd_staging_verify(args):
         print("[ERROR] No active workflow.", file=sys.stderr)
         sys.exit(1)
 
+    # Check if this is a nested staging defect workflow
+    if state.get("parent_workflow"):
+        parent = state["parent_workflow"]
+        defect_name = state.get("task_name")
+        defect_id = state.get("workflow_id")
+
+        if not state["guards"].get("red_state_verified") or not state["guards"].get("green_state_verified"):
+            print("[ERROR] Cannot verify defect on staging without verified RED and GREEN gates.", file=sys.stderr)
+            sys.exit(1)
+        if not state["guards"].get("adversarial_audit_passed"):
+            print("[ERROR] Cannot verify defect on staging without passing adversarial audit.", file=sys.stderr)
+            sys.exit(1)
+
+        parent_state = dict(parent)
+        parent_state["active_node"] = "PHASE_5_STAGING"
+        parent_state["guards"]["staging_verified"] = False  # Must re-verify staging for parent feature
+        append_audit(parent_state, "STAGING_DEFECT_RESOLVED", f"Defect '{defect_name}' ({defect_id}) verified on staging. Parent workflow resumed.")
+        save_state(parent_state)
+
+        print("==================================================================")
+        print("  [RESOLVED] STAGING DEFECT COMPLETED & VERIFIED")
+        print("==================================================================")
+        print(f"   Defect '{defect_name}' has been successfully verified on staging.")
+        print(f"   Parent workflow '{parent_state.get('task_name')}' resumed at: PHASE_5_STAGING.")
+        print("   Run 'python scripts/protocol_graph.py staging-verify' when full parent staging acceptance is confirmed.")
+        print("==================================================================")
+        return
+
     state["guards"]["staging_verified"] = True
     state["active_node"] = "PHASE_6_PRODUCTION_GATE"
     append_audit(state, "STAGING_VERIFIED", "Staging in-situ health confirmed on port 8096")
@@ -248,6 +366,16 @@ def cmd_prod_authorize(args):
     state = get_current_state()
     if not state:
         print("[ERROR] No active workflow.", file=sys.stderr)
+        sys.exit(1)
+
+    if state.get("parent_workflow"):
+        print(f"\n[STOP] [PROD BLOCKED] Cannot authorize production while nested staging defect '{state.get('task_name')}' is active.", file=sys.stderr)
+        print("   The defect must be resolved and verified on staging before parent feature can be promoted.", file=sys.stderr)
+        sys.exit(1)
+
+    if not state["guards"].get("staging_verified"):
+        print("\n[STOP] [PROD BLOCKED] Staging verification not completed.", file=sys.stderr)
+        print("   Run: python scripts/protocol_graph.py staging-verify", file=sys.stderr)
         sys.exit(1)
 
     state["guards"]["production_authorized"] = True
@@ -327,6 +455,10 @@ def main():
     p_start.add_argument("--type", choices=["bug", "feature", "polish"], default="bug", help="Workflow type")
     p_start.add_argument("--name", default="unnamed", help="Task name / issue description")
 
+    p_sbug = subparsers.add_parser("staging-bug", help="Spawn a nested bug remediation workflow from staging")
+    p_sbug.add_argument("--name", required=True, help="Defect description / bug name")
+
+    subparsers.add_parser("cancel-bug", help="Cancel active staging defect and resume parent workflow")
     subparsers.add_parser("status")
     subparsers.add_parser("plan-approve")
 
@@ -347,6 +479,8 @@ def main():
 
     dispatch = {
         "start": cmd_start,
+        "staging-bug": cmd_staging_bug,
+        "cancel-bug": cmd_cancel_bug,
         "status": cmd_status,
         "plan-approve": cmd_plan_approve,
         "red": cmd_red,
