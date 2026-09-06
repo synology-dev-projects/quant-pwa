@@ -83,8 +83,11 @@ class App {
     if (AppState.getActiveTab() === 'cockpit' && this.cockpitView && this.cockpitView.currentTicker) {
       this.cockpitView.searchTicker(this.cockpitView.currentTicker);
     }
-    if (AppState.getActiveTab() === 'radar' && this.radarView) {
-      this.radarView.loadScanData();
+    if (this.radarView) {
+      this.radarView.loadAvailableDates();
+      if (AppState.getActiveTab() === 'radar') {
+        this.radarView.loadScanData();
+      }
     }
 
     // Load initial chat history
@@ -101,6 +104,12 @@ class App {
       AppState.setActiveTab(tabId);
       if (promptContainer) {
         promptContainer.style.display = (tabId === 'cockpit' || tabId === 'radar') ? 'none' : 'block';
+      }
+      if (tabId === 'radar' && this.radarView) {
+        if (!this.radarView.currentData || !this.radarView.currentData.summary) {
+          this.radarView.loadAvailableDates();
+          this.radarView.loadScanData();
+        }
       }
     });
 

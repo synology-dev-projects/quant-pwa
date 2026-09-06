@@ -197,15 +197,18 @@ export class RadarView {
 
   async loadAvailableDates() {
     try {
-      const dates = await fetchWithAuth('/api/scanner/dates');
-      if (Array.isArray(dates)) {
-        this.availableDates = dates;
-        const select = this.container?.querySelector('#radarDateSelect');
-        if (select) {
-          select.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
-          if (dates.length > 0 && !this.selectedDate) {
-            this.selectedDate = dates[0];
-            select.value = dates[0];
+      const res = await fetchWithAuth('/api/scanner/dates');
+      if (res && res.ok) {
+        const dates = await res.json();
+        if (Array.isArray(dates)) {
+          this.availableDates = dates;
+          const select = this.container?.querySelector('#radarDateSelect');
+          if (select) {
+            select.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
+            if (dates.length > 0 && !this.selectedDate) {
+              this.selectedDate = dates[0];
+              select.value = dates[0];
+            }
           }
         }
       }
@@ -220,10 +223,15 @@ export class RadarView {
 
     const url = dateParam ? `/api/scanner/by-date?date=${encodeURIComponent(dateParam)}` : '/api/scanner/latest';
     try {
-      const data = await fetchWithAuth(url);
-      this.currentData = data || { summary: None, rows: [] };
-      this.renderSummaryCards();
-      this.renderTableRows();
+      const res = await fetchWithAuth(url);
+      if (res && res.ok) {
+        const data = await res.json();
+        this.currentData = data || { summary: null, rows: [] };
+        this.renderSummaryCards();
+        this.renderTableRows();
+      } else {
+        throw new Error(`Server returned HTTP ${res?.status || 500}`);
+      }
     } catch (e) {
       console.error('Error fetching confluence scan data:', e);
       const tbody = this.container?.querySelector('#radarTableBody');

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quant-ai-v1.1.0';
+const CACHE_NAME = 'quant-ai-v1.1.1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -9,6 +9,8 @@ const ASSETS_TO_CACHE = [
   './src/tabs/tab_manager.js',
   './src/tabs/chat_view.js',
   './src/tabs/cockpit_view.js',
+  './src/tabs/radar_view.js',
+  './src/styles/radar.css',
   './src/components/lock_screen.js',
   './src/components/message_renderer.js',
   './src/components/quant_chart.js',
