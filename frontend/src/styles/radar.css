@@ -192,9 +192,9 @@
   border-radius: 4px;
 }
 
-/* Table Card & Layout */
+/* Table Card & Layout (Top 10 Full View) */
 .radar-table-card {
-  flex: 1;
+  flex-shrink: 0;
   background: rgba(18, 24, 38, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -205,8 +205,8 @@
 
 .radar-table-wrapper {
   overflow-x: auto;
-  overflow-y: auto;
-  flex: 1;
+  overflow-y: visible;
+  max-height: none;
 }
 
 .radar-table {
@@ -249,6 +249,12 @@
 
 .radar-row.clickable:hover {
   background: rgba(56, 189, 248, 0.06);
+}
+
+.radar-row.radar-row-selected {
+  background: rgba(56, 189, 248, 0.14) !important;
+  border-left: 3px solid #38bdf8 !important;
+  box-shadow: inset 0 0 12px rgba(56, 189, 248, 0.12);
 }
 
 .ticker-pill {
@@ -454,4 +460,467 @@
 
 .radar-empty-state.error {
   color: #f43f5e;
+}
+
+/* ==============================================================================
+   Deep-Dive Inspector Section (Explainability, Exposure Chart, 30-Day Flow Prints)
+   ============================================================================== */
+
+.radar-inspector-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+/* Card 1: Quantitative Rationale Card */
+.radar-explain-card {
+  background: rgba(18, 24, 38, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  backdrop-filter: blur(12px);
+}
+
+.radar-explain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 0.75rem;
+}
+
+.explain-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.explain-badge-icon {
+  font-size: 1.1rem;
+}
+
+.explain-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.03em;
+}
+
+.inspect-ticker-badge {
+  color: #38bdf8;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace, sans-serif;
+}
+
+.inspect-play-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.inspect-score-badge {
+  padding: 0.2rem 0.5rem;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #38bdf8;
+}
+
+.inspect-score-badge.score-elite {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.15);
+  border-color: rgba(250, 204, 21, 0.4);
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.2);
+}
+
+.radar-open-cockpit-btn {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.radar-open-cockpit-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.radar-explain-body {
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  line-height: 1.5;
+}
+
+.explain-placeholder {
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+  margin: 0.5rem 0;
+}
+
+.explain-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.explain-lead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+  color: #f8fafc;
+}
+
+.explain-lead p {
+  margin: 0;
+}
+
+.lead-icon {
+  font-size: 1.1rem;
+}
+
+.explain-factors-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.explain-factors-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.factor-bullet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-top: 1px;
+}
+
+/* Card 2: Interactive Options Exposure Chart Card */
+.radar-chart-card {
+  background: rgba(18, 24, 38, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  backdrop-filter: blur(12px);
+}
+
+.radar-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 0.75rem;
+}
+
+.chart-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.chart-badge-icon {
+  font-size: 1.1rem;
+}
+
+.chart-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.03em;
+}
+
+.chart-ticker-tag {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace, sans-serif;
+}
+
+.radar-key-levels {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.kl-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.kl-label {
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.kl-item strong {
+  color: #38bdf8;
+  font-family: 'JetBrains Mono', monospace, sans-serif;
+}
+
+.gex-dex-toggle {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.gex-dex-toggle .toggle-btn {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  border: none;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gex-dex-toggle .toggle-btn.active {
+  background: rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.radar-chart-slot {
+  min-height: 380px;
+  width: 100%;
+  position: relative;
+}
+
+.chart-loading-slot,
+.radar-chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 250px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+  gap: 0.5rem;
+}
+
+/* Card 3: 30-Day Options Flow Prints Table Card */
+.radar-flow-card {
+  background: rgba(18, 24, 38, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  backdrop-filter: blur(12px);
+}
+
+.radar-flow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 0.75rem;
+}
+
+.flow-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.flow-badge-icon {
+  font-size: 1.1rem;
+}
+
+.flow-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.03em;
+}
+
+.flow-count-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.radar-flow-filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.flow-chip {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.flow-chip:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.flow-chip.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.radar-flow-slot {
+  width: 100%;
+}
+
+.radar-flow-table-wrapper {
+  max-height: 420px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+}
+
+.radar-flow-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.radar-flow-table thead th {
+  background: #0f172a;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.radar-flow-table tbody td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+}
+
+.cell-mono {
+  font-family: 'JetBrains Mono', monospace, sans-serif;
+}
+
+.flow-type-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+}
+
+.flow-type-badge.type-call {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.flow-type-badge.type-put {
+  background: rgba(244, 63, 94, 0.2);
+  color: #f43f5e;
+}
+
+.flow-action-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+}
+
+.flow-action-badge.action-buy {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
+.flow-action-badge.action-sell {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.text-whale {
+  color: #facc15;
+  font-weight: 700;
+}
+
+.text-dim {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.flow-empty-state,
+.flow-loading-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
 }
