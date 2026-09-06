@@ -57,6 +57,11 @@ def get_latest_confluence_scan(_: str = Depends(get_current_user)) -> Dict[str, 
                 top_whale_premium,
                 formatted_top_whale_premium,
                 market_regime_summary,
+                total_watchlist_count,
+                qualifying_bull_spring_count,
+                qualifying_bear_exhaustion_count,
+                top_catalyst_ticker,
+                top_catalyst_expiry,
                 scanned_at
             FROM daily_confluence_summary
             ORDER BY scan_date DESC
@@ -106,10 +111,24 @@ def get_latest_confluence_scan(_: str = Depends(get_current_user)) -> Dict[str, 
                 wall_spread_range,
                 confluence_status,
                 confluence_score,
-                confluence_rationale
+                confluence_rationale,
+                play_type,
+                rank,
+                exposure_imbalance_pct,
+                imbalance_type,
+                pin_wall_strike,
+                pin_wall_type,
+                pin_expiration,
+                pin_dte,
+                pin_dist_pct,
+                flow_hits_count,
+                flow_call_put_ratio,
+                viability_score
             FROM daily_confluence_scans
             WHERE scan_date = :s_date
-            ORDER BY confluence_score DESC, total_flow_premium DESC
+              AND (rank IS NOT NULL OR play_type IS NOT NULL OR confluence_status IN ('CONFIRMED_BULL', 'CONFIRMED_BEAR', 'VOLATILITY_PIN'))
+            ORDER BY rank ASC NULLS LAST, viability_score DESC NULLS LAST, confluence_score DESC, total_flow_premium DESC
+            LIMIT 10
         """)
 
         with engine.connect() as conn:
@@ -129,9 +148,14 @@ def get_latest_confluence_scan(_: str = Depends(get_current_user)) -> Dict[str, 
             for float_col in ("spot_price", "total_flow_premium", "call_premium", "put_premium",
                               "call_premium_pct", "put_premium_pct", "top_whale_premium",
                               "net_sentiment_score", "net_gex", "net_dex", "zero_gamma_flip",
-                              "spot_vs_flip_pct", "call_wall", "put_wall", "confluence_score"):
+                              "spot_vs_flip_pct", "call_wall", "put_wall", "confluence_score",
+                              "exposure_imbalance_pct", "pin_wall_strike", "pin_dist_pct",
+                              "flow_call_put_ratio", "viability_score"):
                 if d.get(float_col) is not None:
                     d[float_col] = float(d[float_col])
+            for int_col in ("rank", "pin_dte", "flow_hits_count", "whale_prints_count"):
+                if d.get(int_col) is not None:
+                    d[int_col] = int(d[int_col])
             clean_rows.append(d)
 
         return {
@@ -169,6 +193,11 @@ def get_confluence_scan_by_date(
                 top_whale_premium,
                 formatted_top_whale_premium,
                 market_regime_summary,
+                total_watchlist_count,
+                qualifying_bull_spring_count,
+                qualifying_bear_exhaustion_count,
+                top_catalyst_ticker,
+                top_catalyst_expiry,
                 scanned_at
             FROM daily_confluence_summary
             WHERE scan_date = :s_date
@@ -214,10 +243,24 @@ def get_confluence_scan_by_date(
                 wall_spread_range,
                 confluence_status,
                 confluence_score,
-                confluence_rationale
+                confluence_rationale,
+                play_type,
+                rank,
+                exposure_imbalance_pct,
+                imbalance_type,
+                pin_wall_strike,
+                pin_wall_type,
+                pin_expiration,
+                pin_dte,
+                pin_dist_pct,
+                flow_hits_count,
+                flow_call_put_ratio,
+                viability_score
             FROM daily_confluence_scans
             WHERE scan_date = :s_date
-            ORDER BY confluence_score DESC, total_flow_premium DESC
+              AND (rank IS NOT NULL OR play_type IS NOT NULL OR confluence_status IN ('CONFIRMED_BULL', 'CONFIRMED_BEAR', 'VOLATILITY_PIN'))
+            ORDER BY rank ASC NULLS LAST, viability_score DESC NULLS LAST, confluence_score DESC, total_flow_premium DESC
+            LIMIT 10
         """)
 
         with engine.connect() as conn:
@@ -237,9 +280,14 @@ def get_confluence_scan_by_date(
             for float_col in ("spot_price", "total_flow_premium", "call_premium", "put_premium",
                               "call_premium_pct", "put_premium_pct", "top_whale_premium",
                               "net_sentiment_score", "net_gex", "net_dex", "zero_gamma_flip",
-                              "spot_vs_flip_pct", "call_wall", "put_wall", "confluence_score"):
+                              "spot_vs_flip_pct", "call_wall", "put_wall", "confluence_score",
+                              "exposure_imbalance_pct", "pin_wall_strike", "pin_dist_pct",
+                              "flow_call_put_ratio", "viability_score"):
                 if d.get(float_col) is not None:
                     d[float_col] = float(d[float_col])
+            for int_col in ("rank", "pin_dte", "flow_hits_count", "whale_prints_count"):
+                if d.get(int_col) is not None:
+                    d[int_col] = int(d[int_col])
             clean_rows.append(d)
 
         return {

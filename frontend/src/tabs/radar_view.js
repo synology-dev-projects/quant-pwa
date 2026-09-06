@@ -5,8 +5,8 @@ export class RadarView {
     this.container = null;
     this.currentData = null;
     this.activeFilter = 'all';
-    this.sortColumn = 'confluence_score';
-    this.sortDirection = 'desc'; // 'desc' | 'asc' | 'natural'
+    this.sortColumn = 'rank';
+    this.sortDirection = 'asc'; // 'asc' | 'desc' | 'natural'
     this.selectedDate = null;
     this.availableDates = [];
     this.isLoading = false;
@@ -19,11 +19,11 @@ export class RadarView {
         <!-- Top Session & Control Bar -->
         <div class="radar-header-bar">
           <div class="radar-title-group">
-            <span class="radar-badge-icon">📡</span>
-            <h1 class="radar-title">Confluence Radar</h1>
+            <span class="radar-badge-icon">🎯</span>
+            <h1 class="radar-title">Asymmetric Options Radar</h1>
             <span class="radar-session-tag" id="radarSessionTag">
               <span class="status-dot dot-live"></span>
-              <span class="tag-text" id="radarSessionText">LOADING EOD SCAN...</span>
+              <span class="tag-text" id="radarSessionText">LOADING SCAN...</span>
             </span>
           </div>
 
@@ -39,38 +39,35 @@ export class RadarView {
         <!-- 4 Summary Metric Cards (Zero Derivation) -->
         <div class="radar-metric-cards" id="radarMetricCards">
           <div class="radar-card" id="cardTotalScanned">
-            <span class="card-label">TOTAL SCANNED</span>
+            <span class="card-label">WATCHLIST SCANNED</span>
             <strong class="card-val" id="valTotalScanned">--</strong>
-            <span class="card-sub">Institutional Flow Tickers</span>
+            <span class="card-sub">Top Liquidity Watchlist</span>
           </div>
           <div class="radar-card" id="cardConfirmedSetups">
-            <span class="card-label">CONFIRMED SETUPS</span>
+            <span class="card-label">QUALIFYING PLAYS</span>
             <strong class="card-val text-bull" id="valConfirmedSetups">--</strong>
-            <span class="card-sub" id="subConfirmedSetups">Bull / Bear Confluence</span>
+            <span class="card-sub" id="subConfirmedSetups">Meeting &ge;80% Imbalance</span>
           </div>
           <div class="radar-card" id="cardTopWhale">
-            <span class="card-label">TOP WHALE VOLUME</span>
+            <span class="card-label">TOP OPPORTUNITY</span>
             <strong class="card-val text-cyan" id="valTopWhale">--</strong>
-            <span class="card-sub" id="subTopWhale">Largest Single Sweep</span>
+            <span class="card-sub" id="subTopWhale">Highest Viability Play</span>
           </div>
           <div class="radar-card" id="cardMarketRegime">
-            <span class="card-label">MARKET REGIME</span>
+            <span class="card-label">NEAREST PIN CATALYST</span>
             <strong class="card-val" id="valMarketRegime">--</strong>
-            <span class="card-sub">Dominant Structural Bias</span>
+            <span class="card-sub" id="subMarketRegime">Dominant Expiration Pin</span>
           </div>
         </div>
 
         <!-- Filter Chips Bar -->
         <div class="radar-filter-bar">
           <div class="radar-filter-chips" id="radarFilterChips">
-            <button type="button" class="radar-chip active" data-filter="all">All Setups</button>
-            <button type="button" class="radar-chip" data-filter="CONFIRMED_BULL">Confirmed Bull</button>
-            <button type="button" class="radar-chip" data-filter="CONFIRMED_BEAR">Confirmed Bear</button>
-            <button type="button" class="radar-chip" data-filter="VOL_PIN">Volatility Pin</button>
-            <button type="button" class="radar-chip" data-filter="STRUCTURAL_HEDGE">Structural Hedge</button>
-            <button type="button" class="radar-chip" data-filter="whales">Whales &gt;$1M Only 🐳</button>
+            <button type="button" class="radar-chip active" data-filter="all">All Top 10</button>
+            <button type="button" class="radar-chip" data-filter="BULL_SPRING">Bull Springs (Spot &lt; 80%)</button>
+            <button type="button" class="radar-chip" data-filter="BEAR_EXHAUSTION">Bear Exhaustions (Spot &gt; 80%)</button>
           </div>
-          <div class="radar-count-badge" id="radarCountBadge">0 TICKERS</div>
+          <div class="radar-count-badge" id="radarCountBadge">0 PLAYS</div>
         </div>
 
         <!-- Leaderboard Table Container -->
@@ -79,21 +76,19 @@ export class RadarView {
             <table class="radar-table" id="radarTable">
               <thead>
                 <tr>
+                  <th class="col-rank sort-asc" data-col="rank">RANK</th>
                   <th class="col-ticker" data-col="ticker">TICKER</th>
                   <th class="col-spot" data-col="spot_price">SPOT</th>
-                  <th class="col-flow" data-col="total_flow_premium">FLOW ($)</th>
-                  <th class="col-callpct" data-col="call_premium_pct">CALL %</th>
-                  <th class="col-bias" data-col="flow_bias">FLOW BIAS</th>
-                  <th class="col-regime" data-col="gamma_regime">GEX REGIME</th>
-                  <th class="col-netgex" data-col="net_gex">NET GEX</th>
-                  <th class="col-walls" data-col="wall_spread_range">WALL SPREAD</th>
-                  <th class="col-status" data-col="confluence_status">STATUS</th>
-                  <th class="col-score sort-desc" data-col="confluence_score">SCORE</th>
+                  <th class="col-play" data-col="play_type">PLAY TYPE</th>
+                  <th class="col-imbalance" data-col="exposure_imbalance_pct">EXPOSURE IMBALANCE</th>
+                  <th class="col-pin" data-col="pin_wall_strike">PINNING NODE</th>
+                  <th class="col-flowacc" data-col="flow_call_put_ratio">FLOW ACCUMULATION</th>
+                  <th class="col-score" data-col="viability_score">VIABILITY SCORE</th>
                 </tr>
               </thead>
               <tbody id="radarTableBody">
                 <tr>
-                  <td colspan="10" class="radar-empty-state">Loading confluence radar data...</td>
+                  <td colspan="8" class="radar-empty-state">Loading asymmetric options radar data...</td>
                 </tr>
               </tbody>
             </table>
@@ -145,12 +140,12 @@ export class RadarView {
       th.addEventListener('click', () => {
         const col = th.dataset.col;
         if (this.sortColumn === col) {
-          if (this.sortDirection === 'desc') this.sortDirection = 'asc';
-          else if (this.sortDirection === 'asc') this.sortDirection = 'natural';
-          else this.sortDirection = 'desc';
+          if (this.sortDirection === 'asc') this.sortDirection = 'desc';
+          else if (this.sortDirection === 'desc') this.sortDirection = 'natural';
+          else this.sortDirection = 'asc';
         } else {
           this.sortColumn = col;
-          this.sortDirection = 'desc';
+          this.sortDirection = 'asc';
         }
         this.updateHeaderSortClasses();
         this.renderTableRows();
@@ -236,7 +231,7 @@ export class RadarView {
       console.error('Error fetching confluence scan data:', e);
       const tbody = this.container?.querySelector('#radarTableBody');
       if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="10" class="radar-empty-state error">Failed to load confluence scan. Ensure database is connected.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="radar-empty-state error">Failed to load confluence scan. Ensure database is connected.</td></tr>`;
       }
     } finally {
       this.isLoading = false;
@@ -254,6 +249,7 @@ export class RadarView {
     const valWhale = this.container.querySelector('#valTopWhale');
     const subWhale = this.container.querySelector('#subTopWhale');
     const valRegime = this.container.querySelector('#valMarketRegime');
+    const subRegime = this.container.querySelector('#subMarketRegime');
 
     if (!s) {
       if (sessionText) sessionText.textContent = 'NO ACTIVE EOD SCAN';
@@ -265,27 +261,40 @@ export class RadarView {
     }
 
     if (sessionText) sessionText.textContent = s.session_label || `EOD Scan (${s.scan_date})`;
-    if (valTotal) valTotal.textContent = String(s.total_scanned_count || 0);
+    if (valTotal) valTotal.textContent = String(s.total_watchlist_count || s.total_scanned_count || 0);
 
-    const bull = s.confirmed_bull_count || 0;
-    const bear = s.confirmed_bear_count || 0;
+    const bull = s.qualifying_bull_spring_count ?? s.confirmed_bull_count ?? 0;
+    const bear = s.qualifying_bear_exhaustion_count ?? s.confirmed_bear_count ?? 0;
     if (valConfirmed) {
       valConfirmed.textContent = `${bull} Bull / ${bear} Bear`;
       valConfirmed.className = `card-val ${bull >= bear ? 'text-bull' : 'text-bear'}`;
     }
     if (subConfirmed) {
-      subConfirmed.textContent = `${s.vol_pin_count || 0} Vol Pin | ${s.divergent_count || 0} Divergent`;
+      subConfirmed.textContent = 'Meeting ≥80% Imbalance';
     }
 
+    // Top Opportunity (top ranked row or ticker from summary)
+    const rows = this.currentData.rows || [];
+    const topPlay = rows.length > 0 ? rows[0] : null;
     if (valWhale) {
-      valWhale.textContent = s.top_whale_ticker ? `${s.top_whale_ticker} (${s.formatted_top_whale_premium})` : 'None';
+      if (topPlay && (topPlay.viability_score || topPlay.confluence_score)) {
+        valWhale.textContent = `${topPlay.ticker} (Score ${topPlay.viability_score || topPlay.confluence_score})`;
+      } else if (s.top_whale_ticker && s.top_whale_ticker !== 'N/A') {
+        valWhale.textContent = `${s.top_whale_ticker} (${s.formatted_top_whale_premium})`;
+      } else {
+        valWhale.textContent = 'None';
+      }
     }
     if (subWhale) {
-      subWhale.textContent = 'Top Institutional Whale Sweep';
+      subWhale.textContent = 'Highest Viability Play';
     }
 
     if (valRegime) {
-      valRegime.textContent = s.market_regime_summary || 'BALANCED FLOW REGIME';
+      if (s.top_catalyst_ticker && s.top_catalyst_ticker !== 'None' && s.top_catalyst_ticker !== 'N/A') {
+        valRegime.textContent = `${s.top_catalyst_ticker}: ${s.top_catalyst_expiry || ''}`;
+      } else {
+        valRegime.textContent = s.market_regime_summary || 'BALANCED ASYMMETRIC BIAS';
+      }
     }
   }
 
@@ -295,16 +304,22 @@ export class RadarView {
     if (!tbody || !this.currentData) return;
 
     let rows = Array.isArray(this.currentData.rows) ? [...this.currentData.rows] : [];
+    // Strict Zero-Noise filter: only show qualifying plays (ranked or valid play type)
+    rows = rows.filter(r => r.rank != null || r.play_type != null || r.confluence_status === 'CONFIRMED_BULL' || r.confluence_status === 'CONFIRMED_BEAR');
 
     // Filter
-    if (this.activeFilter === 'whales') {
+    if (this.activeFilter === 'BULL_SPRING') {
+      rows = rows.filter(r => r.play_type === 'BULL_SPRING' || r.confluence_status === 'BULL_SPRING' || r.confluence_status === 'CONFIRMED_BULL');
+    } else if (this.activeFilter === 'BEAR_EXHAUSTION') {
+      rows = rows.filter(r => r.play_type === 'BEAR_EXHAUSTION' || r.confluence_status === 'BEAR_EXHAUSTION' || r.confluence_status === 'CONFIRMED_BEAR');
+    } else if (this.activeFilter === 'whales') {
       rows = rows.filter(r => (r.whale_prints_count || 0) > 0);
     } else if (this.activeFilter !== 'all') {
-      rows = rows.filter(r => r.confluence_status === this.activeFilter);
+      rows = rows.filter(r => r.play_type === this.activeFilter || r.confluence_status === this.activeFilter);
     }
 
     if (badge) {
-      badge.textContent = `${rows.length} TICKERS`;
+      badge.textContent = `${rows.length} PLAYS`;
     }
 
     // Sort
@@ -316,6 +331,8 @@ export class RadarView {
         let vb = b[col];
         if (typeof va === 'string') va = va.toLowerCase();
         if (typeof vb === 'string') vb = vb.toLowerCase();
+        if (va === undefined || va === null) return 1;
+        if (vb === undefined || vb === null) return -1;
         if (va < vb) return asc ? -1 : 1;
         if (va > vb) return asc ? 1 : -1;
         return 0;
@@ -323,36 +340,70 @@ export class RadarView {
     }
 
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="10" class="radar-empty-state">No matching setups found for the selected filter.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="radar-empty-state">No matching asymmetric plays found for the selected filter.</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = rows.map(r => {
-      const biasClass = r.flow_bias === 'BULLISH' ? 'bias-bull' : (r.flow_bias === 'BEARISH' ? 'bias-bear' : 'bias-neutral');
-      const statusClass = (r.confluence_status || '').toLowerCase().replace('_', '-');
-      const whaleTag = (r.whale_prints_count || 0) > 0 ? `<span class="whale-indicator" title="${r.whale_prints_count} Whale Sweeps">🐳 ${r.whale_prints_count}</span>` : '';
-      const spotVsFlipStr = r.spot_vs_flip_pct !== null && r.spot_vs_flip_pct !== undefined ? `<span class="flip-dist">${r.spot_vs_flip_pct > 0 ? '+' : ''}${r.spot_vs_flip_pct}% vs Flip</span>` : '';
+    tbody.innerHTML = rows.map((r, idx) => {
+      const rankNum = r.rank || (idx + 1);
+      const isSpring = r.play_type === 'BULL_SPRING' || r.confluence_status === 'BULL_SPRING';
+      const isExhaust = r.play_type === 'BEAR_EXHAUSTION' || r.confluence_status === 'BEAR_EXHAUSTION';
+      const playClass = isSpring ? 'badge-spring' : (isExhaust ? 'badge-exhaustion' : 'badge-neutral');
+      const playLabel = isSpring ? 'BULL SPRING' : (isExhaust ? 'BEAR EXHAUST' : (r.play_type || r.confluence_status || 'N/A'));
+
+      const dirLabel = isSpring ? 'Above' : (isExhaust ? 'Below' : '');
+      const imbType = r.imbalance_type || 'GEX';
+      const imbPct = r.exposure_imbalance_pct !== null && r.exposure_imbalance_pct !== undefined ? `${r.exposure_imbalance_pct}%` : '--';
+      const imbText = `${imbPct} ${imbType} ${dirLabel}`.trim();
+
+      const pinStrike = r.pin_wall_strike ? `$${r.pin_wall_strike.toFixed(2)}` : (r.call_wall ? `$${r.call_wall.toFixed(2)}` : '--');
+      const pinType = (r.pin_wall_type || 'Wall').replace('_', ' ').toUpperCase();
+      const dteText = r.pin_dte !== null && r.pin_dte !== undefined ? `${r.pin_dte} DTE` : '';
+      const distText = r.pin_dist_pct !== null && r.pin_dist_pct !== undefined ? `${r.pin_dist_pct}%` : '';
+
+      const ratioVal = r.flow_call_put_ratio !== null && r.flow_call_put_ratio !== undefined ? `${r.flow_call_put_ratio}x` : '--';
+      const ratioType = isExhaust ? 'P/C' : 'C/P';
+      const hitsCount = r.flow_hits_count || r.whale_prints_count || 0;
+      const hitsText = hitsCount > 0 ? `${hitsCount} Prints` : '';
+
+      const scoreVal = r.viability_score !== null && r.viability_score !== undefined ? r.viability_score : (r.confluence_score || '--');
+      const isTopScore = typeof scoreVal === 'number' && scoreVal >= 85.0;
 
       return `
         <tr data-ticker="${r.ticker}" class="radar-row clickable" title="Click to view ${r.ticker} in Cockpit">
+          <td class="col-rank">
+            <span class="rank-badge rank-${rankNum <= 3 ? rankNum : 'other'}">#${rankNum}</span>
+          </td>
           <td class="col-ticker">
             <span class="ticker-pill">${r.ticker}</span>
-            ${whaleTag}
           </td>
           <td class="col-spot">
-            <strong>${r.formatted_spot_price || '$0.00'}</strong>
-            ${spotVsFlipStr}
+            <strong>${r.formatted_spot_price || (r.spot_price ? '$' + r.spot_price.toFixed(2) : '$0.00')}</strong>
           </td>
-          <td class="col-flow">${r.formatted_flow_premium || '$0.00'}</td>
-          <td class="col-callpct">${r.call_premium_pct !== undefined ? r.call_premium_pct + '%' : '--'}</td>
-          <td class="col-bias"><span class="badge ${biasClass}">${r.flow_bias || 'NEUTRAL'}</span></td>
-          <td class="col-regime"><span class="regime-text">${r.gamma_regime || 'N/A'}</span></td>
-          <td class="col-netgex"><strong>${r.formatted_net_gex || '$0.00'}</strong></td>
-          <td class="col-walls">${r.wall_spread_range || 'N/A'}</td>
-          <td class="col-status"><span class="status-pill ${statusClass}">${r.confluence_status}</span></td>
-          <td class="col-score"><strong class="score-badge">${r.confluence_score}</strong></td>
+          <td class="col-play">
+            <span class="play-badge ${playClass}">${playLabel}</span>
+          </td>
+          <td class="col-imbalance">
+            <span class="imbalance-pill">${imbText}</span>
+          </td>
+          <td class="col-pin">
+            <div class="pin-cell">
+              <strong>${pinStrike} ${pinType}</strong>
+              <span class="pin-meta">${dteText}${distText ? ' • ' + distText : ''}</span>
+            </div>
+          </td>
+          <td class="col-flowacc">
+            <div class="flow-cell">
+              <strong>${ratioVal} ${ratioType}</strong>
+              <span class="flow-meta">${hitsText}</span>
+            </div>
+          </td>
+          <td class="col-score">
+            <strong class="score-badge ${isTopScore ? 'score-high' : ''}">${scoreVal}</strong>
+          </td>
         </tr>
       `;
     }).join('');
   }
 }
+
