@@ -56,6 +56,20 @@ def test_get_latest_confluence_scan_returns_precomputed_data():
         assert "confluence_score" in first_row
         assert "confluence_rationale" in first_row
 
+        # Verify new Asymmetric Radar fields
+        assert "play_type" in first_row
+        assert "rank" in first_row
+        assert "exposure_imbalance_pct" in first_row
+        assert "imbalance_type" in first_row
+        assert "pin_wall_strike" in first_row
+        assert "pin_wall_type" in first_row
+        assert "pin_expiration" in first_row
+        assert "pin_dte" in first_row
+        assert "pin_dist_pct" in first_row
+        assert "flow_hits_count" in first_row
+        assert "flow_call_put_ratio" in first_row
+        assert "viability_score" in first_row
+
         # Verify summary
         summary = data["summary"]
         assert summary is not None
@@ -63,6 +77,11 @@ def test_get_latest_confluence_scan_returns_precomputed_data():
         assert "total_scanned_count" in summary
         assert "market_regime_summary" in summary
         assert "top_whale_ticker" in summary
+        assert "total_watchlist_count" in summary
+        assert "qualifying_bull_spring_count" in summary
+        assert "qualifying_bear_exhaustion_count" in summary
+        assert "top_catalyst_ticker" in summary
+        assert "top_catalyst_expiry" in summary
 
 
 def test_get_confluence_scan_by_date():

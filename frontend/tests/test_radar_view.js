@@ -352,21 +352,73 @@ async function runTests() {
   const mockSummary = {
     scan_date: '2026-09-04',
     session_label: 'Post-Market EOD Scan (2026-09-04)',
-    total_scanned_count: 40,
-    confirmed_bull_count: 35,
-    confirmed_bear_count: 3,
-    vol_pin_count: 2,
-    divergent_count: 0,
-    top_whale_ticker: 'TSM',
-    top_whale_premium: 34900000.0,
-    formatted_top_whale_premium: '$34.90M',
-    market_regime_summary: 'BULLISH FLOW CONFLUENCE'
+    total_scanned_count: 4,
+    total_watchlist_count: 50,
+    qualifying_bull_spring_count: 3,
+    qualifying_bear_exhaustion_count: 1,
+    top_catalyst_ticker: 'TSLA',
+    top_catalyst_expiry: '$360 Call Wall • 12 DTE',
+    top_whale_ticker: 'TSLA',
+    top_whale_premium: 28400000.0,
+    formatted_top_whale_premium: '$28.40M',
+    market_regime_summary: 'BULL SPRING CONFLUENCE'
   };
+
+  const mockRows = [
+    {
+      rank: 1,
+      ticker: 'TSLA',
+      spot_price: 354.08,
+      formatted_spot_price: '$354.08',
+      play_type: 'BULL_SPRING',
+      exposure_imbalance_pct: 88.4,
+      imbalance_type: 'DEX',
+      pin_wall_strike: 360.0,
+      pin_wall_type: 'CALL_WALL',
+      pin_dte: 12,
+      pin_dist_pct: 1.7,
+      flow_call_put_ratio: 3.4,
+      flow_hits_count: 14,
+      viability_score: 94.5
+    },
+    {
+      rank: 2,
+      ticker: 'NVDA',
+      spot_price: 350.00,
+      formatted_spot_price: '$350.00',
+      play_type: 'BULL_SPRING',
+      exposure_imbalance_pct: 85.0,
+      imbalance_type: 'GEX',
+      pin_wall_strike: 355.0,
+      pin_wall_type: 'CALL_WALL',
+      pin_dte: 14,
+      pin_dist_pct: 1.4,
+      flow_call_put_ratio: 5.0,
+      flow_hits_count: 16,
+      viability_score: 91.0
+    },
+    {
+      rank: 3,
+      ticker: 'AMD',
+      spot_price: 155.00,
+      formatted_spot_price: '$155.00',
+      play_type: 'BEAR_EXHAUSTION',
+      exposure_imbalance_pct: 82.5,
+      imbalance_type: 'GEX',
+      pin_wall_strike: 150.0,
+      pin_wall_type: 'PUT_WALL',
+      pin_dte: 7,
+      pin_dist_pct: 3.2,
+      flow_call_put_ratio: 2.8,
+      flow_hits_count: 8,
+      viability_score: 86.5
+    }
+  ];
 
   radar.currentData = {
     scan_date: '2026-09-04',
     summary: mockSummary,
-    rows: []
+    rows: mockRows
   };
   radar.renderSummaryCards();
 
@@ -375,91 +427,54 @@ async function runTests() {
   pass('Session label rendered directly: Post-Market EOD Scan (2026-09-04)');
 
   const valTotal = container.querySelector('#valTotalScanned');
-  assert.equal(valTotal.textContent, '40');
-  pass('Total scanned count rendered directly: 40');
+  assert.equal(valTotal.textContent, '50');
+  pass('Watchlist scanned count rendered directly: 50');
 
   const valConfirmed = container.querySelector('#valConfirmedSetups');
-  assert.equal(valConfirmed.textContent, '35 Bull / 3 Bear');
-  pass('Confirmed setups count rendered directly: 35 Bull / 3 Bear');
+  assert.equal(valConfirmed.textContent, '3 Bull / 1 Bear');
+  pass('Qualifying plays count rendered directly: 3 Bull / 1 Bear');
 
   const valWhale = container.querySelector('#valTopWhale');
-  assert.equal(valWhale.textContent, 'TSM ($34.90M)');
-  pass('Top whale leader rendered directly: TSM ($34.90M)');
+  assert(valWhale.textContent.includes('TSLA (Score 94.5)'), 'Top opportunity card displays top ranked play');
+  pass('Top opportunity leader rendered directly: TSLA (Score 94.5)');
 
   const valRegime = container.querySelector('#valMarketRegime');
-  assert.equal(valRegime.textContent, 'BULLISH FLOW CONFLUENCE');
-  pass('Market regime summary rendered directly: BULLISH FLOW CONFLUENCE');
+  assert.equal(valRegime.textContent, 'TSLA: $360 Call Wall • 12 DTE');
+  pass('Nearest pin catalyst rendered directly: TSLA: $360 Call Wall • 12 DTE');
 
   // Test 3: Table Rows Zero Derivation
   console.log('\n--- TEST 3: Table Rows (Zero Derivations) ---');
-  const mockRows = [
-    {
-      ticker: 'TSM',
-      formatted_spot_price: '$428.91',
-      formatted_flow_premium: '$34.90M',
-      call_premium_pct: 100.0,
-      flow_bias: 'BULLISH',
-      gamma_regime: 'POSITIVE (LONG GAMMA)',
-      formatted_net_gex: '+$97.68B',
-      wall_spread_range: '$427.50 - $425.00',
-      confluence_status: 'CONFIRMED_BULL',
-      confluence_score: 90.0,
-      whale_prints_count: 1
-    },
-    {
-      ticker: 'TSLA',
-      formatted_spot_price: '$354.08',
-      formatted_flow_premium: '$28.40M',
-      call_premium_pct: 78.5,
-      flow_bias: 'BULLISH',
-      gamma_regime: 'POSITIVE (LONG GAMMA)',
-      formatted_net_gex: '+$45.20B',
-      wall_spread_range: '$340.00 - $360.00',
-      confluence_status: 'CONFIRMED_BULL',
-      confluence_score: 85.0,
-      whale_prints_count: 2
-    },
-    {
-      ticker: 'SPY',
-      formatted_spot_price: '$769.25',
-      formatted_flow_premium: '$120.00M',
-      call_premium_pct: 35.0,
-      flow_bias: 'BEARISH',
-      gamma_regime: 'POSITIVE (LONG GAMMA)',
-      formatted_net_gex: '+$850.00B',
-      wall_spread_range: '$750.00 - $785.00',
-      confluence_status: 'STRUCTURAL_HEDGE',
-      confluence_score: 75.0,
-      whale_prints_count: 4
-    }
-  ];
-
-  radar.currentData.rows = mockRows;
   radar.renderTableRows();
 
   const tbody = container.querySelector('#radarTableBody');
-  assert(tbody.innerHTML.includes('TSM'), 'TSM row must be rendered');
-  assert(tbody.innerHTML.includes('$428.91'), 'Formatted spot price must be rendered directly');
-  assert(tbody.innerHTML.includes('$34.90M'), 'Formatted flow premium must be rendered directly');
-  assert(tbody.innerHTML.includes('CONFIRMED_BULL'), 'Confluence status must be rendered');
-  pass('Pre-computed table cells verified for TSM');
+  assert(tbody.innerHTML.includes('TSLA'), 'TSLA row must be rendered');
+  assert(tbody.innerHTML.includes('#1'), 'Rank #1 badge must be rendered');
+  assert(tbody.innerHTML.includes('$354.08'), 'Formatted spot price must be rendered directly');
+  assert(tbody.innerHTML.includes('BULL SPRING'), 'BULL SPRING play badge must be rendered');
+  assert(tbody.innerHTML.includes('88.4% DEX Above'), 'Exposure imbalance pill must be rendered');
+  assert(tbody.innerHTML.includes('$360.00 CALL WALL'), 'Pinning node strike and type must be rendered');
+  assert(tbody.innerHTML.includes('12 DTE'), 'Pinning node DTE must be rendered');
+  assert(tbody.innerHTML.includes('3.4x C/P'), 'Flow accumulation ratio must be rendered');
+  assert(tbody.innerHTML.includes('94.5'), 'Viability score must be rendered');
+  pass('Pre-computed asymmetric leaderboard cells verified for TSLA');
 
   // Test 4: Filtering
   console.log('\n--- TEST 4: Client-Side Filter Chips ---');
-  radar.activeFilter = 'STRUCTURAL_HEDGE';
+  radar.activeFilter = 'BEAR_EXHAUSTION';
   radar.renderTableRows();
-  assert(tbody.innerHTML.includes('SPY'), 'SPY must be rendered under STRUCTURAL_HEDGE');
-  assert(!tbody.innerHTML.includes('TSM'), 'TSM must be hidden under STRUCTURAL_HEDGE');
-  pass('Filter chip correctly isolates STRUCTURAL_HEDGE setups');
+  assert(tbody.innerHTML.includes('AMD'), 'AMD must be rendered under BEAR_EXHAUSTION');
+  assert(!tbody.innerHTML.includes('TSLA'), 'TSLA must be hidden under BEAR_EXHAUSTION');
+  pass('Filter chip correctly isolates BEAR_EXHAUSTION setups');
 
-  radar.activeFilter = 'whales';
+  radar.activeFilter = 'BULL_SPRING';
   radar.renderTableRows();
-  assert(tbody.innerHTML.includes('TSM') && tbody.innerHTML.includes('SPY'), 'Whales filter includes items with whale prints');
-  pass('Whales filter verified');
+  assert(tbody.innerHTML.includes('TSLA') && tbody.innerHTML.includes('NVDA'), 'BULL_SPRING filter includes TSLA and NVDA');
+  assert(!tbody.innerHTML.includes('AMD'), 'AMD must be hidden under BULL_SPRING');
+  pass('Filter chip correctly isolates BULL_SPRING setups');
 
   radar.activeFilter = 'all';
   radar.renderTableRows();
-  assert(tbody.innerHTML.includes('TSM') && tbody.innerHTML.includes('TSLA') && tbody.innerHTML.includes('SPY'), 'All filter restores full list');
+  assert(tbody.innerHTML.includes('TSLA') && tbody.innerHTML.includes('NVDA') && tbody.innerHTML.includes('AMD'), 'All filter restores full Top 10 list');
   pass('All filter resets properly');
 
   // Test 5: 1-Click Drill Down to Cockpit
