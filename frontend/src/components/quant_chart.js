@@ -73,7 +73,23 @@ export class QuantChart {
     const spot = this.data.spot_price || 0;
     const callWall = this.data.call_wall || 0;
     const putWall = this.data.put_wall || 0;
-    const cpRatio = this.data.call_put_ratio || 0;
+    let cpRatio = Number(this.data.call_put_ratio || 0);
+
+    // Fallback: derive Call/Put ratio dynamically from strikes if omitted or 0
+    if (cpRatio <= 0 && Array.isArray(this.data.strikes) && this.data.strikes.length > 0) {
+      let callGexSum = 0;
+      let putGexSum = 0;
+      for (const s of this.data.strikes) {
+        callGexSum += Math.max(0, Number(s.call_gex || 0));
+        putGexSum += Math.abs(Math.min(0, Number(s.put_gex || 0)));
+      }
+      if (putGexSum > 0) {
+        cpRatio = callGexSum / putGexSum;
+      } else if (callGexSum > 0) {
+        cpRatio = 1.0;
+      }
+    }
+
     const ticker = this.data.ticker || 'QUANT';
 
     let initialTitle = `${ticker} GEX DEX Chart`;

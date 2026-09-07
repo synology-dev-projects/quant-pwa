@@ -683,6 +683,11 @@ export class RadarView {
     const flip = Number(gex.zero_gex_level || metrics.zero_gamma_flip || data.zero_flip || spot);
     const callWall = Number(gex.call_wall || metrics.call_wall || data.call_wall || 0);
     const putWall = Number(gex.put_wall || metrics.put_wall || data.put_wall || 0);
+    const cpRatio = Number(
+      gex.call_put_ratio !== undefined && gex.call_put_ratio !== null ? gex.call_put_ratio :
+      (metrics.call_put_ratio !== undefined && metrics.call_put_ratio !== null ? metrics.call_put_ratio :
+      (data.call_put_ratio !== undefined && data.call_put_ratio !== null ? data.call_put_ratio : 0))
+    );
 
     const klSpot = this.container.querySelector('#radarKlSpot');
     const klFlip = this.container.querySelector('#radarKlFlip');
@@ -720,6 +725,7 @@ export class RadarView {
       zero_flip: flip,
       call_wall: callWall,
       put_wall: putWall,
+      call_put_ratio: cpRatio,
       strikes,
       expirations
     };
