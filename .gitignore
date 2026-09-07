@@ -20,3 +20,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 .protocol_state.json
+evaluation_reports/
+gateway/evaluation_reports/
