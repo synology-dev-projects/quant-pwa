@@ -708,13 +708,20 @@ export class RadarView {
     }
 
     chartSlot.innerHTML = '';
+    const expirations = (Array.isArray(gex.expirations) && gex.expirations.length > 0)
+      ? gex.expirations
+      : ((Array.isArray(data.expirations) && data.expirations.length > 0)
+        ? data.expirations
+        : (strikes[0]?.exp_gex ? Object.keys(strikes[0].exp_gex) : []));
+
     const chartData = {
       ticker,
       spot_price: spot,
       zero_flip: flip,
       call_wall: callWall,
       put_wall: putWall,
-      strikes
+      strikes,
+      expirations
     };
 
     try {
@@ -761,11 +768,13 @@ export class RadarView {
       const premStr = r.premium ? `$${(r.premium >= 1000000 ? (r.premium / 1000000).toFixed(2) + 'M' : (r.premium / 1000).toFixed(0) + 'K')}` : '--';
       const actionClass = (r.action || '').toUpperCase() === 'BUY' ? 'action-buy' : 'action-sell';
       const typeClass = isCall ? 'type-call' : 'type-put';
+      const strikeVal = Number(r.strike || 0);
+      const strikeStr = strikeVal > 0 ? `$${strikeVal.toFixed(1)}` : '--';
 
       return `
         <tr>
           <td class="cell-mono">${r.trade_date || r.date || '--'}</td>
-          <td class="cell-mono">$${Number(r.strike || 0).toFixed(1)}</td>
+          <td class="cell-mono">${strikeStr}</td>
           <td class="cell-mono">${r.expiration || '--'}</td>
           <td><span class="flow-type-badge ${typeClass}">${isCall ? 'CALL' : 'PUT'}</span></td>
           <td class="cell-mono ${isWhale ? 'text-whale' : ''}">${premStr} ${isWhale ? '🐳' : ''}</td>
