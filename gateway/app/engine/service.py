@@ -833,10 +833,7 @@ class GexDexService:
             ai_contexts: List[str] = []
 
             for sym, metrics in data.items():
-                chart_png_url = f"/api/v1/gexdex/chart.png?ticker={sym}&max_dte={max_dte}&strike_range={strike_range}&format=webp{refresh_param}"
                 item = metrics.model_dump()
-                item["chart_png_url"] = chart_png_url
-                item["markdown_image"] = f"![{sym} Options Chart]({chart_png_url})"
 
                 # Attach granular strike distribution for client-side Canvas rendering
                 try:
@@ -934,10 +931,7 @@ class GexDexService:
             ai_contexts: List[str] = []
 
             for sym, metrics in data.items():
-                chart_png_url = f"/api/v1/gexdex/chart.png?ticker={sym}&max_dte={max_dte}&strike_range={strike_range}&format=webp"
                 item = metrics.model_dump()
-                item["chart_png_url"] = chart_png_url
-                item["markdown_image"] = f"![{sym} Options Chart]({chart_png_url})"
 
                 try:
                     strike_dist = get_strike_distribution(sym, max_dte=max_dte, strike_range=strike_range, force_refresh=force_refresh)
