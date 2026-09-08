@@ -301,16 +301,21 @@ export class FlowView {
               }
             }
             if (dataStr) {
+              if (dataStr.trim() === '[DONE]' || dataStr.includes('[DONE]')) {
+                break;
+              }
               try {
                 const parsed = JSON.parse(dataStr);
                 const tokenChunk = parsed.content || parsed.text || parsed.token || '';
-                if (tokenChunk) {
+                if (tokenChunk && tokenChunk !== '[DONE]') {
                   accumulatedText += tokenChunk;
-                  if (synthBox) synthBox.innerHTML = renderMarkdown(accumulatedText);
+                  if (synthBox) synthBox.innerHTML = renderMarkdown(accumulatedText.replace(/\[DONE\]/g, ''));
                 }
               } catch {
-                accumulatedText += dataStr;
-                if (synthBox) synthBox.innerHTML = renderMarkdown(accumulatedText);
+                if (!dataStr.includes('[DONE]')) {
+                  accumulatedText += dataStr;
+                  if (synthBox) synthBox.innerHTML = renderMarkdown(accumulatedText.replace(/\[DONE\]/g, ''));
+                }
               }
             }
           }
@@ -330,13 +335,17 @@ export class FlowView {
     if (!synthBox) return;
     const topPrem = this.currentData?.window_3d?.top_premium_bullish || [];
     const leader = topPrem[0];
-    const leaderStr = leader
-      ? `**${leader.symbol}** led bullish dollar flow with **${leader.formatted_premium}** in premium spent`
-      : `Broad institutional sweeps observed across index ETFs`;
+    const topPremLine = leader
+      ? `    - ${leader.symbol} ${leader.formatted_premium} PREMIUM (1st)`
+      : `    - NONE FOUND`;
 
     const thesisMarkdown = `
 ### Market Flow Snapshot
-• **Notable Flow**: ${leaderStr}, concentrating high-conviction order positioning across the latest session.
+• **Notable Flow**:
+  • **TOP PREMIUM**:
+${topPremLine}
+  • **NOTABLE OTM**:
+    - NONE FOUND
     `.trim();
 
     synthBox.innerHTML = renderMarkdown(thesisMarkdown);

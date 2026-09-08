@@ -477,6 +477,21 @@ async function runTests() {
   assert.equal(global.window.searchedTicker, 'NVDA', 'Cockpit searchTicker triggered for NVDA');
   console.log('  ✓ PASS: Clicking a ticker seamlessly switches to Cockpit and searches ticker');
 
+  // Test 5: Synthesis Rendering & [DONE] Exclusion
+  console.log('\n--- TEST 5: Synthesis Rendering & [DONE] Exclusion ---');
+  const synthBox = container.querySelector('#flowSynthesisMarkdown');
+  assert(synthBox, 'flowSynthesisMarkdown box exists');
+  await view.simulateFlowSynthesisStream(synthBox);
+  assert(!synthBox.innerHTML.includes('[DONE]'), 'Synthesis output does not contain [DONE]');
+  assert(synthBox.innerHTML.includes('Notable Flow'), 'Synthesis contains Notable Flow');
+  assert(synthBox.innerHTML.includes('TOP PREMIUM'), 'Synthesis contains TOP PREMIUM');
+  assert(synthBox.innerHTML.includes('NOTABLE OTM'), 'Synthesis contains NOTABLE OTM');
+  assert(synthBox.innerHTML.includes('SMH'), 'Synthesis contains SMH');
+  assert(synthBox.innerHTML.includes('$24.5M'), 'Synthesis contains $24.5M');
+  assert(synthBox.innerHTML.includes('PREMIUM (1st)'), 'Synthesis contains PREMIUM (1st)');
+  assert(synthBox.innerHTML.includes('NONE FOUND'), 'Synthesis contains NONE FOUND');
+  console.log('  ✓ PASS: Synthesis renders exact structured markdown without leaking [DONE]');
+
   console.log('\n==================================================================');
   console.log('  ALL FLOW VIEW DOM INTEGRATION TESTS PASSED (100% GREEN)');
   console.log('==================================================================');

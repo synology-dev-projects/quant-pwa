@@ -67,7 +67,11 @@ def test_notable_flow_point_extraction_and_deterministic():
     assert "TOP PREMIUM" in instruction
     assert "NVDA $15.5M PREMIUM (2nd)" in instruction
     assert "NOTABLE OTM" in instruction
-    assert "TELEGRAPHIC, ZERO ADJECTIVES" in instruction
+
+    prompt = flow_synthesis_registry.build_synthesis_prompt("2026-08-28", {"notable_flow": mock_features})
+    assert "CRITICAL FORMAT REQUIREMENT" in prompt
+    assert "TELEGRAPHIC / ZERO ADJECTIVES" in prompt
+    assert "TOP PREMIUM" in prompt
 
 
 def test_notable_flow_point_empty_fallback_none_found():

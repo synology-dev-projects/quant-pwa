@@ -86,8 +86,9 @@ def format_notable_flow_markdown(
         "  • **TOP PREMIUM**:"
     ]
 
-    if top_premium_prints:
-        for p in top_premium_prints:
+    tp = (top_premium_prints or [])[:3]
+    if tp:
+        for p in tp:
             sym = str(p.get("symbol", "")).upper()
             prem = p.get("formatted_premium") or format_currency(p.get("premium"))
             rank = p.get("rank", 1)
@@ -98,8 +99,9 @@ def format_notable_flow_markdown(
 
     lines.append("  • **NOTABLE OTM**:")
 
-    if notable_otm_prints:
-        for o in notable_otm_prints:
+    otm = (notable_otm_prints or [])[:3]
+    if otm:
+        for o in otm:
             sym = str(o.get("symbol", "")).upper()
             otm_pct = abs(float(o.get("otm_pct", 0.0)))
             dte = int(o.get("dte", 0))
@@ -301,4 +303,4 @@ def extract_session_notable_flow_db(
     except Exception as e:
         logger.warning(f"Failed to query session notable OTM flow: {e}")
 
-    return top_premium_prints, notable_otm_prints
+    return top_premium_prints[:3], notable_otm_prints[:3]
