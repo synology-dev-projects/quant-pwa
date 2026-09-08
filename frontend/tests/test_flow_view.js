@@ -336,6 +336,13 @@ const MOCK_FLOW_RESPONSE = {
       { rank: 4, symbol: 'SOXX', contract_count: 4, formatted_premium: '$4.5M', active_days: 2 },
       { rank: 5, symbol: 'ORCL', contract_count: 4, formatted_premium: '$3.7M', active_days: 2 }
     ],
+    top_premium_bearish: [
+      { rank: 1, symbol: 'SPCX', total_premium: 8350000, formatted_premium: '$8.4M', contract_count: 4, active_days: 2 },
+      { rank: 2, symbol: 'PCG', total_premium: 4700000, formatted_premium: '$4.7M', contract_count: 1, active_days: 1 },
+      { rank: 3, symbol: 'MDB', total_premium: 3800000, formatted_premium: '$3.8M', contract_count: 1, active_days: 1 },
+      { rank: 4, symbol: 'LITE', total_premium: 3800000, formatted_premium: '$3.8M', contract_count: 1, active_days: 1 },
+      { rank: 5, symbol: 'XBI', total_premium: 3500000, formatted_premium: '$3.5M', contract_count: 1, active_days: 1 }
+    ],
     top_hits_bearish: [
       { rank: 1, symbol: 'SPCX', contract_count: 2, formatted_premium: '$1.3M', active_days: 1 },
       { rank: 2, symbol: 'PCG', contract_count: 1, formatted_premium: '$4.7M', active_days: 1 },
@@ -344,8 +351,8 @@ const MOCK_FLOW_RESPONSE = {
       { rank: 5, symbol: 'XBI', contract_count: 1, formatted_premium: '$3.5M', active_days: 1 }
     ]
   },
-  window_7d: {
-    market_dates: ['2026-09-04', '2026-09-03', '2026-09-02', '2026-09-01', '2026-08-31', '2026-08-28', '2026-08-27'],
+  window_1w: {
+    market_dates: ['2026-09-04', '2026-09-03', '2026-09-02', '2026-09-01', '2026-08-31'],
     top_premium_bullish: [
       { rank: 1, symbol: 'SMH', total_premium: 27027000, formatted_premium: '$27.0M', contract_count: 6, active_days: 3 },
       { rank: 2, symbol: 'NVDA', total_premium: 26767000, formatted_premium: '$26.8M', contract_count: 9, active_days: 4 },
@@ -354,11 +361,18 @@ const MOCK_FLOW_RESPONSE = {
       { rank: 5, symbol: 'MU', total_premium: 19923000, formatted_premium: '$19.9M', contract_count: 6, active_days: 5 }
     ],
     top_hits_bullish: [
-      { rank: 1, symbol: 'SQQQ', contract_count: 10, formatted_premium: '$4.7M', active_days: 7 },
+      { rank: 1, symbol: 'SQQQ', contract_count: 10, formatted_premium: '$4.7M', active_days: 5 },
       { rank: 2, symbol: 'NVDA', contract_count: 9, formatted_premium: '$26.8M', active_days: 4 },
       { rank: 3, symbol: 'SOXL', contract_count: 8, formatted_premium: '$13.5M', active_days: 3 },
       { rank: 4, symbol: 'SOXX', contract_count: 7, formatted_premium: '$8.1M', active_days: 4 },
       { rank: 5, symbol: 'IREN', contract_count: 7, formatted_premium: '$4.9M', active_days: 5 }
+    ],
+    top_premium_bearish: [
+      { rank: 1, symbol: 'SPCX', total_premium: 10500000, formatted_premium: '$10.5M', contract_count: 5, active_days: 3 },
+      { rank: 2, symbol: 'IREN', total_premium: 4900000, formatted_premium: '$4.9M', contract_count: 3, active_days: 2 },
+      { rank: 3, symbol: 'PCG', total_premium: 4700000, formatted_premium: '$4.7M', contract_count: 1, active_days: 1 },
+      { rank: 4, symbol: 'MDB', total_premium: 3800000, formatted_premium: '$3.8M', contract_count: 1, active_days: 1 },
+      { rank: 5, symbol: 'AAPL', total_premium: 3200000, formatted_premium: '$3.2M', contract_count: 2, active_days: 2 }
     ],
     top_hits_bearish: [
       { rank: 1, symbol: 'IREN', contract_count: 3, formatted_premium: '$4.9M', active_days: 2 },
@@ -367,6 +381,13 @@ const MOCK_FLOW_RESPONSE = {
       { rank: 4, symbol: 'GH', contract_count: 2, formatted_premium: '$2.6M', active_days: 1 },
       { rank: 5, symbol: 'CRM', contract_count: 2, formatted_premium: '$2.2M', active_days: 2 }
     ]
+  },
+  window_7d: {
+    market_dates: ['2026-09-04', '2026-09-03', '2026-09-02', '2026-09-01', '2026-08-31'],
+    top_premium_bullish: [],
+    top_hits_bullish: [],
+    top_premium_bearish: [],
+    top_hits_bearish: []
   }
 };
 
@@ -402,63 +423,13 @@ async function runTests() {
   assert(container.querySelector('#flowDurationToggle'), 'flowDurationToggle is rendered');
   assert(container.querySelector('#cardTopPremium'), 'cardTopPremium card is mounted');
   assert(container.querySelector('#cardTopBullish'), 'cardTopBullish card is mounted');
+  assert(container.querySelector('#cardTopBearishPremium'), 'cardTopBearishPremium card is mounted');
   assert(container.querySelector('#cardTopBearish'), 'cardTopBearish card is mounted');
-  console.log('  ✓ PASS: All 3 primary section cards and controls are mounted in DOM');
+  console.log('  ✓ PASS: All 4 primary section cards and controls are mounted in DOM');
 
   // Test 2: Populate Mock Data & Verify 3D Tables
   console.log('\n--- TEST 2: Populate 3D Data & Verify Table Contents ---');
-  view.currentData = {
-    as_of_date: '2026-09-04',
-    latest_market_day: '2026-09-04',
-    window_3d: {
-      market_dates: ['2026-09-04', '2026-09-03', '2026-09-02'],
-      top_premium_bullish: [
-        { rank: 1, symbol: 'SMH', total_premium: 24467000, formatted_premium: '$24.5M', contract_count: 2, active_days: 1 },
-        { rank: 2, symbol: 'AMD', total_premium: 23763000, formatted_premium: '$23.8M', contract_count: 5, active_days: 3 },
-        { rank: 3, symbol: 'NVDA', total_premium: 23067000, formatted_premium: '$23.1M', contract_count: 8, active_days: 3 },
-        { rank: 4, symbol: 'VIX', total_premium: 12700000, formatted_premium: '$12.7M', contract_count: 1, active_days: 1 },
-        { rank: 5, symbol: 'MSTR', total_premium: 9383000, formatted_premium: '$9.4M', contract_count: 2, active_days: 2 }
-      ],
-      top_hits_bullish: [
-        { rank: 1, symbol: 'NVDA', contract_count: 8, formatted_premium: '$23.1M', active_days: 3 },
-        { rank: 2, symbol: 'AMD', contract_count: 5, formatted_premium: '$23.8M', active_days: 3 },
-        { rank: 3, symbol: 'SKHY', contract_count: 5, formatted_premium: '$7.9M', active_days: 1 },
-        { rank: 4, symbol: 'SOXX', contract_count: 4, formatted_premium: '$4.5M', active_days: 2 },
-        { rank: 5, symbol: 'ORCL', contract_count: 4, formatted_premium: '$3.7M', active_days: 2 }
-      ],
-      top_hits_bearish: [
-        { rank: 1, symbol: 'SPCX', contract_count: 2, formatted_premium: '$1.3M', active_days: 1 },
-        { rank: 2, symbol: 'PCG', contract_count: 1, formatted_premium: '$4.7M', active_days: 1 },
-        { rank: 3, symbol: 'MDB', contract_count: 1, formatted_premium: '$3.8M', active_days: 1 },
-        { rank: 4, symbol: 'LITE', contract_count: 1, formatted_premium: '$3.8M', active_days: 1 },
-        { rank: 5, symbol: 'XBI', contract_count: 1, formatted_premium: '$3.5M', active_days: 1 }
-      ]
-    },
-    window_7d: {
-      market_dates: ['2026-09-04', '2026-09-03', '2026-09-02', '2026-09-01', '2026-08-31', '2026-08-28', '2026-08-27'],
-      top_premium_bullish: [
-        { rank: 1, symbol: 'SMH', total_premium: 27027000, formatted_premium: '$27.0M', contract_count: 6, active_days: 3 },
-        { rank: 2, symbol: 'NVDA', total_premium: 26767000, formatted_premium: '$26.8M', contract_count: 9, active_days: 4 },
-        { rank: 3, symbol: 'VIX', total_premium: 26000000, formatted_premium: '$26.0M', contract_count: 2, active_days: 2 },
-        { rank: 4, symbol: 'AMD', total_premium: 25263000, formatted_premium: '$25.3M', contract_count: 6, active_days: 4 },
-        { rank: 5, symbol: 'MU', total_premium: 19923000, formatted_premium: '$19.9M', contract_count: 6, active_days: 5 }
-      ],
-      top_hits_bullish: [
-        { rank: 1, symbol: 'SQQQ', contract_count: 10, formatted_premium: '$4.7M', active_days: 7 },
-        { rank: 2, symbol: 'NVDA', contract_count: 9, formatted_premium: '$26.8M', active_days: 4 },
-        { rank: 3, symbol: 'SOXL', contract_count: 8, formatted_premium: '$13.5M', active_days: 3 },
-        { rank: 4, symbol: 'SOXX', contract_count: 7, formatted_premium: '$8.1M', active_days: 4 },
-        { rank: 5, symbol: 'IREN', contract_count: 7, formatted_premium: '$4.9M', active_days: 5 }
-      ],
-      top_hits_bearish: [
-        { rank: 1, symbol: 'IREN', contract_count: 3, formatted_premium: '$4.9M', active_days: 2 },
-        { rank: 2, symbol: 'SPCX', contract_count: 3, formatted_premium: '$3.5M', active_days: 2 },
-        { rank: 3, symbol: 'AAPL', contract_count: 2, formatted_premium: '$3.2M', active_days: 2 },
-        { rank: 4, symbol: 'GH', contract_count: 2, formatted_premium: '$2.6M', active_days: 1 },
-        { rank: 5, symbol: 'CRM', contract_count: 2, formatted_premium: '$2.2M', active_days: 2 }
-      ]
-    }
-  };
+  view.currentData = MOCK_FLOW_RESPONSE;
 
   view.renderSessionHeader();
   view.renderActiveTables();
@@ -474,22 +445,30 @@ async function runTests() {
   assert.equal(rowsBull.length, 5, 'Top Bullish Hits has 5 rows in 3D');
   assert.equal(rowsBull[0].dataset.ticker, 'NVDA', 'Top Bullish Hits rank 1 is NVDA');
 
+  const rowsBearPrem = container.querySelectorAll('#flowBodyBearishPremium tr[data-ticker]');
+  assert.equal(rowsBearPrem.length, 5, 'Top Bearish Premium has 5 rows in 3D');
+  assert.equal(rowsBearPrem[0].dataset.ticker, 'SPCX', 'Top Bearish Premium rank 1 is SPCX');
+
   const rowsBear = container.querySelectorAll('#flowBodyBearish tr[data-ticker]');
   assert.equal(rowsBear.length, 5, 'Top Bearish Hits has 5 rows in 3D');
   assert.equal(rowsBear[0].dataset.ticker, 'SPCX', 'Top Bearish Hits rank 1 is SPCX');
   console.log('  ✓ PASS: 3D window renders exactly 5 rows per section with correct top tickers');
 
-  // Test 3: Switch to 7D Duration
-  console.log('\n--- TEST 3: Switch to 7D Duration & Verify Re-render ---');
-  const btn7d = container.querySelector('button[data-duration="7d"]');
-  assert(btn7d, '7D duration button found');
-  btn7d.dispatchEvent({ type: 'click' });
+  // Test 3: Switch to 1W Duration
+  console.log('\n--- TEST 3: Switch to 1W Duration & Verify Re-render ---');
+  const btn1w = container.querySelector('button[data-duration="1w"]');
+  assert(btn1w, '1W duration button found');
+  btn1w.dispatchEvent({ type: 'click' });
 
-  assert.equal(view.activeDuration, '7d', 'Active duration switched to 7d');
-  const rowsBull7d = container.querySelectorAll('#flowBodyBullish tr[data-ticker]');
-  assert.equal(rowsBull7d.length, 5, 'Top Bullish Hits has 5 rows in 7D');
-  assert.equal(rowsBull7d[0].dataset.ticker, 'SQQQ', 'Top Bullish Hits rank 1 in 7D is SQQQ');
-  console.log('  ✓ PASS: 7D duration toggle switches and updates tables instantaneously');
+  assert.equal(view.activeDuration, '1w', 'Active duration switched to 1w');
+  const rowsBull1w = container.querySelectorAll('#flowBodyBullish tr[data-ticker]');
+  assert.equal(rowsBull1w.length, 5, 'Top Bullish Hits has 5 rows in 1W');
+  assert.equal(rowsBull1w[0].dataset.ticker, 'SQQQ', 'Top Bullish Hits rank 1 in 1W is SQQQ');
+
+  const rowsBearPrem1w = container.querySelectorAll('#flowBodyBearishPremium tr[data-ticker]');
+  assert.equal(rowsBearPrem1w.length, 5, 'Top Bearish Premium has 5 rows in 1W');
+  assert.equal(rowsBearPrem1w[0].dataset.ticker, 'SPCX', 'Top Bearish Premium rank 1 in 1W is SPCX');
+  console.log('  ✓ PASS: 1W duration toggle switches and updates tables instantaneously');
 
   // Test 4: Cockpit Drill-Down
   console.log('\n--- TEST 4: Cockpit Drill-Down on Row Click ---');

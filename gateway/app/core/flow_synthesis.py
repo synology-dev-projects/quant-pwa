@@ -5,33 +5,29 @@ Extensible, Pluggable Synthesis Engine for Institutional Options Flow Analysis.
 Enforces:
 1. Pluggable Architecture: Developers can register/unregister analytical points easily.
 2. Initial Core Point:
-   - Notable Flow: Analyzes the latest completed market session across all tickers.
-     Identifies flow records that rank in the top 3 highest premiums to date for that specific ticker,
-     plus deep OTM short-expiry tail-risk speculation (>= 15% OTM, <= 30 DTE).
-3. Strict Constraints: ADHD-Brevity (1-2 punchy sentences per point), bold tickers/numbers, zero trade advice.
+   - Notable Flow: Standardized structured hierarchy:
+     • **Notable Flow**:
+       • **TOP PREMIUM**:
+         - TICKER $XX.XM PREMIUM (1st)
+       • **NOTABLE OTM**:
+         - TICKER XX% OTM exp 2 weeks
+     (or "- NONE FOUND" if empty).
+3. Strict Constraints: Zero trade advice, TELEGRAPHIC / ZERO ADJECTIVES, ADHD-friendly brevity.
 """
 
 from abc import ABC, abstractmethod
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 import logging
 import sqlalchemy as sa
-import pandas as pd
+from app.core.flow_criteria import (
+    extract_session_notable_flow_db,
+    format_notable_flow_markdown,
+    format_rank_suffix,
+    format_dte_exp,
+    format_currency
+)
 
 logger = logging.getLogger("quant.gateway.flow_synthesis")
-
-
-def _format_currency(val: Optional[float]) -> str:
-    if val is None:
-        return "$0"
-    abs_val = abs(val)
-    if abs_val >= 1_000_000_000:
-        return f"${val / 1_000_000_000:.2f}B"
-    elif abs_val >= 1_000_000:
-        return f"${val / 1_000_000:.1f}M"
-    elif abs_val >= 1_000:
-        return f"${val / 1_000:.0f}K"
-    return f"${val:,.0f}"
 
 
 class FlowSynthesisPoint(ABC):
@@ -59,11 +55,14 @@ class FlowSynthesisPoint(ABC):
 
 class NotableFlowPoint(FlowSynthesisPoint):
     """
-    Analyzes all tickers from the latest market session date.
-    Identifies:
-    1. Any flow print that ranks in the top 3 highest premiums EVER recorded for that specific ticker.
-    2. Deep OTM tail-risk speculative flow (>= 15% OTM and <= 30 DTE).
-    3. Fallback to session's dominant whale flow print if no extreme outliers exist.
+    Standardized Notable Flow Point for Flow Tab.
+    Structures outliers across all tickers for latest_date into:
+    • **Notable Flow**:
+      • **TOP PREMIUM**:
+        - TICKER $XX.XM PREMIUM (1st)
+      • **NOTABLE OTM**:
+        - TICKER XX% OTM exp 2 weeks
+    With "- NONE FOUND" fallbacks.
     """
 
     def __init__(self):
@@ -73,200 +72,49 @@ class NotableFlowPoint(FlowSynthesisPoint):
         )
 
     def extract_features(self, conn: sa.Connection, latest_date: str) -> Dict[str, Any]:
-        if not latest_date:
-            return {
-                "latest_date": None,
-                "top_all_time_prints": [],
-                "deep_otm_prints": [],
-                "top_whale_print": None
-            }
-
-        # 1. Query prints from latest_date evaluated against all historical records for each ticker
-        query_all_time = sa.text("""
-            WITH ranked_flow AS (
-                SELECT 
-                    flow_id,
-                    trade_date,
-                    symbol,
-                    order_type,
-                    strike_price,
-                    strike_otm_pct,
-                    expiration_date,
-                    premium,
-                    open_interest,
-                    is_unusual_oi,
-                    DENSE_RANK() OVER (PARTITION BY symbol ORDER BY premium DESC) as all_time_rank
-                FROM unusual_option_flow_te
-                WHERE strike_price > 0
-            )
-            SELECT *
-            FROM ranked_flow
-            WHERE trade_date = :latest_date
-              AND all_time_rank <= 3
-            ORDER BY premium DESC
-            LIMIT 5
-        """)
-
-        try:
-            rows_all_time = conn.execute(query_all_time, {"latest_date": latest_date}).mappings().all()
-        except Exception as e:
-            logger.warning(f"Failed to query all_time_rank flow: {e}")
-            rows_all_time = []
-
-        top_all_time_prints = []
-        for r in rows_all_time:
-            top_all_time_prints.append({
-                "symbol": str(r["symbol"]).upper(),
-                "order_type": str(r["order_type"]),
-                "strike": float(r["strike_price"]),
-                "premium": float(r["premium"]),
-                "formatted_premium": _format_currency(float(r["premium"])),
-                "rank": int(r["all_time_rank"]),
-                "expiration_date": str(r["expiration_date"])
-            })
-
-        # 2. Query deep OTM short-expiry speculative prints (>= 15% OTM, <= 30 DTE)
-        query_deep_otm = sa.text("""
-            SELECT 
-                symbol,
-                order_type,
-                strike_price,
-                strike_otm_pct,
-                expiration_date,
-                trade_date,
-                premium,
-                (expiration_date - trade_date) as dte
-            FROM unusual_option_flow_te
-            WHERE trade_date = :latest_date
-              AND strike_price > 0
-              AND ABS(strike_otm_pct) >= 15.0
-              AND (expiration_date - trade_date) <= 30
-            ORDER BY premium DESC
-            LIMIT 5
-        """)
-
-        try:
-            rows_deep_otm = conn.execute(query_deep_otm, {"latest_date": latest_date}).mappings().all()
-        except Exception as e:
-            logger.warning(f"Failed to query deep_otm flow: {e}")
-            rows_deep_otm = []
-
-        deep_otm_prints = []
-        for r in rows_deep_otm:
-            deep_otm_prints.append({
-                "symbol": str(r["symbol"]).upper(),
-                "order_type": str(r["order_type"]),
-                "strike": float(r["strike_price"]),
-                "otm_pct": float(r["strike_otm_pct"]),
-                "dte": int(r["dte"]) if r["dte"] is not None else 0,
-                "premium": float(r["premium"]),
-                "formatted_premium": _format_currency(float(r["premium"]))
-            })
-
-        # 3. Dominant whale print fallback for the session
-        query_top_whale = sa.text("""
-            SELECT 
-                symbol,
-                order_type,
-                strike_price,
-                expiration_date,
-                premium
-            FROM unusual_option_flow_te
-            WHERE trade_date = :latest_date
-              AND strike_price > 0
-            ORDER BY premium DESC
-            LIMIT 1
-        """)
-        try:
-            row_whale = conn.execute(query_top_whale, {"latest_date": latest_date}).mappings().first()
-            top_whale = dict(row_whale) if row_whale else None
-            if top_whale:
-                top_whale["formatted_premium"] = _format_currency(float(top_whale["premium"]))
-        except Exception as e:
-            logger.warning(f"Failed to query top whale flow: {e}")
-            top_whale = None
-
+        top_premium_prints, notable_otm_prints = extract_session_notable_flow_db(conn, latest_date)
         return {
             "latest_date": latest_date,
-            "top_all_time_prints": top_all_time_prints,
-            "deep_otm_prints": deep_otm_prints,
-            "top_whale_print": top_whale
+            "top_premium_prints": top_premium_prints,
+            "top_all_time_prints": top_premium_prints,
+            "notable_otm_prints": notable_otm_prints,
+            "deep_otm_prints": notable_otm_prints
         }
 
     def get_prompt_instruction(self, features: Dict[str, Any]) -> str:
-        all_time_prints = features.get("top_all_time_prints", [])
-        deep_otm = features.get("deep_otm_prints", [])
-        top_whale = features.get("top_whale_print")
-        latest_date = features.get("latest_date", "recent session")
+        top_premium = features.get("top_premium_prints") or features.get("top_all_time_prints") or []
+        notable_otm = features.get("notable_otm_prints") or features.get("deep_otm_prints") or []
 
-        bullets = []
-        if all_time_prints:
-            p_desc = []
-            for p in all_time_prints[:3]:
-                rank_suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(p["rank"], f"{p['rank']}th")
-                p_desc.append(
-                    f"{p['symbol']} {p['order_type']} ({p['formatted_premium']} at strike ${p['strike']:.2f}) "
-                    f"ranking as the {rank_suffix} highest premium on record to date for {p['symbol']}"
-                )
-            bullets.append(f"Session All-Time Outliers: {'; '.join(p_desc)}.")
-        
-        if deep_otm:
-            o_desc = []
-            for o in deep_otm[:2]:
-                o_desc.append(
-                    f"{o['symbol']} strike ${o['strike']:.2f} ({o['otm_pct']:+.1f}% OTM, {o['dte']} DTE, {o['formatted_premium']})"
-                )
-            bullets.append(f"Deep OTM Tail Risk: {'; '.join(o_desc)}.")
+        lines = [
+            f"• **Notable Flow**:",
+            f"  • **TOP PREMIUM**:"
+        ]
+        if top_premium:
+            for p in top_premium:
+                rank_str = format_rank_suffix(p.get("rank", 1))
+                sym = str(p.get("symbol", "")).upper()
+                prem = p.get("formatted_premium") or format_currency(p.get("premium"))
+                lines.append(f"    - {sym} {prem} PREMIUM ({rank_str})")
+        else:
+            lines.append("    - NONE FOUND")
 
-        if not all_time_prints and not deep_otm and top_whale:
-            bullets.append(
-                f"Session Dominant Print: {top_whale['symbol']} {top_whale['order_type']} (${top_whale['formatted_premium']} at strike ${top_whale['strike_price']:.2f})."
-            )
+        lines.append("  • **NOTABLE OTM**:")
+        if notable_otm:
+            for o in notable_otm:
+                sym = str(o.get("symbol", "")).upper()
+                otm_pct = abs(float(o.get("otm_pct", 0.0)))
+                exp_str = format_dte_exp(int(o.get("dte", 0)))
+                lines.append(f"    - {sym} {otm_pct:.0f}% OTM {exp_str}")
+        else:
+            lines.append("    - NONE FOUND")
 
-        context_str = "\n".join(bullets) if bullets else "No extraordinary outlier prints detected for the session."
-
-        return f"""• **Notable Flow**:
-Context:
-{context_str}
-Instructions:
-- Call out any session print that ranks in the top 3 highest premiums ever recorded for that specific ticker (e.g. "**NVDA** $15.5M BUY_CALL recorded the 2nd highest premium to date for NVDA").
-- Mention any aggressive deep OTM short-expiry tail-risk positioning (>=15% OTM, <=30 DTE).
-- If no record-setting prints occurred, summarize the dominant institutional whale positioning.
-- Tone: Punchy, quantitative, objective. Maximum 1-2 concise sentences. Bold all tickers, dollar premiums, and ranks."""
+        lines.append("TELEGRAPHIC, ZERO ADJECTIVES.")
+        return "\n".join(lines)
 
     def generate_deterministic(self, features: Dict[str, Any]) -> str:
-        all_time_prints = features.get("top_all_time_prints", [])
-        deep_otm = features.get("deep_otm_prints", [])
-        top_whale = features.get("top_whale_print")
-
-        parts = []
-        if all_time_prints:
-            p = all_time_prints[0]
-            rank_suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(p["rank"], f"{p['rank']}th")
-            parts.append(
-                f"**{p['symbol']}** {p['order_type']} (**{p['formatted_premium']}**) ranked as the **{rank_suffix} highest premium to date** for {p['symbol']}"
-            )
-            if len(all_time_prints) > 1:
-                p2 = all_time_prints[1]
-                rank2_suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(p2["rank"], f"{p2['rank']}th")
-                parts.append(f"while **{p2['symbol']}** logged its **{rank2_suffix}** largest print (**{p2['formatted_premium']}**)")
-        
-        if deep_otm:
-            o = deep_otm[0]
-            parts.append(
-                f"with aggressive tail speculation in **{o['symbol']}** (**{o['otm_pct']:+.1f}% OTM**, **{o['dte']} DTE**, **{o['formatted_premium']}**)"
-            )
-
-        if not parts:
-            if top_whale:
-                parts.append(
-                    f"Session volume was led by **{top_whale['symbol']}** {top_whale['order_type']} with **{top_whale['formatted_premium']}** at the **${top_whale['strike_price']:.2f}** strike"
-                )
-            else:
-                parts.append("No extraordinary institutional flow outliers were detected in the latest session")
-
-        statement = ", ".join(parts) + "."
-        return f"• **Notable Flow**: {statement}"
+        top_premium = features.get("top_premium_prints") or features.get("top_all_time_prints") or []
+        notable_otm = features.get("notable_otm_prints") or features.get("deep_otm_prints") or []
+        return format_notable_flow_markdown(top_premium, notable_otm)
 
 
 class FlowSynthesisRegistry:
@@ -320,7 +168,8 @@ Provide an ultra-short, highly digestible executive summary of institutional opt
 
 STRICT CONSTRAINTS:
 1. NEVER GIVE TRADE ADVICE: Absolutely NEVER recommend trades, buy/sell actions, entry/exit targets, or financial advice. Provide purely objective quantitative flow analysis.
-2. ADHD-FRIENDLY BREVITY: Output EXACTLY {len(self._points)} short, punchy bullet points under the heading below. Maximum 1-2 concise sentences per bullet. Bold key tickers, dollar amounts, and ranks. Zero fluff.
+2. TELEGRAPHIC / ZERO ADJECTIVES: Never use descriptive or subjective adjectives (no 'heavy', 'primary', 'massive', 'aggressive', 'significant', 'strong', 'critical'). Write in concise telegraphic bullet-form, strictly stating levels, prices, and functional roles.
+3. ADHD-FRIENDLY BREVITY: Output EXACTLY {len(self._points)} points under the heading below. Zero fluff.
 
 ### Market Flow Snapshot
 {instructions_block}

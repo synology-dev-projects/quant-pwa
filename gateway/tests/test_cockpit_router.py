@@ -270,7 +270,7 @@ def test_cockpit_synthesis_stream_deterministic_fallback(auth_header, mock_gex_d
         assert "Microstructure Snapshot" in assembled_text
         assert "Regime & Volatility" in assembled_text
         assert "Key Structural Walls" in assembled_text
-        assert "Institutional Flow" in assembled_text
+        assert "Notable Flow" in assembled_text
         assert "Tactical Action Playbook" not in assembled_text
         assert "Trade Invalidation" not in assembled_text
 
@@ -283,7 +283,7 @@ def test_cockpit_synthesis_stream_with_gemini(auth_header, mock_gex_data, mock_f
     mock_chunk2 = MagicMock()
     mock_chunk2.text = "• **Key Structural Walls**: $140 Call Wall ceiling, $120 Put Wall floor. "
     mock_chunk3 = MagicMock()
-    mock_chunk3.text = "• **Institutional Flow**: 92% Calls with 1 whale sweep."
+    mock_chunk3.text = "• **Notable Flow**:\n  • **TOP PREMIUM**:\n    - NVDA $15.0M PREMIUM (1st)\n  • **NOTABLE OTM**:\n    - NONE FOUND"
 
     async def fake_async_stream(*args, **kwargs):
         for chk in [mock_chunk1, mock_chunk2, mock_chunk3]:
@@ -318,7 +318,7 @@ def test_cockpit_synthesis_stream_with_gemini(auth_header, mock_gex_data, mock_f
         assert "Microstructure Snapshot" in assembled_text
         assert "Regime & Volatility" in assembled_text
         assert "Key Structural Walls" in assembled_text
-        assert "Institutional Flow" in assembled_text
+        assert "Notable Flow" in assembled_text
         assert "Tactical Action Playbook" not in assembled_text
 
 

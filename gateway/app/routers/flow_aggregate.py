@@ -44,6 +44,7 @@ def _fetch_window_aggregates(conn: sa.Connection, dates: List[str]) -> Dict[str,
             "market_dates": [],
             "top_premium_bullish": [],
             "top_hits_bullish": [],
+            "top_premium_bearish": [],
             "top_hits_bearish": []
         }
 
@@ -103,7 +104,35 @@ def _fetch_window_aggregates(conn: sa.Connection, dates: List[str]) -> Dict[str,
             "active_days": int(r["active_days"])
         })
 
-    # 3. Top 5 Bearish by Number of Hits / Contracts
+    # 3. Top 5 Bearish by Premium Spent
+    q_bear_prem = sa.text("""
+        SELECT 
+            symbol,
+            COALESCE(SUM(premium), 0) AS total_premium,
+            COUNT(*) AS contract_count,
+            COUNT(DISTINCT trade_date) AS active_days
+        FROM unusual_option_flow_te
+        WHERE trade_date = ANY(:dates)
+          AND order_type IN ('BUY_PUT', 'SELL_CALL')
+          AND strike_price > 0
+        GROUP BY symbol
+        ORDER BY total_premium DESC, contract_count DESC
+        LIMIT 5
+    """)
+    rows_bear_prem = conn.execute(q_bear_prem, {"dates": dates}).mappings().all()
+    top_premium_bearish = []
+    for idx, r in enumerate(rows_bear_prem, start=1):
+        prem = float(r["total_premium"])
+        top_premium_bearish.append({
+            "rank": idx,
+            "symbol": str(r["symbol"]).upper(),
+            "total_premium": prem,
+            "formatted_premium": _format_currency(prem),
+            "contract_count": int(r["contract_count"]),
+            "active_days": int(r["active_days"])
+        })
+
+    # 4. Top 5 Bearish by Number of Hits / Contracts
     q_bear_hits = sa.text("""
         SELECT 
             symbol,
@@ -135,6 +164,7 @@ def _fetch_window_aggregates(conn: sa.Connection, dates: List[str]) -> Dict[str,
         "market_dates": dates,
         "top_premium_bullish": top_premium_bullish,
         "top_hits_bullish": top_hits_bullish,
+        "top_premium_bearish": top_premium_bearish,
         "top_hits_bearish": top_hits_bearish
     }
 
@@ -145,11 +175,12 @@ def get_flow_aggregate(
     _: str = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
-    Returns aggregated institutional options flow rankings across two duration windows (3-day and 7-day).
+    Returns aggregated institutional options flow rankings across two duration windows (3-day and 1-week/5-session).
     Includes:
       1. Top 5 Bullish by Premium Spent
       2. Top 5 Bullish by Contract Hits
-      3. Top 5 Bearish by Contract Hits
+      3. Top 5 Bearish by Premium Spent
+      4. Top 5 Bearish by Contract Hits
     Zero client derivation required.
     """
     try:
@@ -192,16 +223,17 @@ def get_flow_aggregate(
             resolved_as_of = distinct_dates_str[0] if distinct_dates_str else None
 
             dates_3d = distinct_dates_str[:3]
-            dates_7d = distinct_dates_str[:7]
+            dates_1w = distinct_dates_str[:5]
 
             window_3d = _fetch_window_aggregates(conn, dates_3d)
-            window_7d = _fetch_window_aggregates(conn, dates_7d)
+            window_1w = _fetch_window_aggregates(conn, dates_1w)
 
             return {
                 "as_of_date": resolved_as_of,
                 "latest_market_day": str(get_last_market_day()),
                 "window_3d": window_3d,
-                "window_7d": window_7d,
+                "window_1w": window_1w,
+                "window_7d": window_1w,  # Backward-compatible alias for 1W
                 "generated_at": datetime.now().isoformat()
             }
 
