@@ -151,6 +151,90 @@ def cmd_staging_bug(args):
     print("==================================================================")
 
 
+def cmd_reviewer_dealbreaker(args):
+    name = args.name or "reviewer-dealbreaker"
+    reviewer = getattr(args, "reviewer", "architect") or "architect"
+    current = get_current_state()
+    if not current:
+        print("[ERROR] No active workflow. 'reviewer-dealbreaker' requires an active workflow.", file=sys.stderr)
+        sys.exit(1)
+
+    if current.get("parent_workflow"):
+        print(f"[ERROR] Already in a nested defect workflow: '{current.get('task_name')}'. Resolve it first.", file=sys.stderr)
+        sys.exit(1)
+
+    parent_snapshot = dict(current)
+
+    defect_state = {
+        "schema_version": "1.1.0",
+        "workflow_id": f"DEALBREAKER-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}",
+        "workflow_type": "bug",
+        "task_name": f"[{reviewer.upper()}] {name}",
+        "active_node": "PHASE_1_RED_GATE",
+        "reproduction_test": None,
+        "parent_workflow": parent_snapshot,
+        "guards": {
+            "plan_approved": True,
+            "red_state_verified": False,
+            "green_state_verified": False,
+            "adversarial_audit_passed": False,
+            "staging_verified": False,
+            "production_authorized": False
+        },
+        "audit_trail": [
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "event": "REVIEWER_DEALBREAKER_INTERCEPT",
+                "node": "PHASE_1_RED_GATE",
+                "details": f"Reviewer '{reviewer}' raised dealbreaker '{name}' intercepting parent workflow '{parent_snapshot.get('task_name')}' ({parent_snapshot.get('workflow_id')})"
+            }
+        ]
+    }
+    save_state(defect_state)
+    print("==================================================================")
+    print("  [INTERCEPT] REVIEWER DEALBREAKER SUB-WORKFLOW INITIALIZED")
+    print("==================================================================")
+    print(f"   Dealbreaker ID:  {defect_state['workflow_id']}")
+    print(f"   Reviewer:        {reviewer.upper()}")
+    print(f"   Task:            {defect_state['task_name']}")
+    print("   Active Node:     PHASE_1_RED_GATE (Bug Remediation Protocol Active)")
+    print(f"   Parent Workflow: {parent_snapshot.get('task_name')} (SUSPENDED at {parent_snapshot.get('active_node')})")
+    print("   Next Action:     Write reproduction test and run: python scripts/protocol_graph.py red --test <path>")
+    print("==================================================================")
+
+
+def cmd_resolve_defect(args):
+    state = get_current_state()
+    if not state or not state.get("parent_workflow"):
+        print("[ERROR] No active nested defect to resolve.", file=sys.stderr)
+        sys.exit(1)
+
+    parent = state["parent_workflow"]
+    defect_name = state.get("task_name")
+    defect_id = state.get("workflow_id")
+
+    if not state["guards"].get("red_state_verified") or not state["guards"].get("green_state_verified"):
+        print("[ERROR] Cannot resolve defect without verified RED and GREEN gates.", file=sys.stderr)
+        sys.exit(1)
+    if not state["guards"].get("adversarial_audit_passed"):
+        print("[ERROR] Cannot resolve defect without passing adversarial audit.", file=sys.stderr)
+        sys.exit(1)
+
+    parent_state = dict(parent)
+    if parent_state.get("active_node") in ["PHASE_5_STAGING", "PHASE_6_PRODUCTION_GATE"]:
+        parent_state["active_node"] = "PHASE_5_STAGING"
+        parent_state["guards"]["staging_verified"] = False
+    append_audit(parent_state, "DEFECT_RESOLVED", f"Defect '{defect_name}' ({defect_id}) verified and resolved. Parent workflow resumed.")
+    save_state(parent_state)
+
+    print("==================================================================")
+    print("  [RESOLVED] DEFECT COMPLETED & VERIFIED")
+    print("==================================================================")
+    print(f"   Defect '{defect_name}' has been successfully verified.")
+    print(f"   Parent workflow '{parent_state.get('task_name')}' resumed at: {parent_state.get('active_node')}.")
+    print("==================================================================")
+
+
 def cmd_cancel_bug(args):
     state = get_current_state()
     if not state or not state.get("parent_workflow"):
@@ -458,6 +542,11 @@ def main():
     p_sbug = subparsers.add_parser("staging-bug", help="Spawn a nested bug remediation workflow from staging")
     p_sbug.add_argument("--name", required=True, help="Defect description / bug name")
 
+    p_rdeal = subparsers.add_parser("reviewer-dealbreaker", help="Spawn a nested bug remediation workflow from reviewer dealbreaker")
+    p_rdeal.add_argument("--name", required=True, help="Dealbreaker description / bug name")
+    p_rdeal.add_argument("--reviewer", default="architect", help="Reviewer role (e.g. architect, quality, security)")
+
+    subparsers.add_parser("resolve-defect", help="Resolve active nested defect / dealbreaker and resume parent workflow")
     subparsers.add_parser("cancel-bug", help="Cancel active staging defect and resume parent workflow")
     subparsers.add_parser("status")
     subparsers.add_parser("plan-approve")
@@ -480,6 +569,8 @@ def main():
     dispatch = {
         "start": cmd_start,
         "staging-bug": cmd_staging_bug,
+        "reviewer-dealbreaker": cmd_reviewer_dealbreaker,
+        "resolve-defect": cmd_resolve_defect,
         "cancel-bug": cmd_cancel_bug,
         "status": cmd_status,
         "plan-approve": cmd_plan_approve,

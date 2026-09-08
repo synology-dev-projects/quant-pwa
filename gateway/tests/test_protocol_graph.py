@@ -291,3 +291,47 @@ def test_start_bug_auto_intercepts_at_staging():
     assert state["task_name"] == "defect-beta"
     assert state["parent_workflow"]["task_name"] == "feature-beta"
 
+
+def test_reviewer_dealbreaker_intercept_and_resolve(tmp_path):
+    run_protocol_cli("start", "--type", "feature", "--name", "feature-gamma")
+    run_protocol_cli("plan-approve")
+
+    # Reviewer intercepts with dealbreaker
+    res_deal = run_protocol_cli("reviewer-dealbreaker", "--name", "partition-key-incompatible", "--reviewer", "architect")
+    assert res_deal.returncode == 0
+    assert "REVIEWER DEALBREAKER SUB-WORKFLOW INITIALIZED" in res_deal.stdout
+
+    with open(STATE_FILE, "r", encoding="utf-8") as f:
+        state = json.load(f)
+    assert state["workflow_type"] == "bug"
+    assert "[ARCHITECT] partition-key-incompatible" in state["task_name"]
+    assert state["parent_workflow"]["task_name"] == "feature-gamma"
+    assert state["active_node"] == "PHASE_1_RED_GATE"
+
+    # RED Gate
+    repro = tmp_path / "test_repro.py"
+    repro.write_text("def test_fail(): assert False", encoding="utf-8")
+    res_red = run_protocol_cli("red", "--test", str(repro))
+    assert res_red.returncode == 0
+
+    # GREEN Gate
+    repro.write_text("def test_fail(): assert True", encoding="utf-8")
+    res_green = run_protocol_cli("green")
+    assert res_green.returncode == 0
+
+    # Audit & Resolve Defect
+    env = os.environ.copy()
+    env["PROTOCOL_TEST_AUDIT_DIFF"] = f"{repro.name}\n"
+    res_audit = run_protocol_cli("audit", env=env)
+    assert res_audit.returncode == 0
+
+    res_resolve = run_protocol_cli("resolve-defect")
+    assert res_resolve.returncode == 0
+    assert "DEFECT COMPLETED & VERIFIED" in res_resolve.stdout
+
+    with open(STATE_FILE, "r", encoding="utf-8") as f:
+        parent_state = json.load(f)
+    assert parent_state["task_name"] == "feature-gamma"
+    assert parent_state["parent_workflow"] is None
+
+
