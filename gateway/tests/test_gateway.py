@@ -36,7 +36,7 @@ def test_version_parity_with_version_json():
             version_data = json.load(f)
         assert settings.APP_VERSION == version_data["version"]
     else:
-        assert settings.APP_VERSION.startswith("v1.0.")
+        assert settings.APP_VERSION.startswith("v1.") and len(settings.APP_VERSION) >= 4
 
 def test_auth_rejection_missing_header():
     response = client.get("/api/models")

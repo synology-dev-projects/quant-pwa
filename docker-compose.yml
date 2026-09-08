@@ -47,6 +47,7 @@ services:
     volumes:
       - ${COMMON_LIB_PATH:-../common-lib/common_lib}:/app/common_lib:ro
       - ${COMMON_CONFIG_PATH:-../common_config}:/app/common_config:ro
+      - ./version.json:/app/version.json:ro
     depends_on:
       - quant-db
     healthcheck:
