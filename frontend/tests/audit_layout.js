@@ -19,6 +19,14 @@ const __dirname = path.dirname(__filename);
 const stylesPath = path.resolve(__dirname, '../styles.css');
 const stylesCss = fs.readFileSync(stylesPath, 'utf8');
 
+const flowCssPath = path.resolve(__dirname, '../src/styles/flow.css');
+const flowCss = fs.existsSync(flowCssPath) ? fs.readFileSync(flowCssPath, 'utf8') : '';
+
+const radarCssPath = path.resolve(__dirname, '../src/styles/radar.css');
+const radarCss = fs.existsSync(radarCssPath) ? fs.readFileSync(radarCssPath, 'utf8') : '';
+
+const allCss = `${stylesCss}\n${flowCss}\n${radarCss}`;
+
 // ============================================================================
 // 1. Lightweight CSS Parser & Cascade Computation Engine
 // ============================================================================
@@ -130,7 +138,7 @@ function parseDeclarations(declStr) {
   return decls;
 }
 
-const parsedCssRules = parseCss(stylesCss);
+const parsedCssRules = parseCss(allCss);
 
 // ============================================================================
 // 2. High-Fidelity Mock DOM & Geometry Model
@@ -612,16 +620,6 @@ function buildAuditDomTree() {
   panelHero.className = 'cockpit-panel cockpit-panel-hero';
   dashboard.appendChild(panelHero);
 
-  const pillsGrid = new MockElement('div');
-  pillsGrid.className = 'cockpit-metric-pills';
-  panelHero.appendChild(pillsGrid);
-
-  for (const pillId of ['pillConfluence', 'pillRegime', 'pillFlowRatio', 'pillWallRange']) {
-    const pill = new MockElement('div', pillId);
-    pill.className = 'metric-pill bullish';
-    pillsGrid.appendChild(pill);
-  }
-
   const synthBox = new MockElement('div');
   synthBox.className = 'synthesis-content-box';
   panelHero.appendChild(synthBox);
@@ -718,6 +716,27 @@ function buildAuditDomTree() {
   const nextBtn = new MockElement('button');
   nextBtn.className = 'bb-page-btn btn-next';
   paginationBar.appendChild(nextBtn);
+
+  // Flow Tab Container
+  const flowTab = new MockElement('div', 'tab-flow');
+  flowTab.className = 'tab-pane';
+  tabContent.appendChild(flowTab);
+
+  const flowViewContainer = new MockElement('div');
+  flowViewContainer.className = 'flow-view-container';
+  flowTab.appendChild(flowViewContainer);
+
+  const flowPanelHero = new MockElement('div', 'flowPanelHero');
+  flowPanelHero.className = 'flow-panel-hero';
+  flowViewContainer.appendChild(flowPanelHero);
+
+  const flowHeroHeader = new MockElement('div');
+  flowHeroHeader.className = 'flow-hero-header';
+  flowPanelHero.appendChild(flowHeroHeader);
+
+  const flowSynthBox = new MockElement('div', 'flowSynthesisMarkdown');
+  flowSynthBox.className = 'synthesis-content-box';
+  flowPanelHero.appendChild(flowSynthBox);
 
 
   // 5. Settings Modal
@@ -862,7 +881,7 @@ function buildAuditDomTree() {
   lightboxContent.className = 'lightbox-content';
   lightboxOverlay.appendChild(lightboxContent);
 
-  return { root, app, settingsModal, diagModal, lockScreen, lightboxOverlay, cockpitTab };
+  return { root, app, settingsModal, diagModal, lockScreen, lightboxOverlay, cockpitTab, flowTab };
 }
 
 // ============================================================================
@@ -892,7 +911,7 @@ const viewports = [
   { name: 'Desktop Landscape', width: 1280 }
 ];
 
-const { root, app, settingsModal, diagModal, lockScreen, lightboxOverlay, cockpitTab } = buildAuditDomTree();
+const { root, app, settingsModal, diagModal, lockScreen, lightboxOverlay, cockpitTab, flowTab } = buildAuditDomTree();
 
 // ----------------------------------------------------------------------------
 // AUDIT 1: Responsive Viewport Geometry (375px, 768px, 1280px)
@@ -1043,8 +1062,9 @@ for (const vp of viewports) {
   const p1Style = p1El.computeStyle(vp.width);
   assertTest(p1Style.boxSizing === 'border-box', `[${vp.width}px] Cockpit Panel 1 has box-sizing: border-box`);
 
-  const p1PillsStyle = p1El.querySelector('.cockpit-metric-pills').computeStyle(vp.width);
-  assertTest(p1PillsStyle.display === 'grid', `[${vp.width}px] Panel 1 metric pills use auto-fitting responsive grid`);
+  const synthBoxStyle = p1El.querySelector('.synthesis-content-box').computeStyle(vp.width);
+  assertTest(synthBoxStyle.boxSizing === 'border-box' && synthBoxStyle.paddingTop === '12px', `[${vp.width}px] Panel 1 synthesis box rendered with clean flush structure`);
+  assertTest(p1El.querySelector('.cockpit-metric-pills') === null, `[${vp.width}px] Panel 1 metric pills completely removed`);
 
   // 4. Panel 2: Interactive Exposure Chart
   const p2El = cockpitTab.querySelector('#cockpitPanelChart');
@@ -1078,6 +1098,12 @@ for (const vp of viewports) {
 
   const paginationStyle = p3El.querySelector('.bb-pagination').computeStyle(vp.width);
   assertTest(paginationStyle.display === 'flex', `[${vp.width}px] Bloomberg pagination toolbar displays as flex`);
+
+  // 7. Flow Tab Hero Card
+  const flowHeroEl = flowTab.querySelector('#flowPanelHero');
+  const flowHeroStyle = flowHeroEl.computeStyle(vp.width);
+  assertTest(flowHeroStyle.boxSizing === 'border-box', `[${vp.width}px] Flow Hero Panel has box-sizing: border-box`);
+  assertTest(flowHeroStyle.display === 'flex', `[${vp.width}px] Flow Hero Panel has flex column layout`);
 }
 
 // ============================================================================

@@ -75,30 +75,6 @@ export class CockpitView {
               <span class="panel-live-tag" id="panelLiveTag"><span class="status-dot dot-live"></span><span class="tag-text">READY</span></span>
             </div>
 
-            <!-- Visual Metric Pills -->
-            <div class="cockpit-metric-pills" id="cockpitMetricPills">
-              <span class="metric-pill bias-pill neutral" id="pillConfluence">
-                <span class="pill-dot"></span>
-                <span class="pill-title">CONFLUENCE BIAS</span>
-                <strong class="pill-val">--</strong>
-              </span>
-              <span class="metric-pill regime-pill neutral" id="pillRegime">
-                <span class="pill-dot"></span>
-                <span class="pill-title">GAMMA REGIME</span>
-                <strong class="pill-val">--</strong>
-              </span>
-              <span class="metric-pill flow-pill neutral" id="pillFlowRatio">
-                <span class="pill-dot"></span>
-                <span class="pill-title">30D FLOW RATIO</span>
-                <strong class="pill-val">--</strong>
-              </span>
-              <span class="metric-pill wall-pill neutral" id="pillWallRange">
-                <span class="pill-dot"></span>
-                <span class="pill-title">WALL RANGE</span>
-                <strong class="pill-val">--</strong>
-              </span>
-            </div>
-
             <!-- Live SSE streaming content area -->
             <div class="synthesis-content-box" id="synthesisContentBox">
               <div class="markdown-body" id="synthesisMarkdown">
@@ -413,17 +389,6 @@ export class CockpitView {
       liveTag.innerHTML = `<span class="status-dot dot-live pulse"></span><span class="tag-text">STREAMING</span>`;
     }
 
-    // Pills loading
-    const pills = ['#pillConfluence', '#pillRegime', '#pillFlowRatio', '#pillWallRange'];
-    pills.forEach(selector => {
-      const el = this.container.querySelector(selector);
-      if (el) {
-        el.className = `metric-pill loading`;
-        const valEl = el.querySelector('.pill-val');
-        if (valEl) valEl.textContent = 'Loading...';
-      }
-    });
-
     // Synthesis loading typing indicator
     const synthBox = this.container.querySelector('#synthesisMarkdown');
     if (synthBox) {
@@ -596,78 +561,13 @@ export class CockpitView {
   renderDataPanels(data) {
     if (!this.container || !data) return;
 
-    // 1. Metric Pills in Hero Panel
-    this.renderMetricPills(data);
-
-    // 2. Key Levels Strip & QuantChart in Panel 2
+    // 1. Key Levels Strip & QuantChart in Panel 2
     this.renderExposureChart(data);
 
-    // 3. 30-Day Options Flow Table in Panel 3
+    // 2. 30-Day Options Flow Table in Panel 3
     const flowObj = data.flow || {};
     this.allFlowPrints = flowObj.records || data.flow_prints || [];
     this.renderFlowTable();
-  }
-
-  renderMetricPills(data) {
-    const metrics = data.metrics || {};
-    const gex = data.gex || {};
-
-    const confluence = metrics.confluence_bias || data.confluence_bias || 'NEUTRAL PIN';
-    const regime = metrics.gamma_regime || gex.gamma_regime || data.gamma_regime || 'LONG GAMMA (+GEX)';
-    
-    let flowRatio = data.flow_ratio;
-    if (!flowRatio && metrics.call_pct !== undefined) {
-      flowRatio = `${metrics.call_pct.toFixed(0)}% CALL FLOW`;
-    }
-    flowRatio = flowRatio || '68% CALL FLOW';
-
-    const putWall = metrics.put_wall || gex.put_wall || data.put_wall;
-    const callWall = metrics.call_wall || gex.call_wall || data.call_wall;
-    const wallRange = (putWall && callWall) ? `$${Number(putWall).toFixed(0)} ↔ $${Number(callWall).toFixed(0)}` : (data.wall_range || 'N/A');
-
-    // Confluence Bias Pill
-    const pillConfluence = this.container.querySelector('#pillConfluence');
-    if (pillConfluence) {
-      let biasClass = 'neutral';
-      if (confluence.includes('BULLISH')) biasClass = 'bullish';
-      else if (confluence.includes('BEARISH')) biasClass = 'bearish';
-
-      pillConfluence.className = `metric-pill bias-pill ${biasClass}`;
-      const valEl = pillConfluence.querySelector('.pill-val');
-      if (valEl) valEl.textContent = confluence;
-    }
-
-    // Gamma Regime Pill
-    const pillRegime = this.container.querySelector('#pillRegime');
-    if (pillRegime) {
-      let regimeClass = 'neutral';
-      if (regime.includes('+GEX') || regime.includes('LONG') || regime.includes('Positive')) regimeClass = 'bullish';
-      else if (regime.includes('-GEX') || regime.includes('SHORT') || regime.includes('Negative')) regimeClass = 'bearish';
-
-      pillRegime.className = `metric-pill regime-pill ${regimeClass}`;
-      const valEl = pillRegime.querySelector('.pill-val');
-      if (valEl) valEl.textContent = regime;
-    }
-
-    // 30D Flow Ratio Pill
-    const pillFlowRatio = this.container.querySelector('#pillFlowRatio');
-    if (pillFlowRatio) {
-      let flowClass = 'bullish';
-      if (flowRatio.includes('PUT') || flowRatio.includes('BEAR') || (metrics.put_pct > 55)) flowClass = 'bearish';
-      else if (flowRatio.includes('NEUTRAL')) flowClass = 'neutral';
-
-      pillFlowRatio.className = `metric-pill flow-pill ${flowClass}`;
-      const valEl = pillFlowRatio.querySelector('.pill-val');
-      if (valEl) valEl.textContent = flowRatio;
-    }
-
-    // Wall Range Pill
-    const pillWallRange = this.container.querySelector('#pillWallRange');
-    if (pillWallRange) {
-      pillWallRange.className = `metric-pill wall-pill accent`;
-      const valEl = pillWallRange.querySelector('.pill-val');
-      if (valEl) valEl.textContent = wallRange;
-    }
   }
 
   renderExposureChart(data) {

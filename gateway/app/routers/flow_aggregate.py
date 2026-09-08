@@ -1,12 +1,17 @@
 import logging
+import json
+import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import date, datetime
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
+from fastapi.responses import StreamingResponse
 import sqlalchemy as sa
 import pandas as pd
 
+from app.config import settings
 from app.core.auth import get_current_user
 from app.routers.flow_status import get_last_market_day
+from app.core.flow_synthesis import flow_synthesis_registry
 
 logger = logging.getLogger("quant.gateway.flow_aggregate")
 
@@ -203,3 +208,118 @@ def get_flow_aggregate(
     except Exception as ex:
         logger.error(f"Failed to calculate flow aggregates: {ex}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error querying flow aggregates: {ex}")
+
+
+@router.post("/synthesis/stream")
+@router.get("/synthesis/stream")
+async def stream_flow_synthesis(
+    request: Request,
+    as_of_date: Optional[str] = Query(None, description="Anchor trade date (YYYY-MM-DD)"),
+    _: str = Depends(get_current_user)
+):
+    """
+    Streams the Flow Executive Synthesis (Notable Flow) using Gemini API or deterministic fallback.
+    Delivers Server-Sent Events (SSE) tokens for real-time rendering on the Flow Hero Card.
+    """
+    async def sse_generator():
+        try:
+            # 1. Resolve target session date and database engine
+            target_date = as_of_date
+            features = {}
+            try:
+                engine = _get_engine()
+                with engine.connect() as conn:
+                    if not target_date:
+                        last_mkt_day = str(get_last_market_day())
+                        date_query = sa.text("""
+                            SELECT DISTINCT trade_date
+                            FROM unusual_option_flow_te
+                            WHERE trade_date <= :last_market_day
+                              AND strike_price > 0
+                            ORDER BY trade_date DESC
+                            LIMIT 1
+                        """)
+                        row = conn.execute(date_query, {"last_market_day": last_mkt_day}).first()
+                        if not row:
+                            fallback_query = sa.text("""
+                                SELECT DISTINCT trade_date
+                                FROM unusual_option_flow_te
+                                WHERE strike_price > 0
+                                ORDER BY trade_date DESC
+                                LIMIT 1
+                            """)
+                            row = conn.execute(fallback_query).first()
+                        target_date = str(row[0]) if row else str(date.today())
+
+                    features = flow_synthesis_registry.extract_all_features(conn, target_date)
+            except Exception as db_err:
+                logger.warning(f"Database error while extracting flow synthesis features: {db_err}")
+                target_date = target_date or str(date.today())
+                features = {}
+
+            # 2. Try Gemini API Streaming if configured
+            if settings.GEMINI_API_KEY:
+                try:
+                    from google import genai
+                    from google.genai import types
+
+                    prompt = flow_synthesis_registry.build_synthesis_prompt(target_date, features)
+                    client = genai.Client(
+                        api_key=settings.GEMINI_API_KEY,
+                        http_options=types.HttpOptions(timeout=60000, retry_options=types.HttpRetryOptions(attempts=1))
+                    )
+
+                    model_name = settings.TIER1_FAST_WORKER_MODEL or "gemini-3.5-flash-lite"
+                    gen_config = types.GenerateContentConfig(
+                        temperature=0.2,
+                        system_instruction="You are Quant AI, an elite institutional options flow strategist."
+                    )
+
+                    response_stream = await client.aio.models.generate_content_stream(
+                        model=model_name,
+                        contents=prompt,
+                        config=gen_config
+                    )
+
+                    async for chunk in response_stream:
+                        if await request.is_disconnected():
+                            logger.info("Client disconnected during flow synthesis stream")
+                            return
+                        if chunk.text:
+                            payload_json = json.dumps({"type": "token", "content": chunk.text})
+                            yield f"data: {payload_json}\n\n"
+
+                    yield "data: [DONE]\n\n"
+                    return
+                except Exception as genai_err:
+                    logger.warning(f"Gemini API error during flow synthesis: {genai_err}. Falling back to deterministic generator.")
+
+            # 3. Fallback deterministic generator
+            fallback_text = flow_synthesis_registry.generate_deterministic_synthesis(features)
+            words = fallback_text.split(" ")
+            for i, word in enumerate(words):
+                if await request.is_disconnected():
+                    return
+                space = " " if i < len(words) - 1 else ""
+                token_payload = json.dumps({"type": "token", "content": word + space})
+                yield f"data: {token_payload}\n\n"
+                await asyncio.sleep(0.005)
+
+            yield "data: [DONE]\n\n"
+
+        except Exception as e:
+            logger.error(f"Flow synthesis streaming failure: {e}", exc_info=True)
+            err_payload = json.dumps({"type": "error", "message": str(e)})
+            yield f"data: {err_payload}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
