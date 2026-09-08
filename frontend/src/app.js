@@ -3,6 +3,7 @@ import { TabManager } from './tabs/tab_manager.js?v=30';
 import { ChatView } from './tabs/chat_view.js?v=30';
 import { CockpitView } from './tabs/cockpit_view.js?v=30';
 import { RadarView } from './tabs/radar_view.js?v=31';
+import { FlowView } from './tabs/flow_view.js?v=32';
 import { PromptInput } from './components/prompt_input.js?v=30';
 import { Lightbox } from './components/lightbox.js?v=30';
 import { LockScreen } from './components/lock_screen.js?v=30';
@@ -21,6 +22,7 @@ class App {
     this.chatView = new ChatView();
     this.cockpitView = new CockpitView();
     this.radarView = new RadarView();
+    this.flowView = new FlowView();
     this.lightbox = new Lightbox();
     window.quantLightbox = this.lightbox;
 
@@ -89,6 +91,9 @@ class App {
         this.radarView.loadScanData();
       }
     }
+    if (this.flowView && AppState.getActiveTab() === 'flow') {
+      this.flowView.loadFlowData();
+    }
 
     // Load initial chat history
     const history = AppState.getHistory();
@@ -103,12 +108,17 @@ class App {
     this.tabManager = new TabManager(tabBar, tabContent, (tabId) => {
       AppState.setActiveTab(tabId);
       if (promptContainer) {
-        promptContainer.style.display = (tabId === 'cockpit' || tabId === 'radar') ? 'none' : 'block';
+        promptContainer.style.display = (tabId === 'cockpit' || tabId === 'radar' || tabId === 'flow') ? 'none' : 'block';
       }
       if (tabId === 'radar' && this.radarView) {
         if (!this.radarView.currentData || !this.radarView.currentData.summary) {
           this.radarView.loadAvailableDates();
           this.radarView.loadScanData();
+        }
+      }
+      if (tabId === 'flow' && this.flowView) {
+        if (!this.flowView.currentData) {
+          this.flowView.loadFlowData();
         }
       }
     });
@@ -129,7 +139,15 @@ class App {
       render: (container) => this.radarView.render(container)
     });
 
-    // 3. Chat Stream Tab
+    // 3. Options Flow Aggregate Tab
+    this.tabManager.registerTab({
+      id: 'flow',
+      title: 'Flow',
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>`,
+      render: (container) => this.flowView.render(container)
+    });
+
+    // 4. Chat Stream Tab
     this.tabManager.registerTab({
       id: 'chat',
       title: 'Chat Stream',

@@ -27,6 +27,7 @@ from contextlib import asynccontextmanager
 from app.mcp import mcp_router, mcp_client_manager, mcp_sse_endpoint, mcp_post_message
 from app.routers.cockpit import router as cockpit_router
 from app.routers.flow_status import router as flow_status_router
+from app.routers.flow_aggregate import router as flow_aggregate_router
 from app.routers.quant_levels_status import router as quant_levels_status_router
 from app.routers.scanner import router as scanner_router
 from app.tools.gexdex_tool import run_cache_warmer_loop
@@ -125,6 +126,9 @@ app.include_router(
     flow_status_router,
     prefix="/api/flow"
 )
+
+# Mount Options Flow Aggregates Router
+app.include_router(flow_aggregate_router)
 
 # Mount Quant Levels Ingestion Status Router
 app.include_router(
