@@ -612,16 +612,6 @@ function buildAuditDomTree() {
   panelHero.className = 'cockpit-panel cockpit-panel-hero';
   dashboard.appendChild(panelHero);
 
-  const pillsGrid = new MockElement('div');
-  pillsGrid.className = 'cockpit-metric-pills';
-  panelHero.appendChild(pillsGrid);
-
-  for (const pillId of ['pillConfluence', 'pillRegime', 'pillFlowRatio', 'pillWallRange']) {
-    const pill = new MockElement('div', pillId);
-    pill.className = 'metric-pill bullish';
-    pillsGrid.appendChild(pill);
-  }
-
   const synthBox = new MockElement('div');
   synthBox.className = 'synthesis-content-box';
   panelHero.appendChild(synthBox);
@@ -1043,8 +1033,9 @@ for (const vp of viewports) {
   const p1Style = p1El.computeStyle(vp.width);
   assertTest(p1Style.boxSizing === 'border-box', `[${vp.width}px] Cockpit Panel 1 has box-sizing: border-box`);
 
-  const p1PillsStyle = p1El.querySelector('.cockpit-metric-pills').computeStyle(vp.width);
-  assertTest(p1PillsStyle.display === 'grid', `[${vp.width}px] Panel 1 metric pills use auto-fitting responsive grid`);
+  const synthBoxStyle = p1El.querySelector('.synthesis-content-box').computeStyle(vp.width);
+  assertTest(synthBoxStyle.boxSizing === 'border-box' && synthBoxStyle.paddingTop === '12px', `[${vp.width}px] Panel 1 synthesis box rendered with clean flush structure`);
+  assertTest(p1El.querySelector('.cockpit-metric-pills') === null, `[${vp.width}px] Panel 1 metric pills completely removed`);
 
   // 4. Panel 2: Interactive Exposure Chart
   const p2El = cockpitTab.querySelector('#cockpitPanelChart');

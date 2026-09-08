@@ -240,83 +240,18 @@ async def get_cockpit_data_post(req: CockpitRequest):
     )
 
 
+from app.core.synthesis import synthesis_registry
+
+
 def _build_synthesis_prompt(ticker: str, payload: Dict[str, Any]) -> str:
     """Constructs prompt for Gemini demanding the 3-Tier Tactical Playbook."""
-    metrics = payload.get("metrics", {})
-    gex = payload.get("gex", {})
-    flow = payload.get("flow", {})
-    records = flow.get("records", [])
-
-    # Extract top 5 prints for prompt context
-    top_prints = []
-    if records:
-        sorted_records = sorted(records, key=lambda r: float(r.get("PREMIUM") or 0.0), reverse=True)[:5]
-        for r in sorted_records:
-            t_date = str(r.get("TRADE_DATE", ""))[:10]
-            prem = float(r.get("PREMIUM") or 0.0)
-            order_type = str(r.get("ORDER_TYPE", "")).replace("_", " ")
-            strike = r.get("STRIKE_PRICE", "N/A")
-            exp = str(r.get("EXPIRATION_DATE", ""))[:10]
-            oi = r.get("OPEN_INTEREST", 0)
-            unusual = " ⚠️" if r.get("IS_UNUSUAL_OI") in (1, True, "1") else ""
-            top_prints.append(f"  • {t_date}: ${prem:,.0f} {order_type} | Strike: ${strike} | Exp: {exp} | OI: {oi}{unusual}")
-
-    prints_block = "\n".join(top_prints) if top_prints else "  • No major institutional whale prints recorded."
-
-    return f"""You are Quant AI's Quantitative Market Microstructure Analyst.
-Provide an ultra-short, highly digestible analysis of the following options microstructure and flow data for {ticker}:
-
-[OPTIONS MICROSTRUCTURE (GEX/DEX)]
-• Spot Price: ${metrics.get('spot_price', 0.0):.2f}
-• Zero Gamma Flip: ${metrics.get('zero_gamma_flip', 0.0):.2f}
-• Call Wall (Major Resistance): ${metrics.get('call_wall', 0.0):.2f}
-• Put Wall (Major Support): ${metrics.get('put_wall', 0.0):.2f}
-• Net GEX: ${metrics.get('net_gex', 0.0):,.2f}
-• Net DEX: ${metrics.get('net_dex', 0.0):,.2f}
-• Gamma Regime: {metrics.get('gamma_regime', 'N/A')}
-• Expected 1-Week Range: ${gex.get('expected_range_low', 'N/A')} to ${gex.get('expected_range_high', 'N/A')} (Expected Move: ${gex.get('expected_move_dollars', 'N/A')})
-
-[30-DAY INSTITUTIONAL OPTIONS FLOW]
-• Total Flow Volume: ${metrics.get('total_30d_flow_volume', 0.0):,.2f}
-• Call Flow: ${metrics.get('call_flow', 0.0):,.2f} ({metrics.get('call_pct', 0.0):.1f}%) | Put Flow: ${metrics.get('put_flow', 0.0):,.2f} ({metrics.get('put_pct', 0.0):.1f}%)
-• Whale Sweeps (> $1M): {metrics.get('whale_count', 0)} prints
-• Unusual OI Alerts: {metrics.get('unusual_oi_count', 0)}
-• Calculated Confluence Bias: {metrics.get('confluence_bias', 'NEUTRAL PIN')}
-
-[HIGH-CONVICTION PRINTS]
-{prints_block}
-
-STRICT CONSTRAINTS:
-1. NEVER GIVE TRADE ADVICE: Absolutely NEVER recommend trades, buy/sell actions, entry/exit targets, or financial advice. Provide purely objective quantitative data analysis.
-2. ADHD-FRIENDLY BREVITY: Output EXACTLY 3 short, punchy bullet points under the heading below. Maximum 1-2 concise sentences per bullet. Bold key numbers and levels. Zero fluff.
-
-### Microstructure Snapshot
-• **Regime & Volatility**: [1-2 punchy sentences on Gamma Regime ({metrics.get('gamma_regime')}), Spot vs Zero Flip (${metrics.get('zero_gamma_flip')}), and whether volatility is dampened or amplified]
-• **Key Structural Walls**: [1 sentence on Call Wall (${metrics.get('call_wall')}) overhead supply and Put Wall (${metrics.get('put_wall')}) downside cushion]
-• **Institutional Flow**: [1 sentence on 30-day Call/Put split ({metrics.get('call_pct')}%), whale count ({metrics.get('whale_count')}), and flow sentiment ({metrics.get('confluence_bias')})]
-"""
+    return synthesis_registry.build_synthesis_prompt(ticker, payload)
 
 
 def _generate_deterministic_synthesis(ticker: str, payload: Dict[str, Any]) -> str:
     """Fallback deterministic synthesis generator when Gemini API is offline or unconfigured."""
-    metrics = payload.get("metrics", {})
-    spot = metrics.get("spot_price", 0.0)
-    cw = metrics.get("call_wall", 0.0)
-    pw = metrics.get("put_wall", 0.0)
-    zg = metrics.get("zero_gamma_flip", 0.0)
-    regime = metrics.get("gamma_regime", "Positive Gamma")
-    bias = metrics.get("confluence_bias", "NEUTRAL PIN")
-    call_pct = metrics.get("call_pct", 0.0)
-    put_pct = metrics.get("put_pct", 0.0)
-    vol = metrics.get("total_30d_flow_volume", 0.0)
-    whales = metrics.get("whale_count", 0)
+    return synthesis_registry.generate_deterministic_synthesis(ticker, payload)
 
-    vol_state = "dampened" if spot >= zg else "amplified"
-    return f"""### Microstructure Snapshot
-• **Regime & Volatility**: **{regime}**. Spot (${spot:.2f}) trades {'above' if spot >= zg else 'below'} Zero Flip (${zg:.2f}), indicating **{vol_state}** realized volatility.
-• **Key Structural Walls**: **Call Wall at ${cw:.2f}** marks upper dealer gamma supply; **Put Wall at ${pw:.2f}** provides structural downside cushion.
-• **Institutional Flow**: **{call_pct:.1f}% Call vs {put_pct:.1f}% Put** across ${vol:,.2f} total volume with **{whales} whale prints**, establishing a **{bias}** profile.
-"""
 
 
 @router.get("/synthesis/stream", summary="Stream Cockpit Tactical Synthesis (GET)")

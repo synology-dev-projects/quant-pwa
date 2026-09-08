@@ -766,19 +766,18 @@ await cockpitView.searchTicker('NVDA');
 const heroBadge = rootContainer.querySelector('#heroTickerBadge');
 assert(heroBadge.textContent === 'NVDA', `Hero badge displays searched ticker NVDA (got ${heroBadge.textContent})`);
 
-const pillConfluence = rootContainer.querySelector('#pillConfluence');
-const pillRegime = rootContainer.querySelector('#pillRegime');
-const pillFlow = rootContainer.querySelector('#pillFlowRatio');
-const pillWall = rootContainer.querySelector('#pillWallRange');
-
-assert(pillConfluence !== null && pillConfluence.textContent.includes('CONFLUENCE'), 'Confluence Bias pill rendered');
-assert(pillConfluence.classList.contains('bullish') || pillConfluence.classList.contains('neutral') || pillConfluence.classList.contains('bearish'), 'Confluence Bias pill has sentiment modifier class');
-assert(pillRegime !== null && pillRegime.textContent.includes('GAMMA'), 'Gamma regime pill rendered');
-assert(pillFlow !== null && pillFlow.textContent.includes('FLOW'), '30D Flow Ratio pill rendered');
-assert(pillWall !== null && pillWall.textContent.includes('WALL'), 'Wall Range pill rendered');
+// Verify metric pills are completely removed (clean flush layout)
+assert(rootContainer.querySelector('#pillConfluence') === null, 'Pill #pillConfluence is not present in DOM');
+assert(rootContainer.querySelector('#pillRegime') === null, 'Pill #pillRegime is not present in DOM');
+assert(rootContainer.querySelector('#pillFlowRatio') === null, 'Pill #pillFlowRatio is not present in DOM');
+assert(rootContainer.querySelector('#pillWallRange') === null, 'Pill #pillWallRange is not present in DOM');
+assert(rootContainer.querySelector('#cockpitMetricPills') === null, 'Container #cockpitMetricPills is not present in DOM');
 
 const synthMarkdown = rootContainer.querySelector('#synthesisMarkdown');
 assert(synthMarkdown !== null && synthMarkdown.innerHTML.includes('Microstructure Snapshot'), 'Synergized synthesis snapshot markdown is rendered');
+assert(synthMarkdown.innerHTML.includes('Regime &amp; Volatility') || synthMarkdown.innerHTML.includes('Regime & Volatility'), 'Synthesis includes Regime & Volatility point');
+assert(synthMarkdown.innerHTML.includes('Key Structural Walls'), 'Synthesis includes Key Structural Walls point');
+assert(synthMarkdown.innerHTML.includes('Institutional Flow'), 'Synthesis includes Institutional Flow point');
 assert(!synthMarkdown.innerHTML.includes('Tactical Playbook'), 'Zero trade advice enforced in synthesis output');
 
 // Verify NVDA Key Levels & Canvas
