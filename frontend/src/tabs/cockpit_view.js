@@ -502,16 +502,21 @@ export class CockpitView {
               }
             }
             if (dataStr) {
+              if (dataStr.trim() === '[DONE]' || dataStr.includes('[DONE]')) {
+                break;
+              }
               try {
                 const parsed = JSON.parse(dataStr);
                 const tokenChunk = parsed.content || parsed.text || parsed.token || '';
-                if (tokenChunk) {
+                if (tokenChunk && tokenChunk !== '[DONE]') {
                   accumulatedText += tokenChunk;
-                  if (synthBox) synthBox.innerHTML = renderMarkdown(accumulatedText);
+                  if (synthBox) synthBox.innerHTML = renderMarkdown(accumulatedText.replace(/\[DONE\]/g, ''));
                 }
               } catch {
-                accumulatedText += dataStr;
-                if (synthBox) synthBox.innerHTML = renderMarkdown(accumulatedText);
+                if (!dataStr.includes('[DONE]')) {
+                  accumulatedText += dataStr;
+                  if (synthBox) synthBox.innerHTML = renderMarkdown(accumulatedText.replace(/\[DONE\]/g, ''));
+                }
               }
             }
           }

@@ -312,6 +312,7 @@ STRICT CONSTRAINTS:
 1. NEVER GIVE TRADE ADVICE: Absolutely NEVER recommend trades, buy/sell actions, entry/exit targets, or financial advice. Provide purely objective quantitative data analysis.
 2. TELEGRAPHIC / ZERO ADJECTIVES: Never use descriptive or subjective adjectives (no 'heavy', 'primary', 'massive', 'aggressive', 'significant', 'strong', 'critical'). Write in concise telegraphic bullet-form, strictly stating levels, prices, and functional roles (e.g. 'Call Wall @ $210 as overhead resistance, Put Wall @ $200 as structural downside floor').
 3. ADHD-FRIENDLY BREVITY: Output EXACTLY {len(self._points)} points under the heading below. Zero fluff.
+4. PRESERVE NOTABLE FLOW SUB-BULLETS: For '• **Notable Flow**:', you MUST strictly keep the sub-headings '• **TOP PREMIUM**:' and '• **NOTABLE OTM**:' with indented hyphens ('    - '). Never collapse or rewrite them into prose.
 
 ### Microstructure Snapshot
 {instructions_block}

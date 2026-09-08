@@ -303,8 +303,8 @@ async def stream_flow_synthesis(
 
                     model_name = settings.TIER1_FAST_WORKER_MODEL or "gemini-3.5-flash-lite"
                     gen_config = types.GenerateContentConfig(
-                        temperature=0.2,
-                        system_instruction="You are Quant AI, an elite institutional options flow strategist."
+                        temperature=0.0,
+                        system_instruction="You are Quant AI, an elite institutional options flow strategist. Always format structured quantitative data exactly to the requested markdown schema."
                     )
 
                     response_stream = await client.aio.models.generate_content_stream(

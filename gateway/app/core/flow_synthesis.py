@@ -82,8 +82,8 @@ class NotableFlowPoint(FlowSynthesisPoint):
         }
 
     def get_prompt_instruction(self, features: Dict[str, Any]) -> str:
-        top_premium = features.get("top_premium_prints") or features.get("top_all_time_prints") or []
-        notable_otm = features.get("notable_otm_prints") or features.get("deep_otm_prints") or []
+        top_premium = (features.get("top_premium_prints") or features.get("top_all_time_prints") or [])[:3]
+        notable_otm = (features.get("notable_otm_prints") or features.get("deep_otm_prints") or [])[:3]
 
         lines = [
             f"• **Notable Flow**:",
@@ -108,7 +108,6 @@ class NotableFlowPoint(FlowSynthesisPoint):
         else:
             lines.append("    - NONE FOUND")
 
-        lines.append("TELEGRAPHIC, ZERO ADJECTIVES.")
         return "\n".join(lines)
 
     def generate_deterministic(self, features: Dict[str, Any]) -> str:
@@ -164,14 +163,29 @@ class FlowSynthesisRegistry:
         instructions_block = "\n".join(point_instructions)
 
         return f"""You are Quant AI's Institutional Options Flow Quantitative Analyst.
-Provide an ultra-short, highly digestible executive summary of institutional options flow from the latest completed market session ({latest_date}):
+Output an ultra-short, highly digestible institutional options flow analysis from the latest completed market session ({latest_date}).
+
+CRITICAL FORMAT REQUIREMENT:
+You MUST format your output EXACTLY as shown in the template below.
+Do NOT combine or summarize nested bullets into prose, paragraphs, or single sentences.
+Do NOT omit the sub-headings "• **TOP PREMIUM**:" or "• **NOTABLE OTM**:".
+Each item under sub-headings must be an indented bullet starting with "    - ".
+
+TEMPLATE:
+### Market Flow Snapshot
+• **Notable Flow**:
+  • **TOP PREMIUM**:
+    - TICKER $XX.XM PREMIUM (rank)
+  • **NOTABLE OTM**:
+    - TICKER XX% OTM exp X weeks
+(If a subcategory has no items, output "    - NONE FOUND").
 
 STRICT CONSTRAINTS:
-1. NEVER GIVE TRADE ADVICE: Absolutely NEVER recommend trades, buy/sell actions, entry/exit targets, or financial advice. Provide purely objective quantitative flow analysis.
-2. TELEGRAPHIC / ZERO ADJECTIVES: Never use descriptive or subjective adjectives (no 'heavy', 'primary', 'massive', 'aggressive', 'significant', 'strong', 'critical'). Write in concise telegraphic bullet-form, strictly stating levels, prices, and functional roles.
-3. ADHD-FRIENDLY BREVITY: Output EXACTLY {len(self._points)} points under the heading below. Zero fluff.
+1. NEVER GIVE TRADE ADVICE: Absolutely NEVER recommend trades, buy/sell actions, entry/exit targets, or financial advice. Purely objective quantitative data.
+2. TELEGRAPHIC / ZERO ADJECTIVES: Never use descriptive or subjective adjectives (no 'heavy', 'primary', 'massive', 'aggressive', 'significant', 'strong', 'critical'). Strictly state symbols, figures, and ranks.
+3. PRESERVE EXACT SUB-BULLETS: Follow the exact indentation, bullet markers, and hierarchy.
 
-### Market Flow Snapshot
+DATA TO FORMAT:
 {instructions_block}
 """
 
