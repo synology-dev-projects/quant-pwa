@@ -7,6 +7,7 @@ import sqlalchemy as sa
 import pandas as pd
 
 from app.core.auth import get_current_user
+from app.routers.flow_status import get_last_market_day
 
 logger = logging.getLogger("quant.gateway.scanner")
 
@@ -22,12 +23,29 @@ def _get_engine():
 
 @router.get("/dates")
 def get_available_scan_dates(_: str = Depends(get_current_user)) -> List[str]:
-    """Returns a list of all distinct scan dates available in daily_confluence_summary."""
+    """Returns a list of all distinct scan dates available in daily_confluence_summary with valid qualifying scans."""
     try:
         engine = _get_engine()
-        query = sa.text("SELECT scan_date FROM daily_confluence_summary ORDER BY scan_date DESC")
+        last_mkt_day = get_last_market_day()
+        query = sa.text("""
+            SELECT s.scan_date 
+            FROM daily_confluence_summary s
+            WHERE s.total_scanned_count > 0
+              AND EXISTS (SELECT 1 FROM daily_confluence_scans r WHERE r.scan_date = s.scan_date)
+              AND s.scan_date <= :last_market_day
+            ORDER BY s.scan_date DESC
+        """)
         with engine.connect() as conn:
-            rows = conn.execute(query).scalars().all()
+            rows = conn.execute(query, {"last_market_day": last_mkt_day}).scalars().all()
+            if not rows:
+                fallback_query = sa.text("""
+                    SELECT s.scan_date 
+                    FROM daily_confluence_summary s
+                    WHERE s.total_scanned_count > 0
+                      AND EXISTS (SELECT 1 FROM daily_confluence_scans r WHERE r.scan_date = s.scan_date)
+                    ORDER BY s.scan_date DESC
+                """)
+                rows = conn.execute(fallback_query).scalars().all()
             return [str(r) for r in rows]
     except Exception as ex:
         logger.error(f"Failed to query scanner dates: {ex}")
@@ -43,32 +61,63 @@ def get_latest_confluence_scan(_: str = Depends(get_current_user)) -> Dict[str, 
     """
     try:
         engine = _get_engine()
-        # 1. Fetch latest summary record
+        last_mkt_day = get_last_market_day()
+        # 1. Fetch latest summary record with qualifying scans up to the last completed market day
         sum_query = sa.text("""
             SELECT 
-                scan_date,
-                session_label,
-                total_scanned_count,
-                confirmed_bull_count,
-                confirmed_bear_count,
-                vol_pin_count,
-                divergent_count,
-                top_whale_ticker,
-                top_whale_premium,
-                formatted_top_whale_premium,
-                market_regime_summary,
-                total_watchlist_count,
-                qualifying_bull_spring_count,
-                qualifying_bear_exhaustion_count,
-                top_catalyst_ticker,
-                top_catalyst_expiry,
-                scanned_at
-            FROM daily_confluence_summary
-            ORDER BY scan_date DESC
+                s.scan_date,
+                s.session_label,
+                s.total_scanned_count,
+                s.confirmed_bull_count,
+                s.confirmed_bear_count,
+                s.vol_pin_count,
+                s.divergent_count,
+                s.top_whale_ticker,
+                s.top_whale_premium,
+                s.formatted_top_whale_premium,
+                s.market_regime_summary,
+                s.total_watchlist_count,
+                s.qualifying_bull_spring_count,
+                s.qualifying_bear_exhaustion_count,
+                s.top_catalyst_ticker,
+                s.top_catalyst_expiry,
+                s.scanned_at
+            FROM daily_confluence_summary s
+            WHERE s.total_scanned_count > 0
+              AND EXISTS (SELECT 1 FROM daily_confluence_scans r WHERE r.scan_date = s.scan_date)
+              AND s.scan_date <= :last_market_day
+            ORDER BY s.scan_date DESC
             LIMIT 1
         """)
         with engine.connect() as conn:
-            summary_row = conn.execute(sum_query).mappings().first()
+            summary_row = conn.execute(sum_query, {"last_market_day": last_mkt_day}).mappings().first()
+            if not summary_row:
+                fallback_query = sa.text("""
+                    SELECT 
+                        s.scan_date,
+                        s.session_label,
+                        s.total_scanned_count,
+                        s.confirmed_bull_count,
+                        s.confirmed_bear_count,
+                        s.vol_pin_count,
+                        s.divergent_count,
+                        s.top_whale_ticker,
+                        s.top_whale_premium,
+                        s.formatted_top_whale_premium,
+                        s.market_regime_summary,
+                        s.total_watchlist_count,
+                        s.qualifying_bull_spring_count,
+                        s.qualifying_bear_exhaustion_count,
+                        s.top_catalyst_ticker,
+                        s.top_catalyst_expiry,
+                        s.scanned_at
+                    FROM daily_confluence_summary s
+                    WHERE s.total_scanned_count > 0
+                      AND EXISTS (SELECT 1 FROM daily_confluence_scans r WHERE r.scan_date = s.scan_date)
+                    ORDER BY s.scan_date DESC
+                    LIMIT 1
+                """)
+                summary_row = conn.execute(fallback_query).mappings().first()
 
         if not summary_row:
             return {
