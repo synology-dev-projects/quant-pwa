@@ -30,8 +30,8 @@ class Settings:
         {"id": "gemini-flash-latest", "name": "Gemini Flash Latest", "badge": "FALLBACK"}
     ]
     
-    # Synology Microservices Configuration
-    GEXDEX_API_URL: str = os.getenv("GEXDEX_API_URL", "http://gexdex-api-prod:8000")
+    # Options Microstructure Engine Configuration (Consolidated In-Process)
+    GEXDEX_API_URL: str = os.getenv("GEXDEX_API_URL", "http://localhost:8000")
     GEXDEX_API_KEY: str = os.getenv("GEXDEX_API_KEY", "YOUR_SECRET_API_KEY_HERE")
     
     # Public Cloudflare / Ingress Base URL (for client-accessible images)
