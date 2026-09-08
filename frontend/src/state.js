@@ -4,7 +4,6 @@ const STORAGE_KEYS = {
   MODEL: 'quant_selected_model',
   GATEWAY_URL: 'quant_gateway_url',
   ACTIVE_TAB: 'quant_active_tab',
-  CHAT_HISTORY: 'quant_chat_history',
   SHOW_DIAGNOSTICS: 'quant_show_diagnostics'
 };
 
@@ -81,7 +80,8 @@ export const AppState = {
   },
 
   getActiveTab() {
-    return localStorage.getItem(STORAGE_KEYS.ACTIVE_TAB) || 'chat';
+    const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_TAB);
+    return (saved && saved !== 'chat') ? saved : 'cockpit';
   },
 
   setActiveTab(tabId) {
@@ -95,28 +95,6 @@ export const AppState = {
 
   setShowDiagnostics(enabled) {
     localStorage.setItem(STORAGE_KEYS.SHOW_DIAGNOSTICS, String(enabled));
-  },
-
-  getHistory() {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.CHAT_HISTORY);
-      return data ? JSON.parse(data) : [];
-    } catch (e) {
-      console.warn('Failed to parse chat history from localStorage', e);
-      return [];
-    }
-  },
-
-  saveHistory(messages) {
-    try {
-      localStorage.setItem(STORAGE_KEYS.CHAT_HISTORY, JSON.stringify(messages));
-    } catch (e) {
-      console.warn('Failed to save chat history to localStorage', e);
-    }
-  },
-
-  clearHistory() {
-    localStorage.removeItem(STORAGE_KEYS.CHAT_HISTORY);
   }
 };
 

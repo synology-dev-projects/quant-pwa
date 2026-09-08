@@ -281,7 +281,7 @@ global.localStorage = global.window.localStorage;
 // ============================================================================
 // 2. Import Component under Test
 // ============================================================================
-const { renderMarkdown, createMessageElement, initInteractiveTables } = await import('../src/components/message_renderer.js');
+const { renderMarkdown, initInteractiveTables } = await import('../src/components/message_renderer.js');
 
 // ============================================================================
 // 3. Test Suite Probe
@@ -342,14 +342,17 @@ const sampleMarkdown = `
 | 2026-09-18 | AAPL | BUY CALL | $230.00 | $225.00 | +2.2% | $500K | 1,200 | 950 | - |
 `;
 
-// Render Message Element
-const messageBubble = createMessageElement('assistant', sampleMarkdown);
-const wrapper = messageBubble.querySelector('.quant-table-wrapper');
-const tbody = messageBubble.querySelector('tbody');
-const thEls = messageBubble.querySelectorAll('th.sortable, th[data-col]');
-const prevBtn = messageBubble.querySelector('.btn-prev');
-const nextBtn = messageBubble.querySelector('.btn-next');
-const pageInfo = messageBubble.querySelector('.bb-page-info');
+// Render into test container
+const testContainer = document.createElement('div');
+testContainer.className = 'markdown-body';
+testContainer.innerHTML = renderMarkdown(sampleMarkdown);
+initInteractiveTables(testContainer);
+const wrapper = testContainer.querySelector('.quant-table-wrapper');
+const tbody = testContainer.querySelector('tbody');
+const thEls = testContainer.querySelectorAll('th.sortable, th[data-col]');
+const prevBtn = testContainer.querySelector('.btn-prev');
+const nextBtn = testContainer.querySelector('.btn-next');
+const pageInfo = testContainer.querySelector('.bb-page-info');
 
 // Helpers to read rendered table state
 function getVisibleRows() {
