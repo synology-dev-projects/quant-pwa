@@ -1,6 +1,6 @@
 import { AppState } from '../state.js';
 
-export const CLIENT_VERSION = 'v1.1.9';
+export const CLIENT_VERSION = 'v1.1.10';
 
 export class SettingsModal {
   constructor({ onSettingsChanged, onLockApp } = {}) {
@@ -16,6 +16,7 @@ export class SettingsModal {
     this.manualResyncLink = document.getElementById('manualResyncLink');
     this.syncFlowBtn = document.getElementById('syncFlowBtn');
     this.syncLevelsBtn = document.getElementById('syncLevelsBtn');
+    this.syncSnapshotBtn = document.getElementById('syncSnapshotBtn');
     this.appBuildVersion = document.getElementById('appBuildVersion');
     this.syncStatusText = document.getElementById('syncStatusText');
     this.flowStatusText = document.getElementById('flowStatusText');
@@ -24,6 +25,9 @@ export class SettingsModal {
     this.levelsStatusText = document.getElementById('levelsStatusText');
     this.levelsSyncDot = document.getElementById('levelsSyncDot');
     this.levelsStatusBadge = document.getElementById('levelsStatusBadge');
+    this.snapshotStatusText = document.getElementById('snapshotStatusText');
+    this.snapshotSyncDot = document.getElementById('snapshotSyncDot');
+    this.snapshotStatusBadge = document.getElementById('snapshotStatusBadge');
     this.passcodeInput = document.getElementById('passcodeInput');
     this.gatewayUrlInput = document.getElementById('gatewayUrlInput');
     this.diagnosticsToggle = document.getElementById('diagnosticsToggle');
@@ -38,6 +42,7 @@ export class SettingsModal {
     this.manualResyncLink?.addEventListener('click', () => this.handleForceUpdate());
     this.syncFlowBtn?.addEventListener('click', () => this.handleSyncFlow());
     this.syncLevelsBtn?.addEventListener('click', () => this.handleSyncQuantLevels());
+    this.syncSnapshotBtn?.addEventListener('click', () => this.handleSyncSnapshot());
 
     // Toggle default state from AppState (defaults to true)
     if (this.diagnosticsToggle) {
@@ -86,6 +91,7 @@ export class SettingsModal {
     this.checkVersionStatus();
     this.checkFlowStatus();
     this.checkQuantLevelsStatus();
+    this.checkSnapshotStatus();
     this.modal.classList.add('open');
   }
 
@@ -319,6 +325,89 @@ export class SettingsModal {
         alert(`Network error during sync: ${err.message}`);
       }
       await this.checkQuantLevelsStatus();
+    }
+  }
+
+  async checkSnapshotStatus() {
+    if (!this.snapshotStatusText) return;
+
+    try {
+      const res = await fetch('/api/snapshot/status');
+      if (res.ok) {
+        const data = await res.json();
+        const isFresh = Boolean(data.is_fresh);
+        const latestRecordDate = data.latest_snapshot_date;
+        const expectedDate = data.expected_date;
+        const displayDate = latestRecordDate || expectedDate;
+
+        if (isFresh) {
+          if (this.snapshotStatusText) this.snapshotStatusText.textContent = `In Sync (${displayDate})`;
+          if (this.snapshotSyncDot) this.snapshotSyncDot.className = 'status-dot dot-live';
+          if (this.syncSnapshotBtn) {
+            this.syncSnapshotBtn.disabled = true;
+            this.syncSnapshotBtn.className = 'btn btn-synced';
+            this.syncSnapshotBtn.innerHTML = `✓ Snapshot Up to Date (${displayDate})`;
+          }
+        } else {
+          if (this.snapshotStatusText) this.snapshotStatusText.textContent = `Stale (Missing ${expectedDate})`;
+          if (this.snapshotSyncDot) this.snapshotSyncDot.className = 'status-dot dot-stale';
+          if (this.syncSnapshotBtn) {
+            this.syncSnapshotBtn.disabled = false;
+            this.syncSnapshotBtn.className = 'btn btn-danger btn-pulse';
+            this.syncSnapshotBtn.innerHTML = `⚡ Sync GEX/DEX Snapshot (${expectedDate}) · Tap to Run`;
+          }
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn('Snapshot status fetch failed:', e);
+    }
+
+    if (this.snapshotSyncDot) this.snapshotSyncDot.className = 'status-dot dot-stale';
+    if (this.snapshotStatusText) this.snapshotStatusText.textContent = 'Status Unavailable';
+    if (this.syncSnapshotBtn) {
+      this.syncSnapshotBtn.disabled = false;
+      this.syncSnapshotBtn.className = 'btn btn-warning';
+      this.syncSnapshotBtn.innerHTML = '⚡ Sync GEX/DEX Snapshot';
+    }
+  }
+
+  async handleSyncSnapshot() {
+    if (!this.syncSnapshotBtn) return;
+    this.syncSnapshotBtn.disabled = true;
+    this.syncSnapshotBtn.className = 'btn btn-synced';
+    this.syncSnapshotBtn.innerHTML = '<span class="status-dot dot-fast"></span> Ingesting Snapshot from TradingEdge...';
+
+    try {
+      const token = AppState.getSessionToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch('/api/snapshot/sync', {
+        method: 'POST',
+        headers: headers
+      });
+
+      if (res.ok) {
+        this.syncSnapshotBtn.innerHTML = '<span class="status-dot dot-live"></span> Ingestion Complete! Verifying DB...';
+        await new Promise((r) => setTimeout(r, 600));
+        await this.checkSnapshotStatus();
+        this.showToast('✓ GEX/DEX Snapshot Ingestion Completed Successfully!');
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (typeof alert === 'function') {
+          alert(`Sync failed: ${errData.detail || errData.message || 'Error executing pipeline'}`);
+        }
+        await this.checkSnapshotStatus();
+      }
+    } catch (err) {
+      console.error('Snapshot sync error:', err);
+      if (typeof alert === 'function') {
+        alert(`Network error during sync: ${err.message}`);
+      }
+      await this.checkSnapshotStatus();
     }
   }
 

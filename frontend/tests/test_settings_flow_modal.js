@@ -86,6 +86,10 @@ const elements = {
   levelsStatusText: new MockElement('span', 'levelsStatusText'),
   levelsSyncDot: new MockElement('span', 'levelsSyncDot'),
   levelsStatusBadge: new MockElement('span', 'levelsStatusBadge'),
+  syncSnapshotBtn: new MockElement('button', 'syncSnapshotBtn'),
+  snapshotStatusText: new MockElement('span', 'snapshotStatusText'),
+  snapshotSyncDot: new MockElement('span', 'snapshotSyncDot'),
+  snapshotStatusBadge: new MockElement('span', 'snapshotStatusBadge'),
   passcodeInput: new MockElement('input', 'passcodeInput'),
   gatewayUrlInput: new MockElement('input', 'gatewayUrlInput'),
   diagnosticsToggle: new MockElement('input', 'diagnosticsToggle')
@@ -357,6 +361,90 @@ assert.strictEqual(authHeaderReceived, 'Bearer mock-jwt-token-12345', 'Bearer se
 assert.strictEqual(syncLevelsBtn.disabled, true, 'Sync levels button re-disabled after completion');
 assert.strictEqual(levelsStatusText.textContent, 'In Sync (2026-08-29)', 'Quant levels status flips to In Sync post-run');
 console.log('  ✓ PASS: Clicking sync levels button triggers backend sync and flips status to In Sync');
+
+// TEST 8: Check Snapshot Status when In Sync
+global.fetch = async (url) => {
+  if (url === '/api/snapshot/status') {
+    return {
+      ok: true,
+      json: async () => ({
+        status: 'synced',
+        is_fresh: true,
+        latest_snapshot_date: '2026-09-04',
+        expected_date: '2026-09-08'
+      })
+    };
+  }
+  return { ok: false };
+};
+
+const { syncSnapshotBtn, snapshotStatusText, snapshotSyncDot } = elements;
+await modal.checkSnapshotStatus();
+
+assert.strictEqual(snapshotStatusText.textContent, 'In Sync (2026-09-04)', 'Snapshot text reflects in-sync state');
+assert.strictEqual(syncSnapshotBtn.disabled, true, 'Sync snapshot button is disabled when in sync');
+assert.strictEqual(syncSnapshotBtn.className, 'btn btn-synced', 'Sync snapshot button has synced class');
+assert.strictEqual(syncSnapshotBtn.innerHTML, '✓ Snapshot Up to Date (2026-09-04)', 'Button displays up to date with date');
+assert.strictEqual(snapshotSyncDot.className, 'status-dot dot-live', 'Snapshot dot is green live');
+console.log('  ✓ PASS: In-Sync GEX/DEX Snapshot DB state renders disabled button and live dot');
+
+// TEST 9: Check Snapshot Status when Stale
+global.fetch = async (url) => {
+  if (url === '/api/snapshot/status') {
+    return {
+      ok: true,
+      json: async () => ({
+        status: 'stale',
+        is_fresh: false,
+        latest_snapshot_date: '2026-09-02',
+        expected_date: '2026-09-08'
+      })
+    };
+  }
+  return { ok: false };
+};
+
+await modal.checkSnapshotStatus();
+
+assert.strictEqual(snapshotStatusText.textContent, 'Stale (Missing 2026-09-08)', 'Snapshot text reflects stale state');
+assert.strictEqual(syncSnapshotBtn.disabled, false, 'Sync snapshot button is enabled when stale');
+assert.strictEqual(syncSnapshotBtn.className, 'btn btn-danger btn-pulse', 'Sync snapshot button has danger pulse class');
+assert.strictEqual(syncSnapshotBtn.innerHTML, '⚡ Sync GEX/DEX Snapshot (2026-09-08) · Tap to Run', 'Button prompts user to sync');
+assert.strictEqual(snapshotSyncDot.className, 'status-dot dot-stale', 'Snapshot dot is red stale');
+console.log('  ✓ PASS: Stale GEX/DEX Snapshot DB state renders enabled danger-pulse button and red dot');
+
+// TEST 10: Click Sync Snapshot Button when Stale
+let snapshotSyncTriggered = false;
+let snapshotAuthHeader = null;
+global.fetch = async (url, opts) => {
+  if (url === '/api/snapshot/sync' && opts?.method === 'POST') {
+    snapshotSyncTriggered = true;
+    snapshotAuthHeader = opts?.headers?.Authorization || opts?.headers?.authorization;
+    return {
+      ok: true,
+      json: async () => ({ status: 'ok', message: 'Snapshot sync complete', rows_upserted: 16 })
+    };
+  }
+  if (url === '/api/snapshot/status') {
+    return {
+      ok: true,
+      json: async () => ({
+        status: 'synced',
+        is_fresh: true,
+        latest_snapshot_date: '2026-09-08',
+        expected_date: '2026-09-08'
+      })
+    };
+  }
+  return { ok: false };
+};
+
+await modal.handleSyncSnapshot();
+assert.strictEqual(snapshotSyncTriggered, true, 'Snapshot Sync API was dispatched upon button click');
+assert.strictEqual(snapshotAuthHeader, 'Bearer mock-jwt-token-12345', 'Bearer session token was included in snapshot sync headers');
+assert.strictEqual(syncSnapshotBtn.disabled, true, 'Sync snapshot button re-disabled after completion');
+assert.strictEqual(snapshotStatusText.textContent, 'In Sync (2026-09-08)', 'Snapshot status flips to In Sync post-run');
+console.log('  ✓ PASS: Clicking sync snapshot button triggers backend sync and flips status to In Sync');
 
 console.log('\n==================================================================');
 console.log('  SETTINGS MODAL TESTS PASSED (100% COVERAGE)                     ');
