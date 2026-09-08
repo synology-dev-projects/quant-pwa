@@ -777,9 +777,18 @@ export class CockpitView {
 
   filterFlowPrints(prints, filter) {
     if (!prints || prints.length === 0) return [];
-    if (filter === 'all') return prints;
 
-    return prints.filter(p => {
+    // Always filter out invalid zero or negative strike prints (e.g. phantom aggregate footer rows)
+    const validPrints = prints.filter(p => {
+      const rawStrike = p.STRIKE_PRICE !== undefined ? p.STRIKE_PRICE : (p.STRIKE !== undefined ? p.STRIKE : (p.strike_price !== undefined ? p.strike_price : p.strike));
+      if (rawStrike === null || rawStrike === undefined || rawStrike === '') return false;
+      const numStrike = typeof rawStrike === 'number' ? rawStrike : parseFloat(String(rawStrike).replace(/[^0-9\.]/g, ''));
+      return !isNaN(numStrike) && numStrike > 0;
+    });
+
+    if (filter === 'all') return validPrints;
+
+    return validPrints.filter(p => {
       const oType = String(p.ORDER_ACTION || p.ORDER_TYPE || p.order_type || p.type || '').toUpperCase();
       const rawPrem = p.PREMIUM !== undefined ? p.PREMIUM : (p.premium !== undefined ? p.premium : 0);
       const prem = typeof rawPrem === 'number' ? rawPrem : parseFloat(String(rawPrem || '0').replace(/[^0-9\.]/g, ''));

@@ -173,6 +173,17 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
     else:
         flow_df = flow_result if isinstance(flow_result, pd.DataFrame) else pd.DataFrame()
 
+    # Defense-in-depth: Filter out invalid / phantom zero-strike options prints
+    if not flow_df.empty:
+        strike_col = None
+        for col in ["STRIKE_PRICE", "strike_price", "STRIKE", "strike"]:
+            if col in flow_df.columns:
+                strike_col = col
+                break
+        if strike_col:
+            numeric_strikes = pd.to_numeric(flow_df[strike_col], errors="coerce")
+            flow_df = flow_df[numeric_strikes > 0].copy()
+
     metrics = _calculate_cockpit_metrics(gex_data, flow_df)
     flow_records = _format_flow_records(flow_df)
 
