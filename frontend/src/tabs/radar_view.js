@@ -177,6 +177,7 @@ export class RadarView {
     const refreshBtn = this.container.querySelector('#radarRefreshBtn');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => {
+        this.loadAvailableDates();
         this.loadScanData(this.selectedDate);
       });
     }
@@ -293,10 +294,21 @@ export class RadarView {
           this.availableDates = dates;
           const select = this.container?.querySelector('#radarDateSelect');
           if (select) {
-            select.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
-            if (dates.length > 0 && !this.selectedDate) {
-              this.selectedDate = dates[0];
-              select.value = dates[0];
+            const latestDate = dates.length > 0 ? dates[0] : '';
+            const options = [];
+            if (latestDate) {
+              options.push(`<option value="">Latest Session (${latestDate})</option>`);
+              for (const d of dates) {
+                options.push(`<option value="${d}">${d}</option>`);
+              }
+            } else {
+              options.push('<option value="">Latest Session</option>');
+            }
+            select.innerHTML = options.join('');
+            if (this.selectedDate) {
+              select.value = this.selectedDate;
+            } else {
+              select.value = '';
             }
           }
         }
@@ -316,6 +328,13 @@ export class RadarView {
       if (res && res.ok) {
         const data = await res.json();
         this.currentData = data || { summary: null, rows: [] };
+        if (data && data.scan_date) {
+          const select = this.container?.querySelector('#radarDateSelect');
+          const defaultOpt = select?.querySelector('option[value=""]');
+          if (defaultOpt && (!defaultOpt.textContent || defaultOpt.textContent === 'Latest Session')) {
+            defaultOpt.textContent = `Latest Session (${data.scan_date})`;
+          }
+        }
         this.renderSummaryCards();
         this.renderTableRows();
       } else {
