@@ -289,6 +289,7 @@ def list_models():
     }
 
 
+@app.get("/api/v1/gexdex", summary="Get GEX/DEX Metrics (Compatibility Route for Pipelines)")
 @app.get("/api/v1/gexdex/assistant-summary", summary="Get Options Exposure Summary for AI Assistants")
 async def get_gexdex_assistant_summary(
     tickers: Optional[str] = Query(None, description="Single ticker or comma-separated list (e.g. AAPL,INTC,SPY)"),

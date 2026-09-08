@@ -184,23 +184,23 @@ def _clean_image_references(obj: Any) -> Any:
             val = obj[k]
             if k.lower() in image_keys or (isinstance(val, str) and ("chart.png" in val or "![chart]" in val or "![options" in val.lower())):
                 obj.pop(k, None)
-            else:
+            elif isinstance(val, (dict, list)):
                 _clean_image_references(val)
     elif isinstance(obj, list):
         for item in obj:
-            _clean_image_references(item)
+            if isinstance(item, (dict, list)):
+                _clean_image_references(item)
     return obj
 
 
 def _emit_ui_events_from_payload(data: Dict[str, Any]) -> None:
     """
     Emits strike distribution UI events for client-side HTML5 Canvas rendering
-    and completely strips any server /chart.png or markdown image references.
+    and strips server /chart.png or markdown image references.
     """
     if not isinstance(data, dict):
         return
 
-    # Strip image references recursively across the payload
     _clean_image_references(data)
 
     # Emit tool UI events for batch or single payload

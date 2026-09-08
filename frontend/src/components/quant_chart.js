@@ -73,7 +73,23 @@ export class QuantChart {
     const spot = this.data.spot_price || 0;
     const callWall = this.data.call_wall || 0;
     const putWall = this.data.put_wall || 0;
-    const cpRatio = this.data.call_put_ratio || 0;
+    let cpRatio = Number(this.data.call_put_ratio || 0);
+
+    // Fallback: derive Call/Put ratio dynamically from strikes if omitted or 0
+    if (cpRatio <= 0 && Array.isArray(this.data.strikes) && this.data.strikes.length > 0) {
+      let callGexSum = 0;
+      let putGexSum = 0;
+      for (const s of this.data.strikes) {
+        callGexSum += Math.max(0, Number(s.call_gex || 0));
+        putGexSum += Math.abs(Math.min(0, Number(s.put_gex || 0)));
+      }
+      if (putGexSum > 0) {
+        cpRatio = callGexSum / putGexSum;
+      } else if (callGexSum > 0) {
+        cpRatio = 1.0;
+      }
+    }
+
     const ticker = this.data.ticker || 'QUANT';
 
     let initialTitle = `${ticker} GEX DEX Chart`;
@@ -130,7 +146,9 @@ export class QuantChart {
     this.wrapper.appendChild(this.canvasContainer);
 
     // 3. Expirations Legend
-    const expirations = this.data.expirations || [];
+    const expirations = (Array.isArray(this.data.expirations) && this.data.expirations.length > 0)
+      ? this.data.expirations
+      : (this.data.strikes?.[0]?.exp_gex ? Object.keys(this.data.strikes[0].exp_gex) : []);
     if (expirations.length > 0) {
       const legend = document.createElement('div');
       legend.className = 'chart-legend';
@@ -348,10 +366,15 @@ export class QuantChart {
   }
 
   _drawGexBars(ctx, s, y, barHeight, center, halfW, maxScaled, expirations) {
+    const exps = (Array.isArray(expirations) && expirations.length > 0)
+      ? expirations
+      : (s.exp_gex ? Object.keys(s.exp_gex) : []);
+
     // 1. CALLS (Left of Center)
-    if (s.exp_gex && Object.keys(s.exp_gex).length > 0) {
+    let callDrawn = false;
+    if (s.exp_gex && Object.keys(s.exp_gex).length > 0 && exps.length > 0) {
       let curLeft = center;
-      expirations.forEach((exp, expIdx) => {
+      exps.forEach((exp, expIdx) => {
         const rawVal = s.exp_gex[exp]?.call || 0;
         const segVal = Math.abs(rawVal);
         if (segVal > 0) {
@@ -359,18 +382,21 @@ export class QuantChart {
           ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
           ctx.fillRect(curLeft - segW, y, segW, barHeight);
           curLeft -= segW;
+          callDrawn = true;
         }
       });
-    } else if (Math.abs(s.call_gex || 0) > 0) {
+    }
+    if (!callDrawn && Math.abs(s.call_gex || 0) > 0) {
       const w = (Math.abs(s.call_gex) / maxScaled) * halfW;
       ctx.fillStyle = '#ef233c';
       ctx.fillRect(center - w, y, w, barHeight);
     }
 
     // 2. PUTS (Right of Center)
-    if (s.exp_gex && Object.keys(s.exp_gex).length > 0) {
+    let putDrawn = false;
+    if (s.exp_gex && Object.keys(s.exp_gex).length > 0 && exps.length > 0) {
       let curRight = center;
-      expirations.forEach((exp, expIdx) => {
+      exps.forEach((exp, expIdx) => {
         const rawVal = s.exp_gex[exp]?.put || 0;
         const segVal = Math.abs(rawVal);
         if (segVal > 0) {
@@ -378,9 +404,11 @@ export class QuantChart {
           ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
           ctx.fillRect(curRight, y, segW, barHeight);
           curRight += segW;
+          putDrawn = true;
         }
       });
-    } else if (Math.abs(s.put_gex || 0) > 0) {
+    }
+    if (!putDrawn && Math.abs(s.put_gex || 0) > 0) {
       const w = (Math.abs(s.put_gex) / maxScaled) * halfW;
       ctx.fillStyle = '#2a9d8f';
       ctx.fillRect(center, y, w, barHeight);
@@ -388,10 +416,15 @@ export class QuantChart {
   }
 
   _drawDexBars(ctx, s, y, barHeight, center, halfW, maxScaled, expirations) {
+    const exps = (Array.isArray(expirations) && expirations.length > 0)
+      ? expirations
+      : (s.exp_dex ? Object.keys(s.exp_dex) : []);
+
     // 1. CALLS (Left of Center)
-    if (s.exp_dex && Object.keys(s.exp_dex).length > 0) {
+    let callDrawn = false;
+    if (s.exp_dex && Object.keys(s.exp_dex).length > 0 && exps.length > 0) {
       let curLeft = center;
-      expirations.forEach((exp, expIdx) => {
+      exps.forEach((exp, expIdx) => {
         const rawVal = s.exp_dex[exp]?.call || 0;
         const segVal = Math.abs(rawVal);
         if (segVal > 0) {
@@ -399,18 +432,21 @@ export class QuantChart {
           ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
           ctx.fillRect(curLeft - segW, y, segW, barHeight);
           curLeft -= segW;
+          callDrawn = true;
         }
       });
-    } else if (Math.abs(s.call_dex || 0) > 0) {
+    }
+    if (!callDrawn && Math.abs(s.call_dex || 0) > 0) {
       const w = (Math.abs(s.call_dex) / maxScaled) * halfW;
       ctx.fillStyle = '#f77f00';
       ctx.fillRect(center - w, y, w, barHeight);
     }
 
     // 2. PUTS (Right of Center)
-    if (s.exp_dex && Object.keys(s.exp_dex).length > 0) {
+    let putDrawn = false;
+    if (s.exp_dex && Object.keys(s.exp_dex).length > 0 && exps.length > 0) {
       let curRight = center;
-      expirations.forEach((exp, expIdx) => {
+      exps.forEach((exp, expIdx) => {
         const rawVal = s.exp_dex[exp]?.put || 0;
         const segVal = Math.abs(rawVal);
         if (segVal > 0) {
@@ -418,9 +454,11 @@ export class QuantChart {
           ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
           ctx.fillRect(curRight, y, segW, barHeight);
           curRight += segW;
+          putDrawn = true;
         }
       });
-    } else if (Math.abs(s.put_dex || 0) > 0) {
+    }
+    if (!putDrawn && Math.abs(s.put_dex || 0) > 0) {
       const w = (Math.abs(s.put_dex) / maxScaled) * halfW;
       ctx.fillStyle = '#3a86ff';
       ctx.fillRect(center, y, w, barHeight);
@@ -521,7 +559,9 @@ export class QuantChart {
     const n = this.strikesList.length;
     if (n === 0) return;
 
-    const expirations = this.data.expirations || [];
+    const expirations = (Array.isArray(this.data.expirations) && this.data.expirations.length > 0)
+      ? this.data.expirations
+      : (this.strikesList[0]?.exp_gex ? Object.keys(this.strikesList[0].exp_gex) : []);
 
     // Calculate maximum magnitude for scaling
     let maxGex = 1;

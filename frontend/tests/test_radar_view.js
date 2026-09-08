@@ -136,6 +136,7 @@ class MockElement {
     this._innerHTML = '';
     this.id = '';
     this.value = '';
+    this.style = {};
   }
 
   get className() {
@@ -286,7 +287,41 @@ class MockElement {
       cur = cur.parentElement;
     }
   }
+
+  getBoundingClientRect() {
+    return { left: 0, top: 0, width: 400, height: 450, right: 400, bottom: 450 };
+  }
+
+  getContext(type) {
+    return {
+      resetTransform: () => {},
+      scale: () => {},
+      fillRect: () => {},
+      strokeRect: () => {},
+      fillText: () => {},
+      stroke: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      save: () => {},
+      restore: () => {},
+      setLineDash: () => {},
+      clearRect: () => {},
+      measureText: (txt) => ({ width: (txt || '').length * 8 }),
+      font: '',
+      fillStyle: '',
+      strokeStyle: ''
+    };
+  }
 }
+
+global.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
+global.requestAnimationFrame = (cb) => { setImmediate(cb); };
 
 global.localStorage = {
   getItem: () => 'mock-token',
@@ -296,6 +331,8 @@ global.localStorage = {
 
 global.window = {
   location: { origin: 'http://localhost:8000' },
+  devicePixelRatio: 2,
+  requestAnimationFrame: (cb) => { setImmediate(cb); },
   quantApp: null
 };
 
@@ -305,6 +342,34 @@ global.fetch = async (url) => {
     status: 200,
     json: async () => {
       if (String(url).includes('/api/scanner/dates')) return ['2026-09-04'];
+      if (String(url).includes('/api/cockpit/data')) {
+        return {
+          ticker: 'TSLA',
+          spot_price: 354.08,
+          gex: {
+            spot_price: 354.08,
+            zero_gex_level: 350.00,
+            call_wall: 360.00,
+            put_wall: 340.00,
+            strikes: [
+              { strike: 340, call_gex: 100, put_gex: 500, net_gex: -400, call_dex: 50, put_dex: 200, net_dex: -150 },
+              { strike: 350, call_gex: 300, put_gex: 300, net_gex: 0, call_dex: 150, put_dex: 150, net_dex: 0 },
+              { strike: 360, call_gex: 600, put_gex: 100, net_gex: 500, call_dex: 300, put_dex: 50, net_dex: 250 }
+            ]
+          },
+          flow: {
+            records: [
+              { trade_date: '2026-09-04', strike: 360, expiration: '2026-09-18', put_call: 'CALL', premium: 2500000, action: 'BUY', spot: 354.08, order_type: 'SWEEP' }
+            ]
+          },
+          metrics: {
+            confluence_bias: 'BULLISH',
+            gamma_regime: 'LONG GAMMA (+GEX)',
+            call_pct: 75.0,
+            whale_count: 3
+          }
+        };
+      }
       return { scan_date: '2026-09-04', summary: null, rows: [] };
     }
   };
@@ -342,8 +407,8 @@ async function runTests() {
   pass('Session tag mounted');
   assert(container.querySelector('#radarDateSelect'), 'Date selector must be mounted');
   pass('Date selector mounted');
-  assert(container.querySelector('#radarMetricCards'), 'Metric cards container mounted');
-  pass('Metric cards container mounted');
+  assert(container.querySelector('#radarInspectorSection'), 'Inspector section mounted');
+  pass('Inspector section mounted');
   assert(container.querySelector('#radarTable'), 'Leaderboard table mounted');
   pass('Leaderboard table mounted');
 
@@ -420,27 +485,17 @@ async function runTests() {
     summary: mockSummary,
     rows: mockRows
   };
-  radar.renderSummaryCards();
-
+  // Test 2: Top Metric Pill Boxes Purged
+  console.log('\n--- TEST 2: Purge 4 Top Metric Pill Boxes & Position Top 10 at Top ---');
   const sessionText = container.querySelector('#radarSessionText');
-  assert.equal(sessionText.textContent, 'Post-Market EOD Scan (2026-09-04)');
-  pass('Session label rendered directly: Post-Market EOD Scan (2026-09-04)');
+  assert(sessionText, 'Session header must remain present');
 
-  const valTotal = container.querySelector('#valTotalScanned');
-  assert.equal(valTotal.textContent, '50');
-  pass('Watchlist scanned count rendered directly: 50');
-
-  const valConfirmed = container.querySelector('#valConfirmedSetups');
-  assert.equal(valConfirmed.textContent, '3 Bull / 1 Bear');
-  pass('Qualifying plays count rendered directly: 3 Bull / 1 Bear');
-
-  const valWhale = container.querySelector('#valTopWhale');
-  assert(valWhale.textContent.includes('TSLA (Score 94.5)'), 'Top opportunity card displays top ranked play');
-  pass('Top opportunity leader rendered directly: TSLA (Score 94.5)');
-
-  const valRegime = container.querySelector('#valMarketRegime');
-  assert.equal(valRegime.textContent, 'TSLA: $360 Call Wall • 12 DTE');
-  pass('Nearest pin catalyst rendered directly: TSLA: $360 Call Wall • 12 DTE');
+  // Verify the 4 old pill boxes are removed from the DOM
+  assert.equal(container.querySelector('#valTotalScanned'), null, 'valTotalScanned pill box must be removed');
+  assert.equal(container.querySelector('#valConfirmedSetups'), null, 'valConfirmedSetups pill box must be removed');
+  assert.equal(container.querySelector('#valTopWhale'), null, 'valTopWhale pill box must be removed');
+  assert.equal(container.querySelector('#valMarketRegime'), null, 'valMarketRegime pill box must be removed');
+  pass('4 top metric pill boxes successfully purged from view');
 
   // Test 3: Table Rows Zero Derivation
   console.log('\n--- TEST 3: Table Rows (Zero Derivations) ---');
@@ -497,6 +552,40 @@ async function runTests() {
   assert.equal(switchedTab, 'cockpit', 'Tab must switch to cockpit');
   assert.equal(searchedTicker, 'NVDA', 'Cockpit searchTicker must be invoked with NVDA');
   pass('1-click drill-down successfully navigates to Cockpit and loads ticker');
+
+  // Test 6: Active Ticker Selection
+  console.log('\n--- TEST 6: Active Ticker Selection & Inspector Trigger ---');
+  assert(typeof radar.selectTicker === 'function', 'radar.selectTicker function must exist');
+  radar.selectTicker('TSLA');
+  assert.equal(radar.selectedTicker, 'TSLA', 'radar.selectedTicker must be set to TSLA');
+  pass('selectTicker updates active state to TSLA');
+
+  // Test 7: Explainability Card ("Why it was picked")
+  console.log('\n--- TEST 7: Explainability Rationale Box ---');
+  const explainBox = container.querySelector('#radarExplainBox');
+  assert(explainBox, '#radarExplainBox must exist in inspector section');
+  assert(explainBox.innerHTML.includes('TSLA'), 'Explain box must display selected ticker');
+  assert(explainBox.innerHTML.includes('BULL SPRING') || explainBox.innerHTML.includes('BULL_SPRING'), 'Explain box must display play type');
+  assert(explainBox.innerHTML.includes('88.4%') && explainBox.innerHTML.includes('DEX'), 'Explain box must explain exposure imbalance');
+  assert(explainBox.innerHTML.includes('$360') && explainBox.innerHTML.includes('12 DTE'), 'Explain box must explain pinning wall catalyst');
+  pass('Explainability rationale renders deterministic quantitative breakdown');
+
+  // Test 8: Interactive Options Exposure Chart Slot
+  console.log('\n--- TEST 8: GEX/DEX Exposure Chart Slot in Inspector ---');
+  const chartSlot = container.querySelector('#radarChartSlot');
+  assert(chartSlot, '#radarChartSlot must exist in inspector section');
+  const klSpot = container.querySelector('#radarKlSpot');
+  const klFlip = container.querySelector('#radarKlFlip');
+  const klCall = container.querySelector('#radarKlCall');
+  const klPut = container.querySelector('#radarKlPut');
+  assert(klSpot && klFlip && klCall && klPut, 'All 4 Key Level badges must exist in inspector chart header');
+  pass('Inspector chart slot and key level badges verified');
+
+  // Test 9: 30-Day Options Flow Hits Table in Inspector
+  console.log('\n--- TEST 9: 30-Day Options Flow Table in Inspector ---');
+  const flowSlot = container.querySelector('#radarFlowSlot');
+  assert(flowSlot, '#radarFlowSlot must exist in inspector section');
+  pass('Inspector flow prints slot verified');
 
   console.log('\n==================================================================');
   console.log(`  ALL RADAR VIEW TESTS PASSED (${passed} CHECKS VERIFIED)`);
