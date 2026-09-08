@@ -530,10 +530,6 @@ function buildAuditDomTree() {
   headerControls.className = 'header-controls';
   header.appendChild(headerControls);
 
-  const modelSelect = new MockElement('select', 'modelSelect');
-  modelSelect.className = 'model-select';
-  headerControls.appendChild(modelSelect);
-
   const settingsBtn = new MockElement('button', 'settingsBtn');
   settingsBtn.className = 'icon-btn';
   headerControls.appendChild(settingsBtn);
@@ -543,13 +539,13 @@ function buildAuditDomTree() {
   tabBar.className = 'tab-bar';
   app.appendChild(tabBar);
 
-  const tabChat = new MockElement('button');
-  tabChat.className = 'tab-btn active';
-  tabBar.appendChild(tabChat);
-
   const tabCockpit = new MockElement('button');
-  tabCockpit.className = 'tab-btn';
+  tabCockpit.className = 'tab-btn active';
   tabBar.appendChild(tabCockpit);
+
+  const tabRadar = new MockElement('button');
+  tabRadar.className = 'tab-btn';
+  tabBar.appendChild(tabRadar);
 
   // 3. Tab Content
   const tabContent = new MockElement('main', 'tabContent');
@@ -723,26 +719,6 @@ function buildAuditDomTree() {
   nextBtn.className = 'bb-page-btn btn-next';
   paginationBar.appendChild(nextBtn);
 
-  // 4. Prompt Input Bar
-  const promptContainer = new MockElement('div', 'promptContainer');
-  promptContainer.className = 'prompt-bar-container';
-  app.appendChild(promptContainer);
-
-  const promptForm = new MockElement('form');
-  promptForm.className = 'prompt-form';
-  promptContainer.appendChild(promptForm);
-
-  const promptTextarea = new MockElement('textarea');
-  promptTextarea.className = 'prompt-textarea';
-  promptForm.appendChild(promptTextarea);
-
-  const promptSendBtn = new MockElement('button', 'promptSendBtn');
-  promptSendBtn.className = 'prompt-send-btn';
-  promptForm.appendChild(promptSendBtn);
-
-  const promptStopBtn = new MockElement('button', 'promptStopBtn');
-  promptStopBtn.className = 'prompt-stop-btn';
-  promptForm.appendChild(promptStopBtn);
 
   // 5. Settings Modal
   const settingsModal = new MockElement('div', 'settingsModal');
@@ -806,10 +782,6 @@ function buildAuditDomTree() {
   const lockAppBtn = new MockElement('button', 'lockAppBtn');
   lockAppBtn.className = 'btn btn-warning';
   settingsActions.appendChild(lockAppBtn);
-
-  const clearHistoryBtn = new MockElement('button', 'clearHistoryBtn');
-  clearHistoryBtn.className = 'btn btn-secondary';
-  settingsActions.appendChild(clearHistoryBtn);
 
   const settingsSave = new MockElement('button', 'settingsSave');
   settingsSave.className = 'btn btn-primary';
@@ -961,7 +933,6 @@ console.log('\n--- AUDIT 2: WCAG Touch-Target Accessibility Audit ---');
 
 const interactiveAuditTargets = [
   { name: 'Settings Button (Header)', selector: '#settingsBtn', minTap: 36, requiresContainer: true },
-  { name: 'Model Selector (Header)', selector: '#modelSelect', minTap: 36, requiresContainer: true },
   { name: 'Tab Navigation Button', selector: '.tab-btn', minTap: 44, requiresContainer: false },
   { name: 'Cockpit Search Input', selector: '#cockpitSearchInput', minTap: 44, requiresContainer: false },
   { name: 'Cockpit Clear Button', selector: '#cockpitClearBtn', minTap: 36, requiresContainer: true },
@@ -972,8 +943,6 @@ const interactiveAuditTargets = [
   { name: 'Bloomberg Page Prev Button', selector: '.bb-page-btn.btn-prev', minTap: 36, requiresContainer: true },
   { name: 'Bloomberg Page Next Button', selector: '.bb-page-btn.btn-next', minTap: 36, requiresContainer: true },
   { name: 'Bloomberg Page Number Button', selector: '.bb-page-num', minTap: 36, requiresContainer: true },
-  { name: 'Prompt Send Button', selector: '#promptSendBtn', minTap: 36, requiresContainer: true },
-  { name: 'Prompt Stop Button', selector: '#promptStopBtn', minTap: 36, requiresContainer: true },
   { name: 'Settings Close Button', selector: '#settingsClose', minTap: 44, requiresContainer: false },
   { name: 'Diagnostics Close Button', selector: '#diagnosticsClose', minTap: 44, requiresContainer: false },
   { name: 'Lightbox Close Button', selector: '#lightboxClose', minTap: 44, requiresContainer: false },
@@ -1017,7 +986,6 @@ const settingsActionButtons = [
   '#syncFlowBtn',
   '#syncLevelsBtn',
   '#lockAppBtn',
-  '#clearHistoryBtn',
   '#settingsSave'
 ];
 

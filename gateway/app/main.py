@@ -10,7 +10,6 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from app.config import settings
-from app.core.agent import stream_chat_response
 from app.core.temporal import get_market_status
 from app.core.auth import (
     create_session_token,
@@ -181,14 +180,6 @@ def verify_app_passcode(authorization: Optional[str] = Header(None)) -> str:
 
 class LoginRequest(BaseModel):
     password: str
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-class ChatStreamRequest(BaseModel):
-    messages: List[ChatMessage]
-    model: Optional[str] = None
 
 
 @app.get("/api/auth/status", summary="Authentication Gate Status")
@@ -378,48 +369,6 @@ async def get_strikes_json(
     )
 
 
-@app.post("/api/chat/stream", summary="Stream Chat Response", dependencies=[Depends(verify_app_passcode)])
-async def chat_stream(request: Request, body: ChatStreamRequest):
-    """
-    Streams AI responses with low-latency Server-Sent Events (SSE).
-    Monitors request.is_disconnected() to cancel upstream processing if mobile client drops.
-    Enforces fail-closed passcode validation and structured trace correlation.
-    """
-    if not settings.APP_PASSCODE or not settings.APP_PASSCODE.strip():
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server passcode unconfigured."
-        )
-
-    trace_id = getattr(request.state, "trace_id", None) or request.headers.get("X-Trace-ID") or f"tr-{secrets.token_hex(3)}"
-    logger.info(f"[{trace_id}] Received chat stream request: model={body.model}, messages_count={len(body.messages)}")
-
-    message_dicts = [{"role": m.role, "content": m.content} for m in body.messages]
-    
-    async def sse_generator():
-        try:
-            async for chunk in stream_chat_response(
-                messages=message_dicts,
-                model_name=body.model,
-                client_disconnected_fn=request.is_disconnected,
-                trace_id=trace_id
-            ):
-                yield chunk
-            logger.info(f"[{trace_id}] Chat stream completed successfully.")
-        except Exception as e:
-            logger.error(f"[{trace_id}] Chat stream exception: {str(e)}")
-            raise
-
-    return StreamingResponse(
-        sse_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-            "X-Trace-ID": trace_id
-        }
-    )
 
 
 @app.get("/api/diagnostics/logs", summary="Get Recent Server Logs", dependencies=[Depends(verify_app_passcode)])

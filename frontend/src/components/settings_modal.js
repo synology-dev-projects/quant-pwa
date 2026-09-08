@@ -1,18 +1,16 @@
 import { AppState } from '../state.js';
 
-export const CLIENT_VERSION = 'v1.1.1';
+export const CLIENT_VERSION = 'v1.1.2';
 
 export class SettingsModal {
-  constructor({ onSettingsChanged, onLockApp, onClearHistory } = {}) {
+  constructor({ onSettingsChanged, onLockApp } = {}) {
     this.onSettingsChanged = onSettingsChanged;
     this.onLockApp = onLockApp;
-    this.onClearHistory = onClearHistory;
 
     this.modal = document.getElementById('settingsModal');
     this.settingsBtn = document.getElementById('settingsBtn');
     this.closeBtn = document.getElementById('settingsClose');
     this.saveBtn = document.getElementById('settingsSave');
-    this.clearHistoryBtn = document.getElementById('clearHistoryBtn');
     this.lockAppBtn = document.getElementById('lockAppBtn');
     this.forceUpdateBtn = document.getElementById('forceUpdateBtn');
     this.manualResyncLink = document.getElementById('manualResyncLink');
@@ -71,7 +69,6 @@ export class SettingsModal {
 
     this.saveBtn?.addEventListener('click', () => this.handleSave());
     this.lockAppBtn?.addEventListener('click', () => this.handleLock());
-    this.clearHistoryBtn?.addEventListener('click', () => this.handleClearHistory());
   }
 
   open() {

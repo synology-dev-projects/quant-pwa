@@ -237,12 +237,6 @@ def test_get_unusual_flow_fault_isolation(mock_postgres):
     assert res_fail == "No unusual institutional options flow recorded for '2026-08-21'."
 
 
-def test_agent_system_instruction_slash_commands():
-    from app.core.agent import SYSTEM_INSTRUCTION_BASE
-    assert "/flow" in SYSTEM_INSTRUCTION_BASE
-    assert "get_unusual_flow(date=" in SYSTEM_INSTRUCTION_BASE
-    assert "Bloomberg Terminal Markdown Table" in SYSTEM_INSTRUCTION_BASE
-
 
 def test_clear_flow_cache():
     from app.tools.flow_tool import _FLOW_MEMORY_CACHE, _LAST_EXECUTED_FLOW_RESULT, clear_flow_cache

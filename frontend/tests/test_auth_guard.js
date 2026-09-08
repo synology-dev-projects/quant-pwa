@@ -311,9 +311,9 @@ const tabManager = new TabManager(tabBarContainer, contentContainer, (tabId) => 
 });
 
 tabManager.registerTab({
-  id: 'chat',
-  title: 'Chat',
-  render: (pane) => { pane.innerHTML = '<div id="chat-content">Chat Pane</div>'; }
+  id: 'radar',
+  title: 'Radar',
+  render: (pane) => { pane.innerHTML = '<div id="radar-content">Radar Pane</div>'; }
 });
 
 tabManager.registerTab({
@@ -326,8 +326,8 @@ tabManager.registerTab({
 AppState.setSessionToken('valid-session-token', Math.floor(Date.now() / 1000) + 3600);
 assert(!AppState.isSessionExpired(), 'Session is currently valid');
 
-tabManager.switchTab('chat');
-assert(tabManager.activeTabId === 'chat', 'Initial tab set to chat when authenticated');
+tabManager.switchTab('radar');
+assert(tabManager.activeTabId === 'radar', 'Initial tab set to radar when authenticated');
 
 tabManager.switchTab('cockpit');
 assert(tabManager.activeTabId === 'cockpit', 'Switched to cockpit tab successfully when authenticated');
@@ -343,7 +343,7 @@ window.addEventListener('quant-session-expired', () => {
 });
 
 currentActiveTabCallback = null;
-tabManager.switchTab('chat');
+tabManager.switchTab('radar');
 
 assert(guardEventFired, 'Navigation guard dispatched quant-session-expired event');
 assert(tabManager.activeTabId === 'cockpit', 'Navigation guard blocked tab switch (activeTab remains cockpit)');

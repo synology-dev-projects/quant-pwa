@@ -2,7 +2,6 @@ import pytest
 from datetime import datetime
 import pytz
 from app.core.temporal import get_market_status, generate_temporal_system_prompt
-from app.core.context import apply_sliding_window
 from app.tools.registry import registry
 
 NY_TZ = pytz.timezone("America/New_York")
@@ -27,13 +26,6 @@ def test_market_status_weekend():
     status = get_market_status(dt)
     assert status["status"] == "WEEKEND_CLOSED"
     assert status["is_live_trading"] is False
-
-def test_sliding_window():
-    msgs = [{"role": "user", "content": f"msg {i}"} for i in range(20)]
-    trimmed = apply_sliding_window(msgs, max_messages=5)
-    assert len(trimmed) == 5
-    assert trimmed[0]["content"] == "msg 15"
-    assert trimmed[-1]["content"] == "msg 19"
 
 def test_tool_registry():
     declarations = registry.get_all_declarations()
