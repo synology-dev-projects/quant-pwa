@@ -483,4 +483,25 @@ def test_lifespan_gracefully_handles_schema_verification_failure():
     asyncio.run(_run())
 
 
+def test_gexdex_route_and_alias():
+    """Verifies that both /api/v1/gexdex and /api/v1/gexdex/assistant-summary resolve to get_gexdex_assistant_summary."""
+    from fastapi.testclient import TestClient
+    from unittest.mock import patch, AsyncMock
+    from app.main import app
+
+    client = TestClient(app)
+    mock_summary = {"ticker": "AAPL", "spot_price": 225.0, "batch_data": {"AAPL": {"spot_price": 225.0}}}
+
+    with patch("app.main.gexdex_service.get_summary", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_summary
+
+        resp1 = client.get("/api/v1/gexdex?tickers=AAPL")
+        assert resp1.status_code == 200
+        assert resp1.json() == mock_summary
+
+        resp2 = client.get("/api/v1/gexdex/assistant-summary?tickers=AAPL")
+        assert resp2.status_code == 200
+        assert resp2.json() == mock_summary
+
+
 

@@ -15,8 +15,6 @@ from requests.adapters import HTTPAdapter
 from pydantic import BaseModel, Field
 import pandas as pd
 import numpy as np
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_agg import FigureCanvasAgg
 import pytz
 
 from app.engine.circuit_breaker import CircuitBreaker, CircuitState
@@ -524,24 +522,9 @@ def render_gexdex_chart_image(
             except Exception as e:
                 logger.error(f"Error rendering chart for {symbol}: {e}")
 
-    # Fallback: Clean status card when ticker has no active options chain
-    try:
-        fig = Figure(figsize=(10, 4), facecolor='#0f141d')
-        canvas = FigureCanvasAgg(fig)
-        ax = fig.add_subplot(111, facecolor='#151a24')
-        ax.axis('off')
-        fig.text(0.5, 0.65, f"📊 {symbol} Options Exposure", color='#ffffff', fontsize=16, fontweight='bold', ha='center')
-        fig.text(0.5, 0.45, "No Active Options Chain / Insufficient Gamma Liquidity", color='#a0aec0', fontsize=12, ha='center')
-        fig.text(0.5, 0.28, "Quant System In-Process Engine", color='#718096', fontsize=10, ha='center')
-        buf = io.BytesIO()
-        canvas.print_figure(buf, format=img_fmt, dpi=120, bbox_inches='tight', facecolor=fig.get_facecolor())
-        buf.seek(0)
-        fallback_bytes = buf.getvalue()
-        _CHART_CACHE[cache_key] = (now_ts, fallback_bytes)
-        return fallback_bytes
-    except Exception as e:
-        logger.error(f"Error generating fallback image for {symbol}: {e}")
-        return b""
+    # Fallback: Clean empty bytes when ticker has no active options chain
+    _CHART_CACHE[cache_key] = (now_ts, b"")
+    return b""
 
 
 def prewarm_chart_cache(
