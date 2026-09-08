@@ -97,30 +97,11 @@ function formatTableCell(content, isHeader) {
     return `<td><span class="bb-ticker">${rawSym}</span></td>`;
   }
   
-  // 3. Format Premium with Whale / Large Size Indicator
+  // 3. Format Premium
   const premMatch = trimmed.match(/^\$?([\d\.,]+)\s*([KMB])?$/i) || trimmed.match(/^<strong>\$?([\d\.,]+)\s*([KMB])?<\/strong>$/i);
   if (premMatch || trimmed.startsWith("$")) {
     const rawPrem = trimmed.replace(/<\/?strong>/gi, '');
-    let tagHtml = '';
-    
-    // Parse numeric value in millions
-    if (premMatch) {
-      const num = parseFloat(premMatch[1].replace(/,/g, ''));
-      const unit = (premMatch[2] || '').toUpperCase();
-      let valInM = 0;
-      if (unit === 'B') valInM = num * 1000;
-      else if (unit === 'M') valInM = num;
-      else if (unit === 'K') valInM = num / 1000;
-      else valInM = num / 1000000; // Raw integer dollar amount (e.g. $5,000,000)
-      
-      if (valInM >= 5.0) {
-        tagHtml = ` <span class="bb-tag bb-tag-whale">[WHALE]</span>`;
-      } else if (valInM >= 1.0) {
-        tagHtml = ` <span class="bb-tag bb-tag-large">[LARGE]</span>`;
-      }
-    }
-    
-    return `<td><span class="bb-prem">${rawPrem}</span>${tagHtml}</td>`;
+    return `<td><span class="bb-prem">${rawPrem}</span></td>`;
   }
   
   // 4. Format OTM % (e.g. +8.0% or -2.0%)
