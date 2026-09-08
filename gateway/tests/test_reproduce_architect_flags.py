@@ -1,8 +1,11 @@
-﻿import sys
+import sys
 from pathlib import Path
 import pytest
 
 DATA_MODELER_DIR = Path(r"C:\Coding\VSCode\Quant System\archive\data-modeler-engine")
+if not DATA_MODELER_DIR.exists():
+    pytest.skip("archive/data-modeler-engine not mounted in container environment", allow_module_level=True)
+
 if str(DATA_MODELER_DIR) not in sys.path:
     sys.path.insert(0, str(DATA_MODELER_DIR))
 
