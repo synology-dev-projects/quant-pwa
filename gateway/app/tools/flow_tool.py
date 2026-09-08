@@ -226,7 +226,7 @@ def format_market_wide_flow_summary(df: Optional[pd.DataFrame], target_date_str:
     else:
         bearish_lines = ["  • None"]
 
-    # Top 5 Largest Individual Whale Sweep Prints
+    # Top 5 Largest Individual Sweep Prints
     sorted_df = df.sort_values(by="PREMIUM", ascending=False) if "PREMIUM" in df.columns else df
     top_prints = sorted_df.head(5)
 
@@ -261,7 +261,7 @@ def format_market_wide_flow_summary(df: Optional[pd.DataFrame], target_date_str:
     sentiment_line = f"• Market Sentiment Score: {net_score_str} | Net Directional Bias: {bias}"
     top_bull_hdr = "• Top Bullish Tickers (Call Volume):"
     top_bear_hdr = "• Top Bearish Tickers (Put Volume):"
-    top_whale_hdr = "• Top Whale Sweeps & Block Prints:"
+    top_whale_hdr = "• Top Sweeps & Block Prints:"
 
     return (
         f"{header}\n"

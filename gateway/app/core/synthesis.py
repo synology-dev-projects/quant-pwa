@@ -283,7 +283,7 @@ class SynthesisRegistry:
                 unusual = " ⚠️" if r.get("IS_UNUSUAL_OI") in (1, True, "1") else ""
                 top_prints.append(f"  • {t_date}: ${prem:,.0f} {order_type} | Strike: ${strike} | Exp: {exp} | OI: {oi}{unusual}")
 
-        prints_block = "\n".join(top_prints) if top_prints else "  • No major institutional whale prints recorded."
+        prints_block = "\n".join(top_prints) if top_prints else "  • No major institutional prints recorded."
 
         # Collect instructions from each registered point
         point_instructions = []

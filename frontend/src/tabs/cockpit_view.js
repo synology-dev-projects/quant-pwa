@@ -137,7 +137,6 @@ export class CockpitView {
               <!-- Quick Filter Chips -->
               <div class="flow-filter-chips" id="flowFilterChips">
                 <button type="button" class="flow-chip active" data-filter="all">All</button>
-                <button type="button" class="flow-chip" data-filter="whales">Whales &gt;$1M</button>
                 <button type="button" class="flow-chip" data-filter="calls">Calls</button>
                 <button type="button" class="flow-chip" data-filter="puts">Puts</button>
                 <button type="button" class="flow-chip" data-filter="unusual">Unusual OI ⚠️</button>
@@ -551,13 +550,12 @@ export class CockpitView {
     const regime = this.cockpitData?.gamma_regime || 'Positive Gamma (+GEX)';
     const metrics = this.cockpitData?.metrics || {};
     const callPct = metrics.call_pct !== undefined ? metrics.call_pct : 65.0;
-    const whales = metrics.whale_count !== undefined ? metrics.whale_count : 2;
 
     const thesisMarkdown = `
 ### Microstructure Snapshot
 • **Regime & Volatility**: **${regime}**. Spot (**$${spot.toFixed(2)}**) trades ${spot >= zeroFlip ? 'above' : 'below'} Zero Flip (**$${zeroFlip.toFixed(2)}**), indicating ${spot >= zeroFlip ? 'dampened' : 'elevated'} intraday volatility.
 • **Key Structural Walls**: **Call Wall at $${callWall.toFixed(2)}** marks primary overhead dealer supply; **Put Wall at $${putWall.toFixed(2)}** acts as structural downside cushion.
-• **Institutional Flow**: **${callPct.toFixed(0)}% Calls** with **${whales} whale prints** (> $1M), establishing a **${confluenceBias}** microstructure profile.
+• **Institutional Flow**: **${callPct.toFixed(0)}% Calls**, establishing a **${confluenceBias}** microstructure profile.
     `.trim();
 
     synthBox.innerHTML = renderMarkdown(thesisMarkdown);
@@ -700,9 +698,6 @@ export class CockpitView {
       const rawOi = p.OPEN_INTEREST !== undefined ? p.OPEN_INTEREST : (p.open_interest !== undefined ? p.open_interest : (p.oi || ''));
       const isUnusual = Boolean(p.IS_UNUSUAL_OI || p.is_unusual_oi || String(rawOi).includes('⚠️'));
 
-      if (filter === 'whales') {
-        return prem >= 1_000_000 || String(p.TAG || p.tag || '').includes('WHALE') || String(p.TAG || p.tag || '').includes('LARGE');
-      }
       if (filter === 'calls') {
         return oType.includes('CALL');
       }
@@ -717,7 +712,7 @@ export class CockpitView {
   }
 
   buildFlowTableMarkdown(prints) {
-    const headers = ['DATE', 'EXP', 'SYMBOL', 'TYPE', 'STRIKE', 'SPOT', '%OTM', 'PREMIUM', 'SIZE', 'OI', 'TAG'];
+    const headers = ['DATE', 'EXP', 'SYMBOL', 'TYPE', 'STRIKE', 'SPOT', '%OTM', 'PREMIUM', 'SIZE', 'OI'];
     const rows = prints.map(p => {
       const rawDate = p.TRADE_DATE || p.trade_date || p.DATE || p.date || '';
       const date = rawDate ? String(rawDate).slice(0, 10) : '-';
@@ -750,15 +745,7 @@ export class CockpitView {
       const unusualTag = (p.IS_UNUSUAL_OI || p.is_unusual_oi || String(rawOi).includes('⚠️')) ? ' ⚠️' : '';
       const oi = `${oiNum.replace('⚠️', '').trim()}${unusualTag}`;
 
-      let tag = p.TAG || p.tag;
-      if (!tag) {
-        const numPrem = typeof rawPrem === 'number' ? rawPrem : (parseFloat(String(rawPrem).replace(/[^0-9\.]/g, '')) || 0);
-        if (numPrem >= 5_000_000) tag = '[WHALE]';
-        else if (numPrem >= 1_000_000) tag = '[LARGE]';
-        else tag = '-';
-      }
-
-      return `| ${date} | ${exp} | ${sym} | ${type} | ${strike} | ${spot} | ${otm} | ${prem} | ${size} | ${oi} | ${tag} |`;
+      return `| ${date} | ${exp} | ${sym} | ${type} | ${strike} | ${spot} | ${otm} | ${prem} | ${size} | ${oi} |`;
     });
 
     const headerLine = `| ${headers.join(' | ')} |`;
@@ -835,28 +822,28 @@ export class CockpitView {
 
   generateMockFlowPrints(sym, spot) {
     const prints = [
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.05, spot: spot, otm_pct: 5.0, premium: 14500000, size: 12000, open_interest: 18500, is_unusual_oi: true, tag: '[WHALE]' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.08, spot: spot, otm_pct: 8.0, premium: 10200000, size: 9500, open_interest: 8200, is_unusual_oi: false, tag: '[WHALE]' },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.95, spot: spot, otm_pct: -5.0, premium: 8900000, size: 6200, open_interest: 4500, is_unusual_oi: false, tag: '[WHALE]' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.02, spot: spot, otm_pct: 2.0, premium: 6400000, size: 5800, open_interest: 12000, is_unusual_oi: true, tag: '[WHALE]' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'SELL PUT', strike: spot * 0.96, spot: spot, otm_pct: -4.0, premium: 4800000, size: 4200, open_interest: 3100, is_unusual_oi: false, tag: '[LARGE]' },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.10, spot: spot, otm_pct: 10.0, premium: 3500000, size: 7500, open_interest: 22000, is_unusual_oi: true, tag: '[LARGE]' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.04, spot: spot, otm_pct: 4.0, premium: 2800000, size: 3100, open_interest: 2500, is_unusual_oi: false, tag: '[LARGE]' },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.92, spot: spot, otm_pct: -8.0, premium: 2100000, size: 2800, open_interest: 1900, is_unusual_oi: false, tag: '[LARGE]' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.06, spot: spot, otm_pct: 6.0, premium: 1600000, size: 2200, open_interest: 1700, is_unusual_oi: false, tag: '[LARGE]' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'SELL CALL', strike: spot * 1.15, spot: spot, otm_pct: 15.0, premium: 1200000, size: 4500, open_interest: 9800, is_unusual_oi: false, tag: '[LARGE]' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.03, spot: spot, otm_pct: 3.0, premium: 950000, size: 1800, open_interest: 1400, is_unusual_oi: false, tag: '-' },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.90, spot: spot, otm_pct: -10.0, premium: 820000, size: 2100, open_interest: 1200, is_unusual_oi: false, tag: '-' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.07, spot: spot, otm_pct: 7.0, premium: 760000, size: 1600, open_interest: 1100, is_unusual_oi: false, tag: '-' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.09, spot: spot, otm_pct: 9.0, premium: 690000, size: 1900, open_interest: 1500, is_unusual_oi: false, tag: '-' },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.12, spot: spot, otm_pct: 12.0, premium: 620000, size: 2400, open_interest: 8500, is_unusual_oi: true, tag: '-' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.94, spot: spot, otm_pct: -6.0, premium: 580000, size: 1300, open_interest: 900, is_unusual_oi: false, tag: '-' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.01, spot: spot, otm_pct: 1.0, premium: 540000, size: 900, open_interest: 800, is_unusual_oi: false, tag: '-' },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'SELL PUT', strike: spot * 0.88, spot: spot, otm_pct: -12.0, premium: 510000, size: 3100, open_interest: 4200, is_unusual_oi: false, tag: '-' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.08, spot: spot, otm_pct: 8.0, premium: 480000, size: 1200, open_interest: 750, is_unusual_oi: false, tag: '-' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.96, spot: spot, otm_pct: -4.0, premium: 450000, size: 1100, open_interest: 700, is_unusual_oi: false, tag: '-' },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.14, spot: spot, otm_pct: 14.0, premium: 420000, size: 2600, open_interest: 6500, is_unusual_oi: true, tag: '-' },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.05, spot: spot, otm_pct: 5.0, premium: 390000, size: 950, open_interest: 600, is_unusual_oi: false, tag: '-' }
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.05, spot: spot, otm_pct: 5.0, premium: 14500000, size: 12000, open_interest: 18500, is_unusual_oi: true },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.08, spot: spot, otm_pct: 8.0, premium: 10200000, size: 9500, open_interest: 8200, is_unusual_oi: false },
+      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.95, spot: spot, otm_pct: -5.0, premium: 8900000, size: 6200, open_interest: 4500, is_unusual_oi: false },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.02, spot: spot, otm_pct: 2.0, premium: 6400000, size: 5800, open_interest: 12000, is_unusual_oi: true },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'SELL PUT', strike: spot * 0.96, spot: spot, otm_pct: -4.0, premium: 4800000, size: 4200, open_interest: 3100, is_unusual_oi: false },
+      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.10, spot: spot, otm_pct: 10.0, premium: 3500000, size: 7500, open_interest: 22000, is_unusual_oi: true },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.04, spot: spot, otm_pct: 4.0, premium: 2800000, size: 3100, open_interest: 2500, is_unusual_oi: false },
+      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.92, spot: spot, otm_pct: -8.0, premium: 2100000, size: 2800, open_interest: 1900, is_unusual_oi: false },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.06, spot: spot, otm_pct: 6.0, premium: 1600000, size: 2200, open_interest: 1700, is_unusual_oi: false },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'SELL CALL', strike: spot * 1.15, spot: spot, otm_pct: 15.0, premium: 1200000, size: 4500, open_interest: 9800, is_unusual_oi: false },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.03, spot: spot, otm_pct: 3.0, premium: 950000, size: 1800, open_interest: 1400, is_unusual_oi: false },
+      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.90, spot: spot, otm_pct: -10.0, premium: 820000, size: 2100, open_interest: 1200, is_unusual_oi: false },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.07, spot: spot, otm_pct: 7.0, premium: 760000, size: 1600, open_interest: 1100, is_unusual_oi: false },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.09, spot: spot, otm_pct: 9.0, premium: 690000, size: 1900, open_interest: 1500, is_unusual_oi: false },
+      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.12, spot: spot, otm_pct: 12.0, premium: 620000, size: 2400, open_interest: 8500, is_unusual_oi: true },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.94, spot: spot, otm_pct: -6.0, premium: 580000, size: 1300, open_interest: 900, is_unusual_oi: false },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.01, spot: spot, otm_pct: 1.0, premium: 540000, size: 900, open_interest: 800, is_unusual_oi: false },
+      { expiration: '2026-10-16', symbol: sym, order_type: 'SELL PUT', strike: spot * 0.88, spot: spot, otm_pct: -12.0, premium: 510000, size: 3100, open_interest: 4200, is_unusual_oi: false },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.08, spot: spot, otm_pct: 8.0, premium: 480000, size: 1200, open_interest: 750, is_unusual_oi: false },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.96, spot: spot, otm_pct: -4.0, premium: 450000, size: 1100, open_interest: 700, is_unusual_oi: false },
+      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.14, spot: spot, otm_pct: 14.0, premium: 420000, size: 2600, open_interest: 6500, is_unusual_oi: true },
+      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.05, spot: spot, otm_pct: 5.0, premium: 390000, size: 950, open_interest: 600, is_unusual_oi: false }
     ];
     return prints;
   }

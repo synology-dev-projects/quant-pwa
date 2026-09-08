@@ -2065,17 +2065,6 @@ th.sort-desc .sort-icon::after {
   text-transform: uppercase;
 }
 
-.bb-tag-whale {
-  background-color: #451a03;
-  color: #fbbf24;
-  border: 1px solid #d97706;
-}
-
-.bb-tag-large {
-  background-color: #312e81;
-  color: #a5b4fc;
-  border: 1px solid #4f46e5;
-}
 
 .bb-otm-pos {
   color: #34d399;

@@ -9,7 +9,7 @@
  *    - Panel 3: 30-Day Options Flow Table with Filter Chips & Bloomberg Table
  * 3. Distinct Real Strike Structures & Spot Prices (SPY vs NVDA)
  * 4. Honest Empty State on Empty Strikes (Purged Fake Gaussian Clones)
- * 5. Filter Chip Clicks ([All], [Whales >$1M], [Calls], [Puts], [Unusual OI ⚠️])
+ * 5. Filter Chip Clicks ([All], [Calls], [Puts], [Unusual OI ⚠️])
  * 6. GEX/DEX Toggle Switch Interactivity
  * 7. Bloomberg Table Tri-State Column Sorting & Pagination
  * 8. Quick Suggestion Chip Clicks
@@ -515,8 +515,8 @@ const MOCK_FEEDS = {
     },
     flow: {
       records: [
-        { expiration: '2026-09-18', symbol: 'NVDA', order_type: 'BUY CALL', strike: 230, spot: 217.5, otm_pct: 5.7, premium: 12500000, size: 10000, open_interest: 15000, is_unusual_oi: true, tag: '[WHALE]' },
-        { expiration: '2026-09-18', symbol: 'NVDA', order_type: 'BUY PUT', strike: 200, spot: 217.5, otm_pct: -8.0, premium: 3500000, size: 4000, open_interest: 6000, is_unusual_oi: false, tag: '[LARGE]' }
+        { expiration: '2026-09-18', symbol: 'NVDA', order_type: 'BUY CALL', strike: 230, spot: 217.5, otm_pct: 5.7, premium: 12500000, size: 10000, open_interest: 15000, is_unusual_oi: true },
+        { expiration: '2026-09-18', symbol: 'NVDA', order_type: 'BUY PUT', strike: 200, spot: 217.5, otm_pct: -8.0, premium: 3500000, size: 4000, open_interest: 6000, is_unusual_oi: false }
       ],
       total_count: 2
     },
@@ -558,7 +558,7 @@ const MOCK_FEEDS = {
     },
     flow: {
       records: [
-        { expiration: '2026-09-18', symbol: 'SPY', order_type: 'BUY CALL', strike: 785, spot: 769.25, otm_pct: 2.0, premium: 25000000, size: 20000, open_interest: 45000, is_unusual_oi: true, tag: '[WHALE]' }
+        { expiration: '2026-09-18', symbol: 'SPY', order_type: 'BUY CALL', strike: 785, spot: 769.25, otm_pct: 2.0, premium: 25000000, size: 20000, open_interest: 45000, is_unusual_oi: true }
       ],
       total_count: 1
     },
@@ -600,7 +600,7 @@ const MOCK_FEEDS = {
     },
     flow: {
       records: [
-        { expiration: '2026-09-18', symbol: 'POWL', order_type: 'BUY CALL', strike: 180, spot: 179.73, otm_pct: 0.15, premium: 12500000, size: 8000, open_interest: 15000, is_unusual_oi: true, tag: '[WHALE]' }
+        { expiration: '2026-09-18', symbol: 'POWL', order_type: 'BUY CALL', strike: 180, spot: 179.73, otm_pct: 0.15, premium: 12500000, size: 8000, open_interest: 15000, is_unusual_oi: true }
       ],
       total_count: 1
     },
@@ -877,16 +877,9 @@ assert(flowTableWrapper !== null, 'Quant interactive table wrapper mounted in fl
 const flowCountBadge = rootContainer.querySelector('#flowCountBadge');
 assert(flowCountBadge !== null && flowCountBadge.textContent.includes('PRINTS'), `Flow count badge displays prints count: ${flowCountBadge.textContent}`);
 
-// Filter Chip: Whales >$1M
+// Filter Chip: Whales >$1M should be removed
 const chipWhales = rootContainer.querySelector('#flowFilterChips .flow-chip[data-filter="whales"]');
-assert(chipWhales !== null, 'Whales >$1M filter chip found');
-
-chipWhales.click();
-assert(chipWhales.classList.contains('active'), 'Whales filter chip is active');
-assert(cockpitView.activeFilter === 'whales', 'Active filter state is "whales"');
-
-const whaleRows = rootContainer.querySelectorAll('#cockpitFlowTableContainer tbody tr');
-assert(whaleRows.length > 0, `Whales filter shows matching whale rows (got ${whaleRows.length})`);
+assert(chipWhales === null, 'Whales >$1M filter chip correctly removed');
 
 // Filter Chip: Calls
 const chipCalls = rootContainer.querySelector('#flowFilterChips .flow-chip[data-filter="calls"]');

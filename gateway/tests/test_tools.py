@@ -401,4 +401,28 @@ async def test_run_cache_warmer_loop_cancellation():
         assert task.cancelled() or task.done()
 
 
+def test_format_flow_summary_header():
+    import pandas as pd
+    from app.tools.flow_tool import format_market_wide_flow_summary
+
+    df = pd.DataFrame([
+        {
+            "TRADE_DATE": "2026-09-04",
+            "SYMBOL": "NVDA",
+            "ORDER_TYPE": "BUY_CALL",
+            "STRIKE_PRICE": 230.0,
+            "STRIKE_OTM_PCT": 5.0,
+            "EXPIRATION_DATE": "2026-09-18",
+            "PREMIUM": 5000000.0,
+            "OPEN_INTEREST": 10000,
+            "IS_UNUSUAL_OI": False
+        }
+    ])
+    summary = format_market_wide_flow_summary(df, "2026-09-04")
+    assert "• Top Sweeps & Block Prints:" in summary
+    assert "Whale" not in summary
+
+
+
+
 

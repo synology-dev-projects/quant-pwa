@@ -674,7 +674,7 @@ function buildAuditDomTree() {
   flowChips.className = 'flow-filter-chips';
   panelFlow.appendChild(flowChips);
 
-  for (const filter of ['all', 'whales', 'calls', 'puts', 'unusual']) {
+  for (const filter of ['all', 'calls', 'puts', 'unusual']) {
     const chip = new MockElement('button');
     chip.className = `flow-chip ${filter === 'all' ? 'active' : ''}`;
     chip.setAttribute('data-filter', filter);
