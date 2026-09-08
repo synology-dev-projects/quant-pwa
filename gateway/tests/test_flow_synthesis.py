@@ -55,37 +55,34 @@ def test_notable_flow_point_extraction_and_deterministic():
     # 1. Deterministic generation check
     deterministic_out = point.generate_deterministic(mock_features)
     assert "• **Notable Flow**:" in deterministic_out
-    assert "**NVDA**" in deterministic_out
-    assert "**2nd highest premium to date**" in deterministic_out
-    assert "**TSLA**" in deterministic_out
-    assert "**+22.5% OTM**" in deterministic_out
+    assert "• **TOP PREMIUM**:" in deterministic_out
+    assert "NVDA $15.5M PREMIUM (2nd)" in deterministic_out
+    assert "• **NOTABLE OTM**:" in deterministic_out
+    assert "TSLA" in deterministic_out
+    assert "exp 2 weeks" in deterministic_out
 
     # 2. Prompt instruction check
     instruction = point.get_prompt_instruction(mock_features)
     assert "• **Notable Flow**:" in instruction
-    assert "NVDA BUY_CALL ($15.5M at strike $135.00)" in instruction
-    assert "TSLA strike $300.00 (+22.5% OTM, 14 DTE, $2.5M)" in instruction
+    assert "TOP PREMIUM" in instruction
+    assert "NVDA $15.5M PREMIUM (2nd)" in instruction
+    assert "NOTABLE OTM" in instruction
+    assert "TELEGRAPHIC, ZERO ADJECTIVES" in instruction
 
 
-def test_notable_flow_point_fallback_to_dominant_whale():
+def test_notable_flow_point_empty_fallback_none_found():
     point = NotableFlowPoint()
     mock_features = {
         "latest_date": "2026-08-28",
         "top_all_time_prints": [],
-        "deep_otm_prints": [],
-        "top_whale_print": {
-            "symbol": "SPY",
-            "order_type": "BUY_PUT",
-            "strike_price": 550.0,
-            "premium": 3200000.0,
-            "formatted_premium": "$3.2M"
-        }
+        "deep_otm_prints": []
     }
 
     deterministic_out = point.generate_deterministic(mock_features)
     assert "• **Notable Flow**:" in deterministic_out
-    assert "**SPY**" in deterministic_out
-    assert "**$3.2M**" in deterministic_out
+    assert "• **TOP PREMIUM**:" in deterministic_out
+    assert "- NONE FOUND" in deterministic_out
+    assert "• **NOTABLE OTM**:" in deterministic_out
 
 
 def test_flow_synthesis_registry_expandability():
@@ -164,5 +161,5 @@ def test_flow_synthesis_stream_deterministic_fallback(auth_header, monkeypatch):
         )
         assert "Market Flow Snapshot" in assembled_text
         assert "Notable Flow" in assembled_text
-        assert "NVDA" in assembled_text
-        assert "1st highest premium to date" in assembled_text
+        assert "NVDA $15.5M PREMIUM (1st)" in assembled_text
+        assert "NONE FOUND" in assembled_text

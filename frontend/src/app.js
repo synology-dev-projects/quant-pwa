@@ -100,23 +100,7 @@ class App {
       }
     });
 
-    // 1. Ticker Cockpit Tab
-    this.tabManager.registerTab({
-      id: 'cockpit',
-      title: 'Cockpit',
-      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>`,
-      render: (container) => this.cockpitView.render(container)
-    });
-
-    // 2. Confluence Radar Tab
-    this.tabManager.registerTab({
-      id: 'radar',
-      title: 'Confluence Radar',
-      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path><path d="M12 6a6 6 0 0 1 6 6"></path><circle cx="12" cy="12" r="2"></circle></svg>`,
-      render: (container) => this.radarView.render(container)
-    });
-
-    // 3. Options Flow Aggregate Tab
+    // 1. Options Flow Aggregate Tab
     this.tabManager.registerTab({
       id: 'flow',
       title: 'Flow',
@@ -124,10 +108,26 @@ class App {
       render: (container) => this.flowView.render(container)
     });
 
+    // 2. Ticker Cockpit Tab
+    this.tabManager.registerTab({
+      id: 'cockpit',
+      title: 'Cockpit',
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>`,
+      render: (container) => this.cockpitView.render(container)
+    });
+
+    // 3. Confluence Radar Tab
+    this.tabManager.registerTab({
+      id: 'radar',
+      title: 'Confluence Radar',
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path><path d="M12 6a6 6 0 0 1 6 6"></path><circle cx="12" cy="12" r="2"></circle></svg>`,
+      render: (container) => this.radarView.render(container)
+    });
+
     // Activate initial tab from localStorage
     const savedTab = AppState.getActiveTab();
-    const validTabs = ['cockpit', 'radar', 'flow'];
-    const activeTab = validTabs.includes(savedTab) ? savedTab : 'cockpit';
+    const validTabs = ['flow', 'cockpit', 'radar'];
+    const activeTab = validTabs.includes(savedTab) ? savedTab : 'flow';
     this.tabManager.switchTab(activeTab);
   }
 
