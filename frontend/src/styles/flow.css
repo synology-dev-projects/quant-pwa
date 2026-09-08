@@ -225,6 +225,10 @@
   border-top: 3px solid #ff5252;
 }
 
+.flow-card.card-bearish-premium {
+  border-top: 3px solid #ff1744;
+}
+
 .flow-card-header {
   padding: 0.75rem 1rem;
   display: flex;
@@ -283,6 +287,12 @@
   background: rgba(255, 82, 82, 0.15);
   color: #ff5252;
   border: 1px solid rgba(255, 82, 82, 0.3);
+}
+
+.badge-blood {
+  background: rgba(255, 23, 68, 0.15);
+  color: #ff1744;
+  border: 1px solid rgba(255, 23, 68, 0.35);
 }
 
 /* Leaderboard Tables */
@@ -390,6 +400,10 @@
 
 .metric-red {
   color: #ff5252;
+}
+
+.metric-blood {
+  color: #ff1744;
 }
 
 .flow-metric-secondary {

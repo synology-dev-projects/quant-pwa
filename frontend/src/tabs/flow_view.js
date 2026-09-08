@@ -5,7 +5,7 @@ export class FlowView {
   constructor() {
     this.container = null;
     this.currentData = null;
-    this.activeDuration = '3d'; // '3d' | '7d'
+    this.activeDuration = '3d'; // '3d' | '1w'
     this.isLoading = false;
     this.isStreaming = false;
     this.streamAbortController = null;
@@ -29,7 +29,7 @@ export class FlowView {
           <div class="flow-controls-group">
             <div class="flow-duration-toggle" id="flowDurationToggle">
               <button type="button" class="flow-duration-btn active" data-duration="3d">3 Days</button>
-              <button type="button" class="flow-duration-btn" data-duration="7d">7 Days</button>
+              <button type="button" class="flow-duration-btn" data-duration="1w">1 Week</button>
             </div>
             <button type="button" class="flow-refresh-btn" id="flowRefreshBtn" title="Reload Flow Aggregates">↻</button>
           </div>
@@ -117,7 +117,35 @@ export class FlowView {
             </div>
           </div>
 
-          <!-- Section 3: Top Bearish by Contract Hits -->
+          <!-- Section 3: Top Bearish by Premium Spent -->
+          <div class="flow-card card-bearish-premium" id="cardTopBearishPremium">
+            <div class="flow-card-header">
+              <div class="flow-card-title-group">
+                <span class="flow-card-icon">🩸</span>
+                <h3 class="flow-card-title">Top Bearish Premium</h3>
+              </div>
+              <span class="flow-card-badge badge-blood">TOP 5</span>
+            </div>
+            <div class="flow-card-subtitle">Top 5 bearish symbols by dollar premium spent on puts & call-sales</div>
+            <div class="flow-table-wrapper">
+              <table class="flow-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">#</th>
+                    <th>TICKER</th>
+                    <th>PREMIUM SPENT</th>
+                    <th>HITS</th>
+                    <th>DAYS</th>
+                  </tr>
+                </thead>
+                <tbody id="flowBodyBearishPremium">
+                  <tr><td colspan="5" class="flow-empty-state">Loading bearish premium flow...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 4: Top Bearish by Contract Hits -->
           <div class="flow-card card-bearish" id="cardTopBearish">
             <div class="flow-card-header">
               <div class="flow-card-title-group">
@@ -317,11 +345,14 @@ export class FlowView {
   renderActiveTables() {
     if (!this.container || !this.currentData) return;
 
-    const windowKey = this.activeDuration === '7d' ? 'window_7d' : 'window_3d';
+    const windowKey = (this.activeDuration === '1w' || this.activeDuration === '7d')
+      ? (this.currentData.window_1w ? 'window_1w' : 'window_7d')
+      : 'window_3d';
     const windowData = this.currentData[windowKey] || {
       market_dates: [],
       top_premium_bullish: [],
       top_hits_bullish: [],
+      top_premium_bearish: [],
       top_hits_bearish: []
     };
 
@@ -370,7 +401,26 @@ export class FlowView {
       }
     }
 
-    // Render Table 3: Top Bearish Hits
+    // Render Table 3: Top Bearish Premium
+    const bodyBearishPremium = this.container.querySelector('#flowBodyBearishPremium');
+    if (bodyBearishPremium) {
+      const rows = windowData.top_premium_bearish || [];
+      if (rows.length === 0) {
+        bodyBearishPremium.innerHTML = `<tr><td colspan="5" class="flow-empty-state">No qualifying bearish premium prints found.</td></tr>`;
+      } else {
+        bodyBearishPremium.innerHTML = rows.map(r => `
+          <tr data-ticker="${r.symbol}" title="Open ${r.symbol} in Cockpit">
+            <td><span class="flow-rank-pill flow-rank-${r.rank}">${r.rank}</span></td>
+            <td><span class="flow-ticker-btn">${r.symbol}</span></td>
+            <td><strong class="flow-metric-primary metric-blood">${r.formatted_premium}</strong></td>
+            <td><span class="flow-metric-secondary">${r.contract_count} prints</span></td>
+            <td><span class="flow-days-pill">${r.active_days}d</span></td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    // Render Table 4: Top Bearish Hits
     const bodyBearish = this.container.querySelector('#flowBodyBearish');
     if (bodyBearish) {
       const rows = windowData.top_hits_bearish || [];
@@ -392,7 +442,7 @@ export class FlowView {
 
   renderErrorState() {
     if (!this.container) return;
-    for (const id of ['#flowBodyPremium', '#flowBodyBullish', '#flowBodyBearish']) {
+    for (const id of ['#flowBodyPremium', '#flowBodyBullish', '#flowBodyBearishPremium', '#flowBodyBearish']) {
       const el = this.container.querySelector(id);
       if (el) {
         el.innerHTML = `<tr><td colspan="5" class="flow-empty-state error">Failed to load options flow aggregates.</td></tr>`;
