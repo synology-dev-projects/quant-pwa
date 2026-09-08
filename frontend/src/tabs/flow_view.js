@@ -1,4 +1,5 @@
 import { fetchWithAuth } from '../state.js?v=30';
+import { renderMarkdown } from '../components/message_renderer.js';
 
 export class FlowView {
   constructor() {
@@ -6,6 +7,8 @@ export class FlowView {
     this.currentData = null;
     this.activeDuration = '3d'; // '3d' | '7d'
     this.isLoading = false;
+    this.isStreaming = false;
+    this.streamAbortController = null;
   }
 
   render(container) {
@@ -29,6 +32,23 @@ export class FlowView {
               <button type="button" class="flow-duration-btn" data-duration="7d">7 Days</button>
             </div>
             <button type="button" class="flow-refresh-btn" id="flowRefreshBtn" title="Reload Flow Aggregates">↻</button>
+          </div>
+        </div>
+
+        <!-- Flow Hero Panel: Synergized Flow Synthesis -->
+        <div class="flow-panel-hero" id="flowPanelHero">
+          <div class="flow-hero-header">
+            <div class="flow-hero-title-group">
+              <span class="status-dot dot-live pulse"></span>
+              <h3 class="flow-hero-title">Notable Flow Synthesis</h3>
+            </div>
+            <span class="flow-hero-session-date" id="flowHeroDate">SESSION: RESOLVING...</span>
+          </div>
+          <div class="synthesis-content-box" id="flowSynthesisMarkdown">
+            <div class="cockpit-loading-block">
+              <div class="typing-indicator"><span></span><span></span><span></span></div>
+              <span class="loading-label">Synthesizing institutional flow thesis across market sessions...</span>
+            </div>
           </div>
         </div>
 
@@ -178,6 +198,7 @@ export class FlowView {
         this.currentData = data;
         this.renderSessionHeader();
         this.renderActiveTables();
+        this.streamFlowSynthesis();
       } else {
         throw new Error(`Server returned HTTP ${res?.status || 500}`);
       }
@@ -191,11 +212,106 @@ export class FlowView {
 
   renderSessionHeader() {
     if (!this.container || !this.currentData) return;
+    const asOf = this.currentData.as_of_date || this.currentData.latest_market_day || 'CURRENT';
     const sessionText = this.container.querySelector('#flowSessionText');
     if (sessionText) {
-      const asOf = this.currentData.as_of_date || this.currentData.latest_market_day || 'CURRENT';
       sessionText.textContent = `AS OF ${asOf}`;
     }
+    const heroDate = this.container.querySelector('#flowHeroDate');
+    if (heroDate) {
+      heroDate.textContent = `SESSION: ${asOf}`;
+    }
+  }
+
+  async streamFlowSynthesis() {
+    if (!this.container) return;
+    const synthBox = this.container.querySelector('#flowSynthesisMarkdown');
+    if (!synthBox) return;
+
+    if (this.streamAbortController) {
+      this.streamAbortController.abort();
+    }
+    this.streamAbortController = new AbortController();
+
+    this.isStreaming = true;
+    synthBox.innerHTML = `
+      <div class="cockpit-loading-block">
+        <div class="typing-indicator"><span></span><span></span><span></span></div>
+        <span class="loading-label">Synthesizing institutional flow thesis across market sessions...</span>
+      </div>
+    `;
+
+    try {
+      const asOf = this.currentData?.as_of_date || '';
+      const url = asOf ? `/api/flow/synthesis/stream?as_of_date=${encodeURIComponent(asOf)}` : '/api/flow/synthesis/stream';
+      const response = await fetchWithAuth(url, {
+        method: 'POST',
+        signal: this.streamAbortController.signal
+      });
+
+      if (response && response.ok && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedText = '';
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split('\n\n');
+          buffer = blocks.pop();
+
+          for (const block of blocks) {
+            if (!block.trim()) continue;
+            let dataStr = '';
+            const lines = block.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data:')) {
+                dataStr += (dataStr ? '\n' : '') + line.slice(5).trim();
+              }
+            }
+            if (dataStr) {
+              try {
+                const parsed = JSON.parse(dataStr);
+                const tokenChunk = parsed.content || parsed.text || parsed.token || '';
+                if (tokenChunk) {
+                  accumulatedText += tokenChunk;
+                  if (synthBox) synthBox.innerHTML = renderMarkdown(accumulatedText);
+                }
+              } catch {
+                accumulatedText += dataStr;
+                if (synthBox) synthBox.innerHTML = renderMarkdown(accumulatedText);
+              }
+            }
+          }
+        }
+      } else {
+        await this.simulateFlowSynthesisStream(synthBox);
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      await this.simulateFlowSynthesisStream(synthBox);
+    } finally {
+      this.isStreaming = false;
+    }
+  }
+
+  async simulateFlowSynthesisStream(synthBox) {
+    if (!synthBox) return;
+    const topPrem = this.currentData?.window_3d?.top_premium_bullish || [];
+    const leader = topPrem[0];
+    const leaderStr = leader
+      ? `**${leader.symbol}** led bullish dollar flow with **${leader.formatted_premium}** in premium spent`
+      : `Broad institutional sweeps observed across index ETFs`;
+
+    const thesisMarkdown = `
+### Market Flow Snapshot
+• **Notable Flow**: ${leaderStr}, concentrating high-conviction order positioning across the latest session.
+    `.trim();
+
+    synthBox.innerHTML = renderMarkdown(thesisMarkdown);
   }
 
   renderActiveTables() {
