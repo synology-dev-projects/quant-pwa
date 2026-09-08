@@ -28,6 +28,7 @@ from app.routers.cockpit import router as cockpit_router
 from app.routers.flow_status import router as flow_status_router
 from app.routers.flow_aggregate import router as flow_aggregate_router
 from app.routers.quant_levels_status import router as quant_levels_status_router
+from app.routers.snapshot_status import router as snapshot_status_router
 from app.routers.scanner import router as scanner_router
 from app.tools.gexdex_tool import run_cache_warmer_loop
 from app.engine.service import gexdex_service
@@ -133,6 +134,12 @@ app.include_router(flow_aggregate_router)
 app.include_router(
     quant_levels_status_router,
     prefix="/api/quant-levels"
+)
+
+# Mount GEX/DEX Snapshot Ingestion Status Router
+app.include_router(
+    snapshot_status_router,
+    prefix="/api/snapshot"
 )
 
 # Mount Market Confluence Scanner Router

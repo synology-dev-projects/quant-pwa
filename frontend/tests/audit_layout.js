@@ -798,6 +798,10 @@ function buildAuditDomTree() {
   syncLevelsBtn.className = 'btn btn-synced';
   settingsActions.appendChild(syncLevelsBtn);
 
+  const syncSnapshotBtn = new MockElement('button', 'syncSnapshotBtn');
+  syncSnapshotBtn.className = 'btn btn-synced';
+  settingsActions.appendChild(syncSnapshotBtn);
+
   const lockAppBtn = new MockElement('button', 'lockAppBtn');
   lockAppBtn.className = 'btn btn-warning';
   settingsActions.appendChild(lockAppBtn);
@@ -972,6 +976,7 @@ const interactiveAuditTargets = [
   { name: 'Settings Warning Lock Button', selector: '#lockAppBtn', minTap: 44, requiresContainer: false },
   { name: 'Settings Sync Flow Button', selector: '#syncFlowBtn', minTap: 44, requiresContainer: false },
   { name: 'Settings Sync Levels Button', selector: '#syncLevelsBtn', minTap: 44, requiresContainer: false },
+  { name: 'Settings Sync Snapshot Button', selector: '#syncSnapshotBtn', minTap: 44, requiresContainer: false },
   { name: 'Settings Force Update Button', selector: '#forceUpdateBtn', minTap: 44, requiresContainer: false }
 ];
 
@@ -1004,6 +1009,7 @@ const settingsActionButtons = [
   '#forceUpdateBtn',
   '#syncFlowBtn',
   '#syncLevelsBtn',
+  '#syncSnapshotBtn',
   '#lockAppBtn',
   '#settingsSave'
 ];
