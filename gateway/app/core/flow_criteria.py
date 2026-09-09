@@ -260,7 +260,14 @@ def extract_session_notable_flow_db(
         logger.warning(f"Failed to query session top premium flow: {e}")
 
     # 2. Query Notable OTM prints for session_date
-    query_notable_otm = sa.text("""
+    is_sqlite = getattr(conn.dialect, "name", "") == "sqlite"
+    dte_expr = (
+        "CAST(ROUND(julianday(expiration_date) - julianday(trade_date)) AS INTEGER)"
+        if is_sqlite
+        else "(CAST(expiration_date AS DATE) - CAST(trade_date AS DATE))"
+    )
+
+    query_notable_otm = sa.text(f"""
         SELECT 
             symbol,
             order_type,
@@ -269,13 +276,13 @@ def extract_session_notable_flow_db(
             expiration_date,
             trade_date,
             premium,
-            (expiration_date - trade_date) as dte
+            {dte_expr} as dte
         FROM unusual_option_flow_te
         WHERE trade_date = :session_date
           AND strike_price > 0
           AND ABS(strike_otm_pct) >= :min_otm_pct
-          AND (expiration_date - trade_date) >= 0
-          AND (expiration_date - trade_date) <= :max_dte
+          AND {dte_expr} >= 0
+          AND {dte_expr} <= :max_dte
         ORDER BY premium DESC
     """)
 

@@ -125,3 +125,39 @@ def test_extract_ticker_notable_flow_strict_segregation_and_session_date():
     assert otm[0]["strike"] == 180.0
     assert otm[0]["otm_pct"] == 10.0
     assert otm[0]["dte"] == 14
+
+
+def test_extract_session_notable_flow_db_sqlite():
+    import sqlalchemy as sa
+    from app.core.flow_criteria import extract_session_notable_flow_db
+
+    engine = sa.create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(sa.text("""
+            CREATE TABLE unusual_option_flow_te (
+                flow_id TEXT PRIMARY KEY,
+                trade_date TEXT,
+                symbol TEXT,
+                order_type TEXT,
+                strike_price REAL,
+                strike_otm_pct REAL,
+                expiration_date TEXT,
+                premium REAL
+            );
+        """))
+        conn.execute(sa.text("""
+            INSERT INTO unusual_option_flow_te VALUES
+            ('1', '2026-09-04', 'ORCL', 'BUY_CALL', 177.5, 12.0, '2026-09-11', 1900000.0),
+            ('2', '2026-09-04', 'SMH', 'SELL_PUT', 580.0, 2.0, '2027-01-15', 24300000.0),
+            ('3', '2026-08-20', 'SMH', 'SELL_PUT', 570.0, 1.0, '2027-01-15', 30000000.0);
+        """))
+
+    with engine.connect() as conn:
+        tp, otm = extract_session_notable_flow_db(conn, "2026-09-04")
+        assert len(tp) >= 1
+        assert tp[0]["symbol"] == "SMH"
+        assert len(otm) >= 1
+        assert otm[0]["symbol"] == "ORCL"
+        assert otm[0]["otm_pct"] == 12.0
+        assert otm[0]["dte"] == 7
+
