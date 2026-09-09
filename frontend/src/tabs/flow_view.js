@@ -213,6 +213,17 @@ export class FlowView {
         }
       });
     }
+
+    // Notable Flow Card Click Delegation for Cockpit Drill-Down
+    const hero = this.container.querySelector('#flowPanelHero');
+    if (hero) {
+      hero.addEventListener('click', (e) => {
+        const row = e.target.closest ? e.target.closest('.notable-flow-row[data-ticker]') : null;
+        if (row && row.dataset.ticker) {
+          this.drillDownToCockpit(row.dataset.ticker);
+        }
+      });
+    }
   }
 
   async loadFlowData() {
