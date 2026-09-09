@@ -34,34 +34,52 @@ class FlowSyncResponse(BaseModel):
 
 def get_last_market_day(ref_dt: Optional[datetime] = None) -> date:
     """
-    Determines the expected market trading day based on day of week and 6:30 AM cutoff.
+    Determines the expected market trading day based on day of week, 6:30 AM cutoff,
+    and official NYSE market holidays.
     - If Saturday (5) or Sunday (6): Last market day is Friday.
     - If Monday (0): Last market day is Friday.
     - If Tuesday (1) to Friday (4):
       - Before 6:30 AM: 2 calendar days ago (or Friday if Tuesday).
       - After 6:30 AM: Yesterday (1 calendar day ago).
+    Rolls back automatically across weekends and official market holidays.
     """
     now = ref_dt or datetime.now()
     weekday = now.weekday()  # 0=Monday, ..., 6=Sunday
     cutoff_time = time(6, 30)
     is_after_cutoff = now.time() >= cutoff_time
 
+    holidays = set()
+    try:
+        from pandas.tseries.holiday import USFederalHolidayCalendar
+        cal = USFederalHolidayCalendar()
+        start_search = (now - timedelta(days=30)).date()
+        end_search = (now + timedelta(days=5)).date()
+        holidays = set(d.date() for d in cal.holidays(start=start_search, end=end_search))
+    except Exception as ex:
+        logger.warning(f"Could not load US holiday calendar: {ex}")
+
     if weekday == 5:  # Saturday
-        return (now - timedelta(days=1)).date()  # Friday
+        candidate = (now - timedelta(days=1)).date()
     elif weekday == 6:  # Sunday
-        return (now - timedelta(days=2)).date()  # Friday
+        candidate = (now - timedelta(days=2)).date()
     elif weekday == 0:  # Monday
-        return (now - timedelta(days=3)).date()  # Friday
+        candidate = (now - timedelta(days=3)).date()
     elif weekday == 1:  # Tuesday
         if is_after_cutoff:
-            return (now - timedelta(days=1)).date()  # Monday
+            candidate = (now - timedelta(days=1)).date()
         else:
-            return (now - timedelta(days=4)).date()  # Friday
+            candidate = (now - timedelta(days=4)).date()
     else:  # Wednesday, Thursday, Friday (2, 3, 4)
         if is_after_cutoff:
-            return (now - timedelta(days=1)).date()  # Yesterday
+            candidate = (now - timedelta(days=1)).date()
         else:
-            return (now - timedelta(days=2)).date()  # 2 days ago
+            candidate = (now - timedelta(days=2)).date()
+
+    while candidate.weekday() >= 5 or candidate in holidays:
+        candidate -= timedelta(days=1)
+
+    return candidate
+
 
 
 def pd_not_na(val: Any) -> bool:
