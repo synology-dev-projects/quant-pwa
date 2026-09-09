@@ -27,3 +27,14 @@
 6. **Staging Defect Intercept Mandate**:
    - If an issue or defect is discovered on Staging (`:8096`) or at the Production Gate, you MUST immediately spawn a nested defect workflow (`python scripts/protocol_graph.py staging-bug --name "<issue>"`).
    - Never apply unverified or ad-hoc patches while a feature is at staging. All defects must satisfy the RED/GREEN/AUDIT gates and be verified on staging before production promotion is unlocked.
+
+7. **Mandatory Graph-Bound Domain Skill Adherence**:
+   - Every phase in `scripts/protocol_graph.py` is bound to a specialized engineering skill runbook under `.agents/skills/`. Agents MUST consult and adhere strictly to the bound skill before making modifications:
+     * **Intake & Orchestration (`PHASE_0_INTAKE`)**: Follow `.agents/skills/captain-orchestrator/SKILL.md` for Grill-Me interviews, user alignment, and task scoping.
+     * **Reproduction Scaffolding (`PHASE_1_RED_GATE`)**: Follow `.agents/skills/repro-scaffolder/SKILL.md` for fast TDD reproduction, isolated mock fixtures, and failing assert verification.
+     * **UI & PWA Frontend (`PHASE_2_SURGICAL_FIX` / `PHASE_3_EXECUTION`)**: Follow `.agents/skills/bloomberg-terminal-components/SKILL.md` for Bloomberg dark-theme tokens (`#0b0f19`, `#10b981`, `#fbbf24`), 44px minimum touch targets, and zero horizontal/vertical layout overflows.
+     * **Database & Hypertables (`PHASE_2_SURGICAL_FIX` / `PHASE_3_EXECUTION`)**: Follow `.agents/skills/timescale-options-analytics/SKILL.md` for single-scan CTE queries, composite partial indexes, and explicit date casting.
+     * **Streaming & FastAPI (`PHASE_2_SURGICAL_FIX` / `PHASE_3_EXECUTION`)**: Follow `.agents/skills/fastapi-sse-streaming/SKILL.md` for native `StreamingResponse`, `ReadableStream` client consumer loops, and keep-alive ping headers.
+     * **Pre-Commit Code Audit (`PHASE_4_AUDIT`)**: Follow `.agents/skills/no-mistakes-reviewer/SKILL.md` for adversarial diff inspection across security, precision, concurrency, and test coverage.
+     * **Staging & Docker Deployment (`PHASE_5_STAGING`)**: Follow `.agents/skills/docker/SKILL.md` (and `.agents/skills/synology-nas-guardian/SKILL.md`) for zero-bloat multi-stage Docker builds, strict `< 350MB` RAM budgets, and healthcheck watchdogs.
+     * **Production Gate (`PHASE_6_PRODUCTION_GATE`)**: Follow `.agents/skills/architecture-review-agent/SKILL.md` for 1,000 DAU enterprise scalability validation.
