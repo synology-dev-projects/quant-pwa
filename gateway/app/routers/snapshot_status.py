@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from common_lib.config.main_config import load_config
 from common_lib.connectors import postgres
 from app.core.auth import get_current_user
+from app.routers.flow_status import get_last_market_day
 
 logger = logging.getLogger("quant.gateway.snapshot_status")
 
@@ -35,36 +36,25 @@ class SnapshotSyncResponse(BaseModel):
 
 def get_market_calendar_context(ref_dt: Optional[datetime] = None) -> tuple[bool, date, date]:
     """
-    Evaluates market schedule based on US/Eastern time:
+    Evaluates market schedule:
     Returns (is_today_market_day, today_date, last_market_day).
-    Accounting for weekends and NYSE official market holidays.
+    Uses get_last_market_day() for complete parity with Flow status.
     """
-    try:
-        eastern = ZoneInfo("America/New_York")
-        now = datetime.now(eastern) if ref_dt is None else (
-            ref_dt.replace(tzinfo=eastern) if ref_dt.tzinfo is None else ref_dt.astimezone(eastern)
-        )
-    except Exception:
-        now = datetime.now()
+    now = ref_dt or datetime.now()
+    today_date = now.date() if isinstance(now, datetime) else now
+    last_market_day = get_last_market_day(ref_dt)
 
     holidays = set()
     try:
         from pandas.tseries.holiday import USFederalHolidayCalendar
         cal = USFederalHolidayCalendar()
-        start_search = (now - timedelta(days=30)).date()
-        end_search = (now + timedelta(days=5)).date()
+        start_search = (today_date - timedelta(days=30))
+        end_search = (today_date + timedelta(days=5))
         holidays = set(d.date() for d in cal.holidays(start=start_search, end=end_search))
     except Exception as ex:
         logger.warning(f"Could not load US holiday calendar: {ex}")
 
-    today_date = now.date()
     is_today_market_day = (today_date.weekday() < 5 and today_date not in holidays)
-
-    # Calculate last market day before today
-    candidate = today_date - timedelta(days=1)
-    while candidate.weekday() >= 5 or candidate in holidays:
-        candidate -= timedelta(days=1)
-    last_market_day = candidate
 
     return is_today_market_day, today_date, last_market_day
 
@@ -80,13 +70,13 @@ def pd_not_na(val: Any) -> bool:
 async def get_snapshot_status():
     """
     Returns the freshness status of the GEX/DEX Snapshot fact table in PostgreSQL.
-    Rule: In order to be synced, the snapshot date must equal today's date (if a market day)
-    OR the last market day.
+    Rule: Synced up the exact same way as flow status: snapshot date matches or exceeds
+    the expected market day (or equals today's date if market day).
     """
     is_today_market_day, today_date, last_market_day = get_market_calendar_context()
     today_str = today_date.strftime("%Y-%m-%d")
     last_market_day_str = last_market_day.strftime("%Y-%m-%d")
-    expected_str = today_str if is_today_market_day else last_market_day_str
+    expected_str = last_market_day_str
 
     try:
         config = load_config()
@@ -138,19 +128,15 @@ async def get_snapshot_status():
         latest_day_count = int(row.get("latest_day_count", 0))
 
         # Freshness Check:
-        # If market day: synced if snapshot_date == today OR last_market_day
-        # If non-market day: synced if snapshot_date == last_market_day
-        valid_dates = {today_date, last_market_day} if is_today_market_day else {last_market_day}
-        valid_date_strs = {d.strftime("%Y-%m-%d") for d in valid_dates}
-
+        # Synced up the exact same way as flow: Must have snapshot date matching or exceeding last_market_day
         is_fresh = False
         if max_date_val and latest_day_count > 0:
             clean_date_str = max_date_val.split()[0]
             try:
                 latest_d = datetime.strptime(clean_date_str, "%Y-%m-%d").date()
-                is_fresh = (latest_d in valid_dates)
+                is_fresh = (latest_d >= last_market_day)
             except Exception:
-                is_fresh = (clean_date_str in valid_date_strs)
+                is_fresh = (clean_date_str >= last_market_day_str)
 
         status_str = "synced" if is_fresh else "stale"
         message_str = (
