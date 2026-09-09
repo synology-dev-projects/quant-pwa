@@ -41,7 +41,7 @@ def get_market_calendar_context(ref_dt: Optional[datetime] = None) -> tuple[bool
     Uses get_last_market_day() for complete parity with Flow status.
     """
     now = ref_dt or datetime.now()
-    today_date = now.date() if isinstance(now, datetime) else now
+    today_date = now.date() if hasattr(now, "date") else now
     last_market_day = get_last_market_day(ref_dt)
 
     holidays = set()
