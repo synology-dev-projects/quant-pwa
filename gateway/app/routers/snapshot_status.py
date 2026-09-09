@@ -98,7 +98,7 @@ async def get_snapshot_status():
         ) AS tbl_exists;
         """
         tbl_df = postgres.sql(config, check_table_sql)
-        if tbl_df.empty or not bool(tbl_df.iloc[0]["tbl_exists"]):
+        if tbl_df.empty or not bool(tbl_df.iloc[0, 0]):
             return SnapshotStatusResponse(
                 status="stale",
                 is_fresh=False,
