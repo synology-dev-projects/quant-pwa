@@ -499,6 +499,112 @@ function parseMarkdownTables(text) {
   return result.join('\n');
 }
 
+function parseNotableFlow(text, storage) {
+  if (!text) return text;
+
+  const nfRegex = /(?:^[•*-]?\s*|\n[•*-]?\s*)\*\*Notable Flow\*\*:\s*(?:\n|$)([\s\S]*?)(?=(?:\n[•*-]\s*\*\*|\n###|$))/i;
+  const match = text.match(nfRegex);
+  if (!match) return text;
+
+  const content = match[1];
+
+  const tpRegex = /[•*-]?\s*\*\*TOP PREMIUM\*\*:\s*(?:\n|$)([\s\S]*?)(?=[•*-]?\s*\*\*NOTABLE OTM\*\*|$)/i;
+  const tpMatch = content.match(tpRegex);
+  const tpRawLines = tpMatch ? tpMatch[1].trim().split('\n').map(l => l.trim()).filter(Boolean) : [];
+
+  const otmRegex = /[•*-]?\s*\*\*NOTABLE OTM\*\*:\s*(?:\n|$)([\s\S]*?)$/i;
+  const otmMatch = content.match(otmRegex);
+  const otmRawLines = otmMatch ? otmMatch[1].trim().split('\n').map(l => l.trim()).filter(Boolean) : [];
+
+  function parseItems(lines, type) {
+    if (!lines.length || lines.some(l => l.toUpperCase().includes('NONE FOUND'))) {
+      return `<div class="notable-flow-empty"><span class="empty-bullet">○</span> NONE FOUND</div>`;
+    }
+
+    return lines.map(line => {
+      const clean = line.replace(/^[-*•]\s*/, '').trim();
+      if (!clean) return '';
+
+      if (type === 'premium') {
+        const m = clean.match(/^([A-Z0-9.\-_]+)\s+(\$[0-9.]+[KMBkmb]?)\s+PREMIUM\s*\(([^)]+)\)/i);
+        if (m) {
+          const [_, sym, prem, rank] = m;
+          return `
+            <div class="notable-flow-row" data-ticker="${sym}" title="Click to inspect ${sym} in Cockpit">
+              <div class="notable-sym-group">
+                <span class="notable-ticker-badge">${sym}</span>
+                <span class="notable-rank-pill">${rank}</span>
+              </div>
+              <div class="notable-metric-group">
+                <span class="notable-metric-val val-premium">${prem}</span>
+                <span class="notable-metric-label">PREMIUM (${rank})</span>
+              </div>
+            </div>
+          `.trim();
+        }
+      } else {
+        const m = clean.match(/^([A-Z0-9.\-_]+)\s+([+-]?[0-9.]+%?)\s*OTM\s+(.*)$/i);
+        if (m) {
+          const [_, sym, otm, exp] = m;
+          const cleanOtm = otm.endsWith('%') ? otm : `${otm}%`;
+          return `
+            <div class="notable-flow-row" data-ticker="${sym}" title="Click to inspect ${sym} in Cockpit">
+              <div class="notable-sym-group">
+                <span class="notable-ticker-badge">${sym}</span>
+                <span class="notable-dte-pill">${exp}</span>
+              </div>
+              <div class="notable-metric-group">
+                <span class="notable-metric-val val-otm">${cleanOtm}</span>
+                <span class="notable-metric-label">OTM</span>
+              </div>
+            </div>
+          `.trim();
+        }
+      }
+      return `<div class="notable-flow-row raw-line">${clean}</div>`;
+    }).filter(Boolean).join('\n');
+  }
+
+  const tpHtml = parseItems(tpRawLines, 'premium');
+  const otmHtml = parseItems(otmRawLines, 'otm');
+
+  const cardHtml = `
+<div class="notable-flow-container">
+  <div class="notable-flow-header">
+    <span class="notable-flow-header-dot"></span>
+    <span class="notable-flow-header-title">Notable Flow</span>
+    <span class="notable-flow-header-hint">Tap any ticker to inspect in Cockpit ↗</span>
+  </div>
+  <div class="notable-flow-grid">
+    <div class="notable-flow-card card-premium">
+      <div class="notable-flow-card-header">
+        <span class="notable-card-icon">💰</span>
+        <span class="notable-card-title">TOP PREMIUM</span>
+        <span class="notable-card-subtitle">All-Time Highs</span>
+      </div>
+      <div class="notable-flow-list">
+        ${tpHtml}
+      </div>
+    </div>
+    <div class="notable-flow-card card-otm">
+      <div class="notable-flow-card-header">
+        <span class="notable-card-icon">⚡</span>
+        <span class="notable-card-title">NOTABLE OTM</span>
+        <span class="notable-card-subtitle">&ge;10% OTM Speculation</span>
+      </div>
+      <div class="notable-flow-list">
+        ${otmHtml}
+      </div>
+    </div>
+  </div>
+</div>
+  `.trim();
+
+  const id = storage.length;
+  storage.push(cardHtml);
+  return text.replace(match[0], `<!--___NOTABLE_FLOW_BLOCK_${id}___-->`);
+}
+
 export function renderMarkdown(text) {
   if (!text) return '';
 
@@ -541,6 +647,10 @@ export function renderMarkdown(text) {
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
   html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
 
+  // Parse Notable Flow into structured cards
+  const notableFlowBlocks = [];
+  html = parseNotableFlow(html, notableFlowBlocks);
+
   // Bold & Italic
   html = html.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
@@ -555,7 +665,7 @@ export function renderMarkdown(text) {
   // Parse Markdown Tables before line break processing
   html = parseMarkdownTables(html);
 
-  // Line breaks & paragraphs (protect table blocks from broken <br/> tags)
+  // Line breaks & paragraphs (protect table blocks and notable flow blocks from broken <br/> tags)
   const parts = html.split(/(<div class="quant-table-wrapper"[\s\S]*?<\/div>\s*<\/div>)/g);
   html = parts.map(part => {
     if (part.startsWith('<div class="quant-table-wrapper"')) {
@@ -565,6 +675,9 @@ export function renderMarkdown(text) {
       .replace(/\n\n/g, '<p></p>')
       .replace(/\n/g, '<br/>');
   }).join('');
+
+  // Restore protected notable flow blocks
+  html = html.replace(/<!--___NOTABLE_FLOW_BLOCK_(\d+)___-->/g, (_, idx) => notableFlowBlocks[parseInt(idx, 10)] || '');
 
   return html;
 }

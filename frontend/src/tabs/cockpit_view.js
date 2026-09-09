@@ -283,6 +283,13 @@ export class CockpitView {
         this.setFlowFilter(filter);
         return;
       }
+
+      // Notable Flow Row Click
+      const notableRow = e.target.closest ? e.target.closest('.notable-flow-row[data-ticker]') : null;
+      if (notableRow && this.container.contains(notableRow) && notableRow.dataset.ticker) {
+        this.searchTicker(notableRow.dataset.ticker);
+        return;
+      }
     });
   }
 
