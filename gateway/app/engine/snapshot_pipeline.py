@@ -375,7 +375,7 @@ def replace_snapshot(engine: sa.Engine, target_date: date, records: List[Dict[st
     for r in records:
         row = dict(r)
         if "source_scorecards" in row and isinstance(row["source_scorecards"], (list, set, tuple)):
-            row["source_scorecards"] = json.dumps(list(row["source_scorecards"]))
+            row["source_scorecards"] = list(row["source_scorecards"])
         prepared_rows.append(row)
 
     with engine.begin() as conn:
