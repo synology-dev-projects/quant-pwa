@@ -6,6 +6,9 @@ export class WatchlistView {
     this.watchlists = [];
     this.selectedWatchlistId = null;
     this.isLoading = false;
+    this.quotes = {};
+    this.pollInterval = null;
+    this.visibilityHandler = null;
   }
 
   render(container) {
@@ -18,6 +21,9 @@ export class WatchlistView {
             <span class="watchlist-badge-icon">📋</span>
             <h1 class="watchlist-title">Watchlists</h1>
             <span class="watchlist-count-badge" id="watchlistCountBadge">0 TICKERS</span>
+            <span class="watchlist-live-tag" id="watchlistLiveTag" title="Live quote feed (updates every 5s)">
+              <span class="dot-live"></span> 5s LIVE
+            </span>
           </div>
 
           <div class="watchlist-controls-group">
@@ -97,21 +103,22 @@ export class WatchlistView {
     if (!this.container) return;
 
     // Watchlist Dropdown Select
-    const select = this.container.querySelector('#watchlistSelect');
+    const select = this.container?.querySelector?.('#watchlistSelect');
     if (select) {
       select.addEventListener('change', (e) => {
         this.selectedWatchlistId = e.target.value;
         this.clearValidationMessage();
         this.renderTickers();
+        this.fetchQuotes();
       });
     }
 
     // Add Ticker Form
-    const form = this.container.querySelector('#watchlistAddForm');
+    const form = this.container?.querySelector?.('#watchlistAddForm');
     if (form) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const input = this.container.querySelector('#watchlistTickerInput');
+        const input = this.container?.querySelector?.('#watchlistTickerInput');
         if (!input) return;
         const ticker = input.value.trim().toUpperCase();
         if (!ticker) return;
@@ -120,12 +127,12 @@ export class WatchlistView {
     }
 
     // New Watchlist Modal Triggers
-    const newBtn = this.container.querySelector('#newWatchlistBtn');
-    const modal = this.container.querySelector('#newWatchlistModal');
-    const nameInput = this.container.querySelector('#newWatchlistNameInput');
-    const closeBtn = this.container.querySelector('#closeWatchlistModalBtn');
-    const cancelBtn = this.container.querySelector('#cancelWatchlistModalBtn');
-    const confirmBtn = this.container.querySelector('#confirmWatchlistModalBtn');
+    const newBtn = this.container?.querySelector?.('#newWatchlistBtn');
+    const modal = this.container?.querySelector?.('#newWatchlistModal');
+    const nameInput = this.container?.querySelector?.('#newWatchlistNameInput');
+    const closeBtn = this.container?.querySelector?.('#closeWatchlistModalBtn');
+    const cancelBtn = this.container?.querySelector?.('#cancelWatchlistModalBtn');
+    const confirmBtn = this.container?.querySelector?.('#confirmWatchlistModalBtn');
 
     const openModal = () => {
       if (modal) {
@@ -169,7 +176,7 @@ export class WatchlistView {
     }
 
     // Delete Watchlist Button
-    const deleteBtn = this.container.querySelector('#deleteWatchlistBtn');
+    const deleteBtn = this.container?.querySelector?.('#deleteWatchlistBtn');
     if (deleteBtn) {
       deleteBtn.addEventListener('click', async () => {
         if (!this.selectedWatchlistId) return;
@@ -183,17 +190,29 @@ export class WatchlistView {
         }
       });
     }
+
+    // Tab visibility handler for battery & network conservation
+    if (!this.visibilityHandler && typeof document !== 'undefined') {
+      this.visibilityHandler = () => {
+        if (document.hidden) {
+          this.stopQuotePolling();
+        } else if (AppState && typeof AppState.getActiveTab === 'function' && AppState.getActiveTab() === 'watchlists') {
+          this.startQuotePolling();
+        }
+      };
+      document.addEventListener('visibilitychange', this.visibilityHandler);
+    }
   }
 
   showValidationMessage(msg, isError = false) {
-    const el = this.container?.querySelector('#watchlistValidationMsg');
+    const el = this.container?.querySelector?.('#watchlistValidationMsg');
     if (!el) return;
     el.textContent = msg;
     el.className = `watchlist-validation-msg visible ${isError ? 'error' : 'success'}`;
   }
 
   clearValidationMessage() {
-    const el = this.container?.querySelector('#watchlistValidationMsg');
+    const el = this.container?.querySelector?.('#watchlistValidationMsg');
     if (!el) return;
     el.textContent = '';
     el.className = 'watchlist-validation-msg';
@@ -216,6 +235,7 @@ export class WatchlistView {
 
       this.renderWatchlistSelect();
       this.renderTickers();
+      this.startQuotePolling();
     } catch (err) {
       console.error('[Watchlist] Error loading watchlists:', err);
       this.showValidationMessage(`Unable to load watchlists: ${err.message}`, true);
@@ -225,7 +245,7 @@ export class WatchlistView {
   }
 
   renderWatchlistSelect() {
-    const select = this.container?.querySelector('#watchlistSelect');
+    const select = this.container?.querySelector?.('#watchlistSelect');
     if (!select) return;
 
     if (this.watchlists.length === 0) {
@@ -239,8 +259,8 @@ export class WatchlistView {
   }
 
   renderTickers() {
-    const grid = this.container?.querySelector('#watchlistGrid');
-    const badge = this.container?.querySelector('#watchlistCountBadge');
+    const grid = this.container?.querySelector?.('#watchlistGrid');
+    const badge = this.container?.querySelector?.('#watchlistCountBadge');
     if (!grid) return;
 
     const current = this.watchlists.find(w => w.id === this.selectedWatchlistId);
@@ -274,6 +294,24 @@ export class WatchlistView {
         return `<span class="watchlist-index-badge ${cls}">${idxName}</span>`;
       }).join('');
 
+      const q = this.quotes[t.ticker];
+      const hasQuote = Boolean(q && typeof q.price === 'number');
+      const displayPrice = hasQuote ? `$${q.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--';
+      let changeClass = 'neutral';
+      let displayChange = '--';
+      if (hasQuote && typeof q.change_pct === 'number') {
+        if (q.change_pct > 0) {
+          changeClass = 'positive';
+          displayChange = `+${q.change_pct.toFixed(2)}%`;
+        } else if (q.change_pct < 0) {
+          changeClass = 'negative';
+          displayChange = `${q.change_pct.toFixed(2)}%`;
+        } else {
+          changeClass = 'neutral';
+          displayChange = '0.00%';
+        }
+      }
+
       return `
         <div class="watchlist-ticker-card" data-ticker="${t.ticker}">
           <div class="watchlist-card-left">
@@ -281,6 +319,10 @@ export class WatchlistView {
             <div class="watchlist-index-badges">
               ${indexPills}
             </div>
+          </div>
+          <div class="watchlist-card-price" id="watchlistPrice_${t.ticker}">
+            <span class="watchlist-spot-price" id="spotPrice_${t.ticker}">${displayPrice}</span>
+            <span class="watchlist-change-badge ${changeClass}" id="changeBadge_${t.ticker}">${displayChange}</span>
           </div>
           <div class="watchlist-card-actions">
             <button type="button" class="watchlist-drilldown-btn" data-ticker="${t.ticker}" title="Inspect ${t.ticker} in Cockpit">
@@ -312,14 +354,120 @@ export class WatchlistView {
     });
   }
 
+  startQuotePolling() {
+    this.updateLiveTag(true);
+    this.fetchQuotes();
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+    }
+    this.pollInterval = setInterval(() => {
+      this.fetchQuotes();
+    }, 5000);
+  }
+
+  stopQuotePolling() {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+    this.updateLiveTag(false);
+  }
+
+  updateLiveTag(isActive) {
+    const tag = this.container?.querySelector?.('#watchlistLiveTag');
+    if (!tag) return;
+    if (isActive) {
+      tag.className = 'watchlist-live-tag';
+      tag.innerHTML = '<span class="dot-live"></span> 5s LIVE';
+      tag.title = 'Live quote feed active (updates every 5s)';
+    } else {
+      tag.className = 'watchlist-live-tag paused';
+      tag.innerHTML = '<span class="dot-live"></span> PAUSED';
+      tag.title = 'Quote feed paused (inactive tab or backgrounded)';
+    }
+  }
+
+  async fetchQuotes() {
+    if (!this.selectedWatchlistId) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+
+    const current = this.watchlists.find(w => w.id === this.selectedWatchlistId);
+    if (!current || !current.tickers || current.tickers.length === 0) return;
+
+    const prevPrices = {};
+    Object.keys(this.quotes).forEach(ticker => {
+      if (this.quotes[ticker] && typeof this.quotes[ticker].price === 'number') {
+        prevPrices[ticker] = this.quotes[ticker].price;
+      }
+    });
+
+    try {
+      const gatewayUrl = AppState.getGatewayUrl();
+      const res = await fetchWithAuth(`${gatewayUrl}/api/watchlists/${this.selectedWatchlistId}/quotes`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (data && data.quotes) {
+        this.quotes = { ...this.quotes, ...data.quotes };
+        this.updatePriceDisplays(prevPrices);
+      }
+    } catch (err) {
+      // In-flight error during network jitter or backgrounding - silently retain existing quotes
+    }
+  }
+
+  updatePriceDisplays(prevPrices = {}) {
+    if (!this.container) return;
+
+    Object.keys(this.quotes).forEach(ticker => {
+      const q = this.quotes[ticker];
+      if (!q || typeof q.price !== 'number') return;
+
+      const spotEl = this.container?.querySelector?.(`#spotPrice_${ticker}`);
+      const badgeEl = this.container?.querySelector?.(`#changeBadge_${ticker}`);
+
+      if (spotEl) {
+        const formattedPrice = `$${q.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        spotEl.textContent = formattedPrice;
+
+        // Flash animation if price changed
+        const prev = prevPrices[ticker];
+        if (typeof prev === 'number') {
+          if (q.price > prev) {
+            spotEl.classList.remove('price-flash-green', 'price-flash-red');
+            void spotEl.offsetWidth;
+            spotEl.classList.add('price-flash-green');
+          } else if (q.price < prev) {
+            spotEl.classList.remove('price-flash-green', 'price-flash-red');
+            void spotEl.offsetWidth;
+            spotEl.classList.add('price-flash-red');
+          }
+        }
+      }
+
+      if (badgeEl && typeof q.change_pct === 'number') {
+        if (q.change_pct > 0) {
+          badgeEl.className = 'watchlist-change-badge positive';
+          badgeEl.textContent = `+${q.change_pct.toFixed(2)}%`;
+        } else if (q.change_pct < 0) {
+          badgeEl.className = 'watchlist-change-badge negative';
+          badgeEl.textContent = `${q.change_pct.toFixed(2)}%`;
+        } else {
+          badgeEl.className = 'watchlist-change-badge neutral';
+          badgeEl.textContent = '0.00%';
+        }
+      }
+    });
+  }
+
   async addTicker(ticker) {
     if (!this.selectedWatchlistId) {
       this.showValidationMessage('Please select or create a watchlist first.', true);
       return;
     }
 
-    const input = this.container?.querySelector('#watchlistTickerInput');
-    const addBtn = this.container?.querySelector('#watchlistAddBtn');
+    const input = this.container?.querySelector?.('#watchlistTickerInput');
+    const addBtn = this.container?.querySelector?.('#watchlistAddBtn');
 
     if (addBtn) addBtn.disabled = true;
     this.clearValidationMessage();
@@ -428,7 +576,9 @@ export class WatchlistView {
         window.quantApp.tabManager.switchTab('cockpit');
       }
       if (window.quantApp.cockpitView && typeof window.quantApp.cockpitView.searchTicker === 'function') {
-        const input = typeof document !== 'undefined' ? document.querySelector('#cockpitSearchInput') : null;
+        const input = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
+          ? document.querySelector('#cockpitSearchInput')
+          : null;
         if (input) input.value = ticker;
         window.quantApp.cockpitView.searchTicker(ticker);
       }
@@ -436,6 +586,11 @@ export class WatchlistView {
   }
 
   destroy() {
+    this.stopQuotePolling();
+    if (this.visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
     if (this.container) {
       this.container.innerHTML = '';
     }

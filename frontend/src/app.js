@@ -106,7 +106,11 @@ class App {
       if (tabId === 'watchlists' && this.watchlistView) {
         if (!this.watchlistView.watchlists || this.watchlistView.watchlists.length === 0) {
           this.watchlistView.loadWatchlists();
+        } else {
+          this.watchlistView.startQuotePolling();
         }
+      } else if (this.watchlistView) {
+        this.watchlistView.stopQuotePolling();
       }
     });
 

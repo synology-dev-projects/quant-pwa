@@ -22,23 +22,44 @@ global.window = {
   }
 };
 global.localStorage = global.window.localStorage;
-global.fetch = async (url) => ({
-  ok: true,
-  status: 200,
-  json: async () => ([
-    {
-      id: 'core_watchlist',
-      name: 'Core Watchlist',
-      tickers: [
-        { ticker: 'NVDA', indices: ['S&P 500', 'Nasdaq 100', 'Dow 30'] },
-        { ticker: 'SPY', indices: ['Major ETF'] },
-        { ticker: 'POWL', indices: ['Russell 2000'] }
-      ]
-    }
-  ])
-});
+global.document = {
+  hidden: false,
+  addEventListener: () => {},
+  removeEventListener: () => {}
+};
+global.fetch = async (url) => {
+  if (url.includes('/quotes')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        watchlist_id: 'core_watchlist',
+        quotes: {
+          NVDA: { ticker: 'NVDA', price: 218.50, change: 3.50, change_pct: 1.63, prev_close: 215.00, is_stale: false },
+          SPY: { ticker: 'SPY', price: 540.20, change: -1.80, change_pct: -0.33, prev_close: 542.00, is_stale: false }
+        },
+        count: 2
+      })
+    };
+  }
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ([
+      {
+        id: 'core_watchlist',
+        name: 'Core Watchlist',
+        tickers: [
+          { ticker: 'NVDA', indices: ['S&P 500', 'Nasdaq 100', 'Dow 30'] },
+          { ticker: 'SPY', indices: ['Major ETF'] },
+          { ticker: 'POWL', indices: ['Russell 2000'] }
+        ]
+      }
+    ])
+  };
+};
 
-import('../src/tabs/watchlist_view.js').then(({ WatchlistView }) => {
+import('../src/tabs/watchlist_view.js').then(async ({ WatchlistView }) => {
   const watchlistView = new WatchlistView();
   const testDiv = { innerHTML: '', querySelector: () => null };
 
@@ -47,6 +68,7 @@ import('../src/tabs/watchlist_view.js').then(({ WatchlistView }) => {
 
   assert(testDiv.innerHTML.includes('watchlist-view-container'), 'Container has watchlist-view-container');
   assert(testDiv.innerHTML.includes('Watchlists'), 'Header contains Watchlists');
+  assert(testDiv.innerHTML.includes('watchlistLiveTag'), 'Header contains 5s LIVE tag');
   assert(testDiv.innerHTML.includes('watchlistSelect'), 'Selector dropdown mounted');
   assert(testDiv.innerHTML.includes('newWatchlistBtn'), '+ New button mounted');
   assert(testDiv.innerHTML.includes('deleteWatchlistBtn'), 'Delete button mounted');
@@ -57,7 +79,7 @@ import('../src/tabs/watchlist_view.js').then(({ WatchlistView }) => {
   assert(testDiv.innerHTML.includes('newWatchlistModal'), 'New Watchlist modal mounted');
   console.log('  ✓ PASS: Watchlist shell mounted cleanly with all required interactive elements');
 
-  console.log('\n--- TEST 2: Ticker Rendering with Index Badges ---');
+  console.log('\n--- TEST 2: Ticker Rendering with Index Badges & Price Slots ---');
   watchlistView.watchlists = [
     {
       id: 'core_watchlist',
@@ -86,18 +108,87 @@ import('../src/tabs/watchlist_view.js').then(({ WatchlistView }) => {
   assert(mockGrid.innerHTML.includes('NVDA'), 'Grid contains NVDA');
   assert(mockGrid.innerHTML.includes('watchlist-index-badge sp500'), 'NVDA has S&P 500 badge');
   assert(mockGrid.innerHTML.includes('watchlist-index-badge ndx'), 'NVDA has Nasdaq 100 badge');
+  assert(mockGrid.innerHTML.includes('watchlist-card-price'), 'Card includes watchlist-card-price slot');
+  assert(mockGrid.innerHTML.includes('spotPrice_NVDA'), 'Card includes spotPrice_NVDA slot');
+  assert(mockGrid.innerHTML.includes('changeBadge_NVDA'), 'Card includes changeBadge_NVDA slot');
   assert(mockGrid.innerHTML.includes('Cockpit ↗'), 'Contains Cockpit drilldown button');
   assert(mockGrid.innerHTML.includes('watchlist-remove-btn'), 'Contains remove button');
-  console.log('  ✓ PASS: Tickers rendered with authoritative index badges & action controls');
+  console.log('  ✓ PASS: Tickers rendered with authoritative index badges & price slots');
 
-  console.log('\n--- TEST 3: Empty State Rendering ---');
+  console.log('\n--- TEST 3: In-Place Spot Price & % Change Mutation ---');
+  const mockSpotNVDA = { textContent: '', classList: { add: () => {}, remove: () => {} } };
+  const mockChangeNVDA = { textContent: '', className: '' };
+  const mockSpotSPY = { textContent: '', classList: { add: () => {}, remove: () => {} } };
+  const mockChangeSPY = { textContent: '', className: '' };
+
+  watchlistView.container = {
+    querySelector: (sel) => {
+      if (sel === '#spotPrice_NVDA') return mockSpotNVDA;
+      if (sel === '#changeBadge_NVDA') return mockChangeNVDA;
+      if (sel === '#spotPrice_SPY') return mockSpotSPY;
+      if (sel === '#changeBadge_SPY') return mockChangeSPY;
+      return null;
+    }
+  };
+
+  watchlistView.quotes = {
+    NVDA: { ticker: 'NVDA', price: 218.50, change: 3.50, change_pct: 1.63 },
+    SPY: { ticker: 'SPY', price: 540.20, change: -1.80, change_pct: -0.33 }
+  };
+
+  watchlistView.updatePriceDisplays({ NVDA: 215.00, SPY: 542.00 });
+
+  assert.equal(mockSpotNVDA.textContent, '$218.50', 'NVDA spot price formatted properly');
+  assert.equal(mockChangeNVDA.textContent, '+1.63%', 'NVDA change badge formatted with +%');
+  assert.equal(mockChangeNVDA.className, 'watchlist-change-badge positive', 'NVDA badge has positive class');
+
+  assert.equal(mockSpotSPY.textContent, '$540.20', 'SPY spot price formatted properly');
+  assert.equal(mockChangeSPY.textContent, '-0.33%', 'SPY change badge formatted with -%');
+  assert.equal(mockChangeSPY.className, 'watchlist-change-badge negative', 'SPY badge has negative class');
+  console.log('  ✓ PASS: In-place DOM price updates format currencies, signs, and polarity classes');
+
+  console.log('\n--- TEST 4: Polling Lifecycle Controls ---');
+  let liveTagHtml = '';
+  let liveTagCls = '';
+  watchlistView.container = {
+    querySelector: (sel) => {
+      if (sel === '#watchlistLiveTag') {
+        return {
+          set innerHTML(val) { liveTagHtml = val; },
+          get innerHTML() { return liveTagHtml; },
+          set className(val) { liveTagCls = val; },
+          get className() { return liveTagCls; },
+          set title(val) {}
+        };
+      }
+      return null;
+    }
+  };
+
+  watchlistView.startQuotePolling();
+  assert(watchlistView.pollInterval !== null, 'pollInterval established');
+  assert(liveTagHtml.includes('5s LIVE'), 'Live tag indicates active polling');
+
+  watchlistView.stopQuotePolling();
+  assert.equal(watchlistView.pollInterval, null, 'pollInterval cleared');
+  assert(liveTagCls.includes('paused'), 'Live tag reflects paused status');
+  console.log('  ✓ PASS: Polling interval and UI tag transition smoothly between active and paused');
+
+  console.log('\n--- TEST 5: Empty State Rendering ---');
   watchlistView.watchlists[0].tickers = [];
+  watchlistView.container = {
+    querySelector: (sel) => {
+      if (sel === '#watchlistGrid') return mockGrid;
+      if (sel === '#watchlistCountBadge') return mockBadge;
+      return null;
+    }
+  };
   watchlistView.renderTickers();
   assert(mockGrid.innerHTML.includes('watchlist-empty-state'), 'Empty state card rendered');
   assert(mockBadge.textContent === '0 TICKERS', 'Count badge updated to 0 TICKERS');
   console.log('  ✓ PASS: Empty state rendered cleanly when zero tickers present');
 
-  console.log('\n--- TEST 4: Drilldown to Cockpit Interaction ---');
+  console.log('\n--- TEST 6: Drilldown to Cockpit Interaction ---');
   let navigatedTab = null;
   let searchedTicker = null;
   global.window.quantApp = {
@@ -114,14 +205,18 @@ import('../src/tabs/watchlist_view.js').then(({ WatchlistView }) => {
   assert.equal(searchedTicker, 'NVDA', 'Invokes cockpitView.searchTicker with NVDA');
   console.log('  ✓ PASS: Drilldown opens cockpit tab and auto-searches ticker');
 
-  console.log('\n--- TEST 5: Lifecycle Teardown ---');
+  console.log('\n--- TEST 7: Lifecycle Teardown ---');
+  watchlistView.startQuotePolling();
+  watchlistView.container = { innerHTML: 'content', querySelector: () => null };
   watchlistView.destroy();
+  assert.equal(watchlistView.pollInterval, null, 'destroy() stopped polling');
   assert.equal(watchlistView.container.innerHTML, '', 'destroy() cleared container');
-  console.log('  ✓ PASS: Container successfully cleared on destroy');
+  console.log('  ✓ PASS: Clean destruction with polling stop and container release');
 
   console.log('\n==================================================================');
   console.log('  ALL WATCHLIST VIEW TESTS PASSED (100% GREEN)');
   console.log('==================================================================');
+  process.exit(0);
 }).catch(err => {
   console.error('Test failed:', err);
   process.exit(1);

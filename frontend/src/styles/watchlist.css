@@ -579,3 +579,122 @@
 .watchlist-modal-btn-create:hover {
   background: #1d4ed8;
 }
+
+/* ==============================================================================
+   Live Polling & Spot Price Geometry (5-Second Free Real-Time Feed)
+   ============================================================================== */
+
+.watchlist-live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #34d399;
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+}
+
+.watchlist-live-tag.paused {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: #94a3b8;
+}
+
+.watchlist-live-tag .dot-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.8);
+  animation: pulseDot 2s infinite ease-in-out;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.watchlist-live-tag.paused .dot-live {
+  background: #64748b;
+  box-shadow: none;
+  animation: none;
+}
+
+/* Card Price & % Up/Down Section */
+.watchlist-card-price {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-left: auto;
+  margin-right: 0.75rem;
+  text-align: right;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.watchlist-spot-price {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.02em;
+  min-width: 65px;
+  transition: color 0.3s ease, transform 0.2s ease;
+}
+
+.watchlist-change-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  padding: 0.25rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  box-sizing: border-box;
+  transition: all 0.25s ease;
+}
+
+.watchlist-change-badge.positive {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.watchlist-change-badge.negative {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.watchlist-change-badge.neutral {
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #94a3b8;
+}
+
+/* Tick flash keyframes */
+.price-flash-green {
+  animation: tickFlashGreen 0.7s ease-out;
+}
+
+.price-flash-red {
+  animation: tickFlashRed 0.7s ease-out;
+}
+
+@keyframes tickFlashGreen {
+  0% { color: #34d399; text-shadow: 0 0 8px rgba(52, 211, 153, 0.6); }
+  100% { color: #f8fafc; text-shadow: none; }
+}
+
+@keyframes tickFlashRed {
+  0% { color: #f87171; text-shadow: 0 0 8px rgba(248, 113, 113, 0.6); }
+  100% { color: #f8fafc; text-shadow: none; }
+}

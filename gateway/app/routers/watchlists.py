@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from app.core.auth import get_current_user
 from app.core.index_validator import validate_ticker_in_indices
+from app.core.quote_feed import get_batch_quotes, WatchlistQuotesResponse, QuoteItem
 
 logger = logging.getLogger("quant.gateway.watchlists")
 
@@ -331,3 +332,41 @@ def remove_ticker_from_watchlist(
     except Exception as ex:
         logger.error(f"Error removing ticker {clean_ticker} from watchlist {watchlist_id}: {ex}")
         raise HTTPException(status_code=500, detail=f"Failed to remove ticker: {ex}")
+
+
+@router.get("/{watchlist_id}/quotes", response_model=WatchlistQuotesResponse)
+async def get_watchlist_quotes(
+    watchlist_id: str,
+    current_user: str = Depends(get_current_user)
+):
+    engine = get_engine()
+    _ensure_tables(engine)
+
+    try:
+        with engine.connect() as conn:
+            wl_exists = conn.execute(
+                sa.text("SELECT id FROM quant_watchlists WHERE id = :wid"),
+                {"wid": watchlist_id}
+            ).scalar()
+            if not wl_exists:
+                raise HTTPException(status_code=404, detail=f"Watchlist '{watchlist_id}' not found.")
+
+            rows = conn.execute(
+                sa.text("SELECT ticker FROM quant_watchlist_tickers WHERE watchlist_id = :wid ORDER BY added_at ASC"),
+                {"wid": watchlist_id}
+            ).mappings().all()
+            tickers = [r["ticker"] for r in rows]
+
+        quotes_map = await get_batch_quotes(tickers)
+        parsed_quotes = {k: QuoteItem(**v) for k, v in quotes_map.items()}
+
+        return WatchlistQuotesResponse(
+            watchlist_id=watchlist_id,
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            quotes=parsed_quotes
+        )
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.error(f"Error fetching quotes for watchlist {watchlist_id}: {ex}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch quotes: {ex}")
