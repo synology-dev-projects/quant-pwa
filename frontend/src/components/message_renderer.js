@@ -535,9 +535,10 @@ function parseNotableFlow(text, storage) {
       if (!clean) return '';
 
       if (type === 'premium') {
-        const m = clean.match(/^([A-Z0-9.\-_]+)\s+(\$[0-9.]+[KMBkmb]?)\s+PREMIUM\s*\(([^)]+)\)/i);
-        if (m) {
-          const [_, sym, prem, rank] = m;
+        // Pattern 1: TICKER $XX.XM PREMIUM (1st)
+        const m1 = clean.match(/^([A-Z0-9.\-_]+)\s+(\$[0-9.]+[KMBkmb]?)\s+PREMIUM\s*\(([^)]+)\)/i);
+        if (m1) {
+          const [_, sym, prem, rank] = m1;
           return `
             <div class="notable-flow-row" data-ticker="${sym}" title="Click to inspect ${sym} in Cockpit">
               <div class="notable-sym-group">
@@ -551,20 +552,82 @@ function parseNotableFlow(text, storage) {
             </div>
           `.trim();
         }
-      } else {
-        const m = clean.match(/^([A-Z0-9.\-_]+)\s+([+-]?[0-9.]+%?)\s*OTM\s+(.*)$/i);
-        if (m) {
-          const [_, sym, otm, exp] = m;
-          const cleanOtm = otm.endsWith('%') ? otm : `${otm}%`;
+
+        // Pattern 2: TICKER $XX.XM [ORDER_TYPE] [Strike/Exp details]
+        const m2 = clean.match(/^([A-Z0-9.\-_]+)\s+(\$[0-9.]+[KMBkmb]?)(?:\s+(BUY|SELL|CALL|PUT|SWEEP|BLOCK)[^()]*)?(?:\s*\(([^)]+)\))?/i);
+        if (m2) {
+          const sym = m2[1].toUpperCase();
+          const prem = m2[2].toUpperCase();
+          const tag = m2[4] || m2[3] || 'TOP';
           return `
             <div class="notable-flow-row" data-ticker="${sym}" title="Click to inspect ${sym} in Cockpit">
               <div class="notable-sym-group">
                 <span class="notable-ticker-badge">${sym}</span>
-                <span class="notable-dte-pill">${exp}</span>
+                <span class="notable-rank-pill">${tag}</span>
+              </div>
+              <div class="notable-metric-group">
+                <span class="notable-metric-val val-premium">${prem}</span>
+                <span class="notable-metric-label">PREMIUM (${tag})</span>
+              </div>
+            </div>
+          `.trim();
+        }
+      } else {
+        // Pattern 1: TICKER XX% OTM exp X weeks
+        const m1 = clean.match(/^([A-Z0-9.\-_]+)\s+([+-]?[0-9.]+%?)\s*OTM\s*(.*)$/i);
+        if (m1) {
+          const [_, sym, otm, exp] = m1;
+          const cleanOtm = otm.endsWith('%') ? otm : `${otm}%`;
+          const expStr = exp ? exp.trim() : 'exp <30d';
+          return `
+            <div class="notable-flow-row" data-ticker="${sym}" title="Click to inspect ${sym} in Cockpit">
+              <div class="notable-sym-group">
+                <span class="notable-ticker-badge">${sym}</span>
+                <span class="notable-dte-pill">${expStr}</span>
               </div>
               <div class="notable-metric-group">
                 <span class="notable-metric-val val-otm">${cleanOtm}</span>
                 <span class="notable-metric-label">OTM</span>
+              </div>
+            </div>
+          `.trim();
+        }
+
+        // Pattern 2: Line with percentage OTM anywhere: TICKER ... XX% OTM ...
+        const m2 = clean.match(/^([A-Z0-9.\-_]+).*\b([+-]?[0-9.]+)%\s*OTM\b(.*)$/i);
+        if (m2) {
+          const sym = m2[1].toUpperCase();
+          const cleanOtm = `${m2[2]}%`;
+          const rest = m2[3] || '';
+          const expMatch = rest.match(/exp\s+[^\s]+(?:\s+[^\s]+)?/i) || rest.match(/[0-9]{4}-[0-9]{2}-[0-9]{2}/);
+          const expStr = expMatch ? (expMatch[0].startsWith('exp') ? expMatch[0] : `exp ${expMatch[0]}`) : 'exp <30d';
+          return `
+            <div class="notable-flow-row" data-ticker="${sym}" title="Click to inspect ${sym} in Cockpit">
+              <div class="notable-sym-group">
+                <span class="notable-ticker-badge">${sym}</span>
+                <span class="notable-dte-pill">${expStr}</span>
+              </div>
+              <div class="notable-metric-group">
+                <span class="notable-metric-val val-otm">${cleanOtm}</span>
+                <span class="notable-metric-label">OTM</span>
+              </div>
+            </div>
+          `.trim();
+        }
+
+        // Pattern 3: TICKER $XX.XM [BUY/SELL] Strike $X Exp YYYY-MM-DD
+        const m3 = clean.match(/^([A-Z0-9.\-_]+)\s+(\$[0-9.]+[KMBkmb]?).*Strike\s+\$?([0-9.]+).*Exp\s+([0-9-]+)/i);
+        if (m3) {
+          const [_, sym, prem, strike, expDate] = m3;
+          return `
+            <div class="notable-flow-row" data-ticker="${sym}" title="Click to inspect ${sym} in Cockpit">
+              <div class="notable-sym-group">
+                <span class="notable-ticker-badge">${sym}</span>
+                <span class="notable-dte-pill">exp ${expDate}</span>
+              </div>
+              <div class="notable-metric-group">
+                <span class="notable-metric-val val-otm">$${strike}</span>
+                <span class="notable-metric-label">STRIKE</span>
               </div>
             </div>
           `.trim();

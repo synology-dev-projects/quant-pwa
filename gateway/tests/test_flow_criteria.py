@@ -161,3 +161,57 @@ def test_extract_session_notable_flow_db_sqlite():
         assert otm[0]["otm_pct"] == 12.0
         assert otm[0]["dte"] == 7
 
+
+def test_notable_flow_unlimited_prints():
+    # Verify that format_notable_flow_markdown does not truncate to 3
+    tp_prints = [
+        {"symbol": f"SYM{i}", "formatted_premium": f"${10-i}.0M", "rank": i + 1}
+        for i in range(6)
+    ]
+    otm_prints = [
+        {"symbol": f"OTM{i}", "otm_pct": 10.0 + i, "dte": 7 + i}
+        for i in range(6)
+    ]
+
+    md = format_notable_flow_markdown(tp_prints, otm_prints)
+    for i in range(6):
+        assert f"SYM{i}" in md
+        assert f"OTM{i}" in md
+
+    # Verify extract_session_notable_flow_db returns all qualifying rows (>3)
+    import sqlalchemy as sa
+    from app.core.flow_criteria import extract_session_notable_flow_db
+
+    engine = sa.create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(sa.text("""
+            CREATE TABLE unusual_option_flow_te (
+                flow_id TEXT PRIMARY KEY,
+                trade_date TEXT,
+                symbol TEXT,
+                order_type TEXT,
+                strike_price REAL,
+                strike_otm_pct REAL,
+                expiration_date TEXT,
+                premium REAL
+            );
+        """))
+        for i in range(5):
+            conn.execute(sa.text(f"""
+                INSERT INTO unusual_option_flow_te VALUES
+                ('tp_{i}', '2026-09-04', 'SYM{i}', 'BUY_CALL', 100.0, 2.0, '2026-09-18', {2000000.0 - i * 100000});
+            """))
+            conn.execute(sa.text(f"""
+                INSERT INTO unusual_option_flow_te VALUES
+                ('otm_{i}', '2026-09-04', 'OTM{i}', 'BUY_CALL', 120.0, {15.0 + i}, '2026-09-18', 500000.0);
+            """))
+
+    with engine.connect() as conn:
+        tp, otm = extract_session_notable_flow_db(conn, "2026-09-04")
+        # All 10 symbols qualify for all_time_rank <= 3, and all 5 OTM prints qualify.
+        # Previously both were capped at 3 with [:3]. Now unlimited prints are preserved.
+        assert len(tp) == 10
+        assert len(otm) == 5
+
+
+

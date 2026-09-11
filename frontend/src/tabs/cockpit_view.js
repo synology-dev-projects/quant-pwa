@@ -558,11 +558,29 @@ export class CockpitView {
     const metrics = this.cockpitData?.metrics || {};
     const callPct = metrics.call_pct !== undefined ? metrics.call_pct : 65.0;
 
+    const records = this.cockpitData?.flow?.records || [];
+    let notableFlowMd = `• **Notable Flow**:\n  • **TOP PREMIUM**:\n    - NONE FOUND\n  • **NOTABLE OTM**:\n    - NONE FOUND`;
+    if (records.length > 0) {
+      const sortedByPrem = [...records].sort((a, b) => (Number(b.PREMIUM) || 0) - (Number(a.PREMIUM) || 0));
+      const tpLines = sortedByPrem.map((r, i) => {
+        const p = Number(r.PREMIUM || 0);
+        const pStr = p >= 1e9 ? `$${(p / 1e9).toFixed(2)}B` : p >= 1e6 ? `$${(p / 1e6).toFixed(1)}M` : `$${Math.round(p / 1e3)}K`;
+        const rStr = i === 0 ? '1st' : i === 1 ? '2nd' : i === 2 ? '3rd' : `${i + 1}th`;
+        return `    - ${ticker} ${pStr} PREMIUM (${rStr})`;
+      });
+
+      const otmLines = records
+        .filter(r => Math.abs(Number(r.STRIKE_OTM_PCT || 0)) >= 10.0)
+        .map(r => `    - ${ticker} ${Math.abs(Number(r.STRIKE_OTM_PCT || 0)).toFixed(0)}% OTM exp 2 weeks`);
+
+      notableFlowMd = `• **Notable Flow**:\n  • **TOP PREMIUM**:\n${tpLines.length ? tpLines.join('\n') : '    - NONE FOUND'}\n  • **NOTABLE OTM**:\n${otmLines.length ? otmLines.join('\n') : '    - NONE FOUND'}`;
+    }
+
     const thesisMarkdown = `
 ### Microstructure Snapshot
 • **Regime & Volatility**: **${regime}**. Spot (**$${spot.toFixed(2)}**) trades ${spot >= zeroFlip ? 'above' : 'below'} Zero Flip (**$${zeroFlip.toFixed(2)}**), indicating ${spot >= zeroFlip ? 'dampened' : 'elevated'} intraday volatility.
 • **Key Structural Walls**: **Call Wall at $${callWall.toFixed(2)}** marks primary overhead dealer supply; **Put Wall at $${putWall.toFixed(2)}** acts as structural downside cushion.
-• **Institutional Flow**: **${callPct.toFixed(0)}% Calls**, establishing a **${confluenceBias}** microstructure profile.
+${notableFlowMd}
     `.trim();
 
     synthBox.innerHTML = renderMarkdown(thesisMarkdown);
