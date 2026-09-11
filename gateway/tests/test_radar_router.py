@@ -8,6 +8,39 @@ from app.core.auth import create_session_token
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def setup_radar_fixtures():
+    import sqlalchemy as sa
+    from app.routers.radar import _get_engine, _ensure_tables
+    try:
+        engine = _get_engine()
+        with engine.connect() as conn:
+            _ensure_tables(conn)
+            existing = conn.execute(sa.text("SELECT COUNT(*) FROM gexdex_snapshot WHERE snapshot_date = '2026-09-09'")).scalar()
+            if not existing:
+                conn.execute(sa.text("""
+                    INSERT INTO gexdex_snapshot (
+                        snapshot_date, snapshot_time, ticker, spot_price, call_put_ratio,
+                        call_wall, put_wall, zero_flip, net_gex, net_dex, gamma_regime
+                    ) VALUES 
+                    ('2026-09-09', '2026-09-09 16:30:00-04', 'AAPL', 235.50, '1.45', 240.0, 230.0, 234.0, 1500000.0, -200000.0, 'Positive Gamma / Resistance Dominant'),
+                    ('2026-09-09', '2026-09-09 16:30:00-04', 'NVDA', 217.50, '2.10', 230.0, 200.0, 214.0, 4500000.0, 1200000.0, 'Bullish Gamma Momentum')
+                    ON CONFLICT (snapshot_date, ticker) DO NOTHING;
+                """))
+            flow_existing = conn.execute(sa.text("SELECT COUNT(*) FROM unusual_option_flow_te WHERE trade_date = '2026-09-09'")).scalar()
+            if not flow_existing:
+                conn.execute(sa.text("""
+                    INSERT INTO unusual_option_flow_te (
+                        trade_date, symbol, strike_price, order_type, premium
+                    ) VALUES 
+                    ('2026-09-09', 'AAPL', 240.0, 'BUY_CALL', 500000.0),
+                    ('2026-09-09', 'NVDA', 220.0, 'BUY_CALL', 1200000.0);
+                """))
+            conn.commit()
+    except Exception:
+        pass
+
+
 def test_radar_auth_rejection_missing_header():
     res = client.get("/api/radar/unified-table")
     assert res.status_code == 401

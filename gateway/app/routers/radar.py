@@ -13,12 +13,61 @@ logger = logging.getLogger("quant.gateway.radar")
 
 router = APIRouter(prefix="/api/radar", tags=["Confluence Radar"])
 
+CREATE_GEXDEX_SNAPSHOT_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS gexdex_snapshot (
+    snapshot_date DATE NOT NULL,
+    snapshot_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    ticker VARCHAR(12) NOT NULL,
+    spot_price NUMERIC(12, 4),
+    call_put_ratio VARCHAR(20) NOT NULL DEFAULT 'N/A',
+    call_wall NUMERIC(12, 2),
+    put_wall NUMERIC(12, 2),
+    zero_flip NUMERIC(12, 2),
+    net_gex NUMERIC(18, 2),
+    net_dex NUMERIC(18, 2),
+    gamma_regime VARCHAR(100),
+    total_call_gex NUMERIC(18, 2),
+    total_put_gex NUMERIC(18, 2),
+    total_call_dex NUMERIC(18, 2),
+    total_put_dex NUMERIC(18, 2),
+    source_scorecards TEXT[],
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (snapshot_date, ticker)
+);
+CREATE INDEX IF NOT EXISTS idx_gexdex_snapshot_date ON gexdex_snapshot (snapshot_date DESC);
+CREATE INDEX IF NOT EXISTS idx_gexdex_snapshot_ticker ON gexdex_snapshot (ticker);
+"""
+
+CREATE_UNUSUAL_FLOW_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS unusual_option_flow_te (
+    trade_date VARCHAR(10) NOT NULL,
+    symbol VARCHAR(12) NOT NULL,
+    strike_price NUMERIC(12, 2),
+    order_type VARCHAR(20),
+    premium NUMERIC(18, 2) DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+"""
+
 
 def _get_engine():
     from common_lib.config.main_config import load_config
     from common_lib.connectors.postgres import get_postgres_engine
     config = load_config()
     return get_postgres_engine(config)
+
+
+def _ensure_tables(conn: sa.Connection) -> None:
+    try:
+        for stmt in CREATE_GEXDEX_SNAPSHOT_TABLE_SQL.strip().split(";"):
+            if stmt.strip():
+                conn.execute(sa.text(stmt))
+        for stmt in CREATE_UNUSUAL_FLOW_TABLE_SQL.strip().split(";"):
+            if stmt.strip():
+                conn.execute(sa.text(stmt))
+        conn.commit()
+    except Exception as ex:
+        logger.warning(f"Could not auto-create missing tables: {ex}")
 
 
 def _format_currency(val: Optional[float]) -> str:
@@ -87,6 +136,7 @@ def get_radar_dates(_: str = Depends(get_current_user)) -> List[str]:
     try:
         engine = _get_engine()
         with engine.connect() as conn:
+            _ensure_tables(conn)
             q = sa.text("""
                 SELECT DISTINCT snapshot_date
                 FROM gexdex_snapshot
@@ -111,6 +161,7 @@ def get_unified_radar_table(
     """
     engine = _get_engine()
     with engine.connect() as conn:
+        _ensure_tables(conn)
         # 1. Resolve Available Dates
         q_dates_all = sa.text("""
             SELECT DISTINCT snapshot_date
