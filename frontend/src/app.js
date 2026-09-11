@@ -88,7 +88,7 @@ class App {
     this.tabManager = new TabManager(tabBar, tabContent, (tabId) => {
       AppState.setActiveTab(tabId);
       if (tabId === 'radar' && this.radarView) {
-        if (!this.radarView.currentData || !this.radarView.currentData.summary) {
+        if (!this.radarView.currentData || !this.radarView.currentData.rows) {
           this.radarView.loadAvailableDates();
           this.radarView.loadScanData();
         }
