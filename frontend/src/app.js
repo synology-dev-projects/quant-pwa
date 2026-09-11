@@ -3,6 +3,7 @@ import { TabManager } from './tabs/tab_manager.js?v=30';
 import { CockpitView } from './tabs/cockpit_view.js?v=30';
 import { RadarView } from './tabs/radar_view.js?v=31';
 import { FlowView } from './tabs/flow_view.js?v=32';
+import { WatchlistView } from './tabs/watchlist_view.js?v=33';
 import { Lightbox } from './components/lightbox.js?v=30';
 import { LockScreen } from './components/lock_screen.js?v=30';
 import { SettingsModal } from './components/settings_modal.js?v=30';
@@ -13,6 +14,7 @@ class App {
     this.cockpitView = new CockpitView();
     this.radarView = new RadarView();
     this.flowView = new FlowView();
+    this.watchlistView = new WatchlistView();
     this.lightbox = new Lightbox();
     window.quantLightbox = this.lightbox;
 
@@ -79,6 +81,9 @@ class App {
     if (this.flowView && AppState.getActiveTab() === 'flow') {
       this.flowView.loadFlowData();
     }
+    if (this.watchlistView && AppState.getActiveTab() === 'watchlists') {
+      this.watchlistView.loadWatchlists();
+    }
   }
 
   initTabs() {
@@ -96,6 +101,11 @@ class App {
       if (tabId === 'flow' && this.flowView) {
         if (!this.flowView.currentData) {
           this.flowView.loadFlowData();
+        }
+      }
+      if (tabId === 'watchlists' && this.watchlistView) {
+        if (!this.watchlistView.watchlists || this.watchlistView.watchlists.length === 0) {
+          this.watchlistView.loadWatchlists();
         }
       }
     });
@@ -120,13 +130,21 @@ class App {
     this.tabManager.registerTab({
       id: 'radar',
       title: 'Confluence Radar',
-      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path><path d="M12 6a6 6 0 0 1 6 6"></path><circle cx="12" cy="12" r="2"></circle></svg>`,
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path><path d="M12 6a6 6 0 0 1 6 6"></path><circle cx="12" cy="2" r="2"></circle></svg>`,
       render: (container) => this.radarView.render(container)
+    });
+
+    // 4. Watchlists Tab
+    this.tabManager.registerTab({
+      id: 'watchlists',
+      title: 'Watchlists',
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>`,
+      render: (container) => this.watchlistView.render(container)
     });
 
     // Activate initial tab from localStorage
     const savedTab = AppState.getActiveTab();
-    const validTabs = ['flow', 'cockpit', 'radar'];
+    const validTabs = ['flow', 'cockpit', 'radar', 'watchlists'];
     const activeTab = validTabs.includes(savedTab) ? savedTab : 'flow';
     this.tabManager.switchTab(activeTab);
   }

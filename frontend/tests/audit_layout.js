@@ -25,7 +25,10 @@ const flowCss = fs.existsSync(flowCssPath) ? fs.readFileSync(flowCssPath, 'utf8'
 const radarCssPath = path.resolve(__dirname, '../src/styles/radar.css');
 const radarCss = fs.existsSync(radarCssPath) ? fs.readFileSync(radarCssPath, 'utf8') : '';
 
-const allCss = `${stylesCss}\n${flowCss}\n${radarCss}`;
+const watchlistCssPath = path.resolve(__dirname, '../src/styles/watchlist.css');
+const watchlistCss = fs.existsSync(watchlistCssPath) ? fs.readFileSync(watchlistCssPath, 'utf8') : '';
+
+const allCss = `${stylesCss}\n${flowCss}\n${radarCss}\n${watchlistCss}`;
 
 // ============================================================================
 // 1. Lightweight CSS Parser & Cascade Computation Engine
@@ -555,6 +558,10 @@ function buildAuditDomTree() {
   tabRadar.className = 'tab-btn';
   tabBar.appendChild(tabRadar);
 
+  const tabWatchlists = new MockElement('button');
+  tabWatchlists.className = 'tab-btn';
+  tabBar.appendChild(tabWatchlists);
+
   // 3. Tab Content
   const tabContent = new MockElement('main', 'tabContent');
   tabContent.className = 'tab-content';
@@ -738,6 +745,66 @@ function buildAuditDomTree() {
   flowSynthBox.className = 'synthesis-content-box';
   flowPanelHero.appendChild(flowSynthBox);
 
+  // Watchlist Tab Container
+  const watchlistTab = new MockElement('div', 'tab-watchlists');
+  watchlistTab.className = 'tab-pane';
+  tabContent.appendChild(watchlistTab);
+
+  const watchlistViewContainer = new MockElement('div');
+  watchlistViewContainer.className = 'watchlist-view-container';
+  watchlistTab.appendChild(watchlistViewContainer);
+
+  const watchlistHeaderBar = new MockElement('div');
+  watchlistHeaderBar.className = 'watchlist-header-bar';
+  watchlistViewContainer.appendChild(watchlistHeaderBar);
+
+  const watchlistControlsGroup = new MockElement('div');
+  watchlistControlsGroup.className = 'watchlist-controls-group';
+  watchlistHeaderBar.appendChild(watchlistControlsGroup);
+
+  const newWatchlistBtn = new MockElement('button', 'newWatchlistBtn');
+  newWatchlistBtn.className = 'watchlist-btn watchlist-btn-primary';
+  watchlistControlsGroup.appendChild(newWatchlistBtn);
+
+  const deleteWatchlistBtn = new MockElement('button', 'deleteWatchlistBtn');
+  deleteWatchlistBtn.className = 'watchlist-btn watchlist-btn-danger';
+  watchlistControlsGroup.appendChild(deleteWatchlistBtn);
+
+  const watchlistAddBox = new MockElement('div');
+  watchlistAddBox.className = 'watchlist-add-box';
+  watchlistViewContainer.appendChild(watchlistAddBox);
+
+  const watchlistAddForm = new MockElement('form', 'watchlistAddForm');
+  watchlistAddForm.className = 'watchlist-add-form';
+  watchlistAddBox.appendChild(watchlistAddForm);
+
+  const watchlistTickerInput = new MockElement('input', 'watchlistTickerInput');
+  watchlistTickerInput.className = 'watchlist-input';
+  watchlistAddForm.appendChild(watchlistTickerInput);
+
+  const watchlistAddBtn = new MockElement('button', 'watchlistAddBtn');
+  watchlistAddBtn.className = 'watchlist-btn-add';
+  watchlistAddForm.appendChild(watchlistAddBtn);
+
+  const watchlistGrid = new MockElement('div', 'watchlistGrid');
+  watchlistGrid.className = 'watchlist-grid';
+  watchlistViewContainer.appendChild(watchlistGrid);
+
+  const watchlistCard = new MockElement('div');
+  watchlistCard.className = 'watchlist-ticker-card';
+  watchlistGrid.appendChild(watchlistCard);
+
+  const watchlistCardActions = new MockElement('div');
+  watchlistCardActions.className = 'watchlist-card-actions';
+  watchlistCard.appendChild(watchlistCardActions);
+
+  const watchlistDrilldownBtn = new MockElement('button');
+  watchlistDrilldownBtn.className = 'watchlist-drilldown-btn';
+  watchlistCardActions.appendChild(watchlistDrilldownBtn);
+
+  const watchlistRemoveBtn = new MockElement('button');
+  watchlistRemoveBtn.className = 'watchlist-remove-btn';
+  watchlistCardActions.appendChild(watchlistRemoveBtn);
 
   // 5. Settings Modal
   const settingsModal = new MockElement('div', 'settingsModal');
@@ -977,7 +1044,13 @@ const interactiveAuditTargets = [
   { name: 'Settings Sync Flow Button', selector: '#syncFlowBtn', minTap: 44, requiresContainer: false },
   { name: 'Settings Sync Levels Button', selector: '#syncLevelsBtn', minTap: 44, requiresContainer: false },
   { name: 'Settings Sync Snapshot Button', selector: '#syncSnapshotBtn', minTap: 44, requiresContainer: false },
-  { name: 'Settings Force Update Button', selector: '#forceUpdateBtn', minTap: 44, requiresContainer: false }
+  { name: 'Settings Force Update Button', selector: '#forceUpdateBtn', minTap: 44, requiresContainer: false },
+  { name: 'Watchlist New Button', selector: '#newWatchlistBtn', minTap: 44, requiresContainer: false },
+  { name: 'Watchlist Delete Button', selector: '#deleteWatchlistBtn', minTap: 44, requiresContainer: false },
+  { name: 'Watchlist Ticker Input', selector: '#watchlistTickerInput', minTap: 44, requiresContainer: false },
+  { name: 'Watchlist Add Button', selector: '#watchlistAddBtn', minTap: 44, requiresContainer: false },
+  { name: 'Watchlist Cockpit Drilldown Button', selector: '.watchlist-drilldown-btn', minTap: 44, requiresContainer: false },
+  { name: 'Watchlist Remove Ticker Button', selector: '.watchlist-remove-btn', minTap: 44, requiresContainer: false }
 ];
 
 for (const target of interactiveAuditTargets) {

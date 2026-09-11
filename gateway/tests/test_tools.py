@@ -393,7 +393,8 @@ async def test_run_cache_warmer_loop_cancellation():
     from unittest.mock import patch, AsyncMock
     from app.tools.gexdex_tool import run_cache_warmer_loop
 
-    with patch("app.tools.gexdex_tool.warm_benchmark_cache", new_callable=AsyncMock) as mock_warm:
+    with patch("app.engine.service.gexdex_service.warm_benchmark_cache", new_callable=AsyncMock) as mock_warm, \
+         patch("app.engine.service.is_market_warmer_window", return_value=False):
         task = asyncio.create_task(run_cache_warmer_loop(interval_seconds=100))
         await asyncio.sleep(0.01)
         task.cancel()

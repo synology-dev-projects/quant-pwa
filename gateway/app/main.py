@@ -32,6 +32,7 @@ from app.routers.snapshot_status import router as snapshot_status_router
 from app.routers.scanner import router as scanner_router
 from app.routers.radar import router as radar_router
 from app.routers.pipelines_router import router as pipelines_router
+from app.routers.watchlists import router as watchlists_router
 from app.tools.gexdex_tool import run_cache_warmer_loop
 from app.engine.service import gexdex_service
 
@@ -155,6 +156,9 @@ app.include_router(
     pipelines_router,
     prefix="/api/pipelines"
 )
+
+# Mount Watchlists Management Router
+app.include_router(watchlists_router)
 
 
 
