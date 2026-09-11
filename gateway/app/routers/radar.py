@@ -40,6 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_gexdex_snapshot_ticker ON gexdex_snapshot (ticker
 
 CREATE_UNUSUAL_FLOW_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS unusual_option_flow_te (
+    flow_id VARCHAR(255) PRIMARY KEY,
     trade_date VARCHAR(10) NOT NULL,
     symbol VARCHAR(12) NOT NULL,
     strike_price NUMERIC(12, 2),
