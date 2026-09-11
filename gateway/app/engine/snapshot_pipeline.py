@@ -29,38 +29,12 @@ def get_expected_trade_session() -> date:
     """
     Determines the expected current/latest trade session date in US/Eastern,
     accounting for weekends and official US market holidays (e.g. Labor Day).
-    - If today is a weekday, market hours have concluded (after 16:30 ET), and today is not a holiday: returns today.
-    - Otherwise: returns the most recent prior weekday that was NOT a market holiday.
+    Runs at Market Open based on last session data, delegating directly
+    to get_last_market_day() for system-wide parity.
     """
-    try:
-        from pandas.tseries.holiday import USFederalHolidayCalendar
-        cal = USFederalHolidayCalendar()
-    except ImportError:
-        cal = None
-
+    from app.routers.flow_status import get_last_market_day
     now_ny = datetime.now(NY_TZ)
-    close_cutoff = time(16, 30)
-
-    holidays = set()
-    if cal:
-        try:
-            start_search = (now_ny - timedelta(days=30)).date()
-            end_search = (now_ny + timedelta(days=5)).date()
-            holidays = set(d.date() for d in cal.holidays(start=start_search, end=end_search))
-        except Exception as err:
-            logger.warning(f"Failed to calculate holiday calendar: {err}")
-
-    candidate = now_ny.date()
-    # If today is a trading day and market has closed for the day
-    if candidate.weekday() < 5 and candidate not in holidays and now_ny.time() >= close_cutoff:
-        return candidate
-
-    # Otherwise step backwards day-by-day to find the most recent valid market session
-    candidate -= timedelta(days=1)
-    while candidate.weekday() >= 5 or candidate in holidays:
-        candidate -= timedelta(days=1)
-
-    return candidate
+    return get_last_market_day(now_ny)
 
 
 def check_session_flow_exists(engine: sa.Engine, session_date: date, config: Any = None) -> bool:

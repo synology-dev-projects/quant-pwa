@@ -49,6 +49,91 @@ def append_audit(state, event, details=""):
     })
 
 
+NODE_SKILL_MAP = {
+    "PHASE_0_INTAKE": {
+        "skill": "captain-orchestrator",
+        "path": ".agents/skills/captain-orchestrator/SKILL.md",
+        "hint": "Align on user intent, clarify requirements via Grill-Me, triage bug vs feature."
+    },
+    "PHASE_0_POLISH": {
+        "skill": "captain-orchestrator",
+        "path": ".agents/skills/captain-orchestrator/SKILL.md",
+        "hint": "Review polish items and prepare lightweight plan."
+    },
+    "PHASE_1_RED_GATE": {
+        "skill": "repro-scaffolder",
+        "path": ".agents/skills/repro-scaffolder/SKILL.md",
+        "hint": "Write failing reproduction test using mocks/fixtures before any source edit."
+    },
+    "PHASE_2_SEQUENCING": {
+        "skill": "captain-orchestrator",
+        "path": ".agents/skills/captain-orchestrator/SKILL.md",
+        "hint": "Sequence module dependencies and establish contract tests."
+    },
+    "PHASE_2_SURGICAL_FIX": {
+        "skill": "domain-router",
+        "hint": "Apply minimal surgical fix following domain skill runbooks (UI: bloomberg-terminal-components, DB: timescale-options-analytics, API: fastapi-sse-streaming)."
+    },
+    "PHASE_3_EXECUTION": {
+        "skill": "domain-router",
+        "hint": "Implement feature components conforming to domain skill standards (UI: bloomberg-terminal-components, DB: timescale-options-analytics, API: fastapi-sse-streaming)."
+    },
+    "PHASE_4_AUDIT": {
+        "skill": "no-mistakes-reviewer",
+        "path": ".agents/skills/no-mistakes-reviewer/SKILL.md",
+        "hint": "Review diff against invariants: security, precision, concurrency, repro test."
+    },
+    "PHASE_5_STAGING": {
+        "skill": "synology-nas-guardian (docker)",
+        "path": ".agents/skills/docker/SKILL.md",
+        "hint": "Verify Docker multi-stage build, container memory <350MB RAM, and staging health on port 8096."
+    },
+    "PHASE_6_PRODUCTION_GATE": {
+        "skill": "architecture-review-agent",
+        "path": ".agents/skills/architecture-review-agent/SKILL.md",
+        "hint": "Verify enterprise scalability (1,000 DAU) and obtain explicit human authorization."
+    }
+}
+
+
+def get_node_bound_skill(node_name, workflow_type=None, task_name=None):
+    """Resolve active domain skill, runbook path, and guidance hint for a protocol node."""
+    if not node_name:
+        return "general-engineer", ".agents/skills/", "Follow workspace invariants."
+
+    if node_name in ["PHASE_2_SURGICAL_FIX", "PHASE_3_EXECUTION"]:
+        task_str = str(task_name or "").lower()
+        if any(k in task_str for k in ["ui", "front", "css", "html", "style", "table", "card", "view", "component", "screen", "pwa", "dark"]):
+            return (
+                "bloomberg-terminal-components",
+                ".agents/skills/bloomberg-terminal-components/SKILL.md",
+                "Apply dark-theme tokens (#0b0f19), 44px touch targets, zero layout overflow."
+            )
+        elif any(k in task_str for k in ["db", "sql", "timescale", "hypertable", "query", "oracle", "database", "analytics", "snapshot"]):
+            return (
+                "timescale-options-analytics",
+                ".agents/skills/timescale-options-analytics/SKILL.md",
+                "Single-scan CTEs, hypertable chunk constraints, explicit date casting."
+            )
+        elif any(k in task_str for k in ["sse", "stream", "fastapi", "api", "endpoint", "route", "gateway", "backend"]):
+            return (
+                "fastapi-sse-streaming",
+                ".agents/skills/fastapi-sse-streaming/SKILL.md",
+                "FastAPI StreamingResponse, getReader() SSE client loop, keep-alive ping."
+            )
+        else:
+            return (
+                "domain-router (bloomberg-ui | timescale-opt | fastapi-sse)",
+                ".agents/skills/",
+                "Follow domain runbook: UI (bloomberg-terminal-components), DB (timescale-options-analytics), or Streaming (fastapi-sse-streaming)."
+            )
+
+    meta = NODE_SKILL_MAP.get(node_name)
+    if meta:
+        return meta.get("skill", "general-engineer"), meta.get("path", ".agents/skills/"), meta.get("hint", "")
+    return "general-engineer", ".agents/skills/", "Adhere to repository invariants."
+
+
 def cmd_start(args):
     workflow_type = args.type
     name = args.name or "unnamed-task"
@@ -93,6 +178,8 @@ def cmd_start(args):
     print(f"   Type:   {state['workflow_type'].upper()}")
     print(f"   Task:   {state['task_name']}")
     print(f"   Node:   {state['active_node']}")
+    skill_name, skill_path, skill_hint = get_node_bound_skill(state['active_node'], state['workflow_type'], state['task_name'])
+    print(f"   [ACTIVE SKILL] {skill_name} ({skill_path}): {skill_hint}")
 
 
 def cmd_staging_bug(args):
@@ -146,6 +233,8 @@ def cmd_staging_bug(args):
     print(f"   Defect ID:       {defect_state['workflow_id']}")
     print(f"   Defect Task:     {defect_state['task_name']}")
     print("   Active Node:     PHASE_1_RED_GATE (TDD Invariant Active)")
+    skill_name, skill_path, skill_hint = get_node_bound_skill(defect_state['active_node'], defect_state['workflow_type'], defect_state['task_name'])
+    print(f"   [ACTIVE SKILL]   {skill_name} ({skill_path}): {skill_hint}")
     print(f"   Parent Workflow: {parent_snapshot.get('task_name')} (SUSPENDED at {parent_snapshot.get('active_node')})")
     print("   Next Action:     Write reproduction test and run: python scripts/protocol_graph.py red --test <path>")
     print("==================================================================")
@@ -198,6 +287,8 @@ def cmd_reviewer_dealbreaker(args):
     print(f"   Reviewer:        {reviewer.upper()}")
     print(f"   Task:            {defect_state['task_name']}")
     print("   Active Node:     PHASE_1_RED_GATE (Bug Remediation Protocol Active)")
+    skill_name, skill_path, skill_hint = get_node_bound_skill(defect_state['active_node'], defect_state['workflow_type'], defect_state['task_name'])
+    print(f"   [ACTIVE SKILL]   {skill_name} ({skill_path}): {skill_hint}")
     print(f"   Parent Workflow: {parent_snapshot.get('task_name')} (SUSPENDED at {parent_snapshot.get('active_node')})")
     print("   Next Action:     Write reproduction test and run: python scripts/protocol_graph.py red --test <path>")
     print("==================================================================")
@@ -232,6 +323,8 @@ def cmd_resolve_defect(args):
     print("==================================================================")
     print(f"   Defect '{defect_name}' has been successfully verified.")
     print(f"   Parent workflow '{parent_state.get('task_name')}' resumed at: {parent_state.get('active_node')}.")
+    skill_name, skill_path, skill_hint = get_node_bound_skill(parent_state['active_node'], parent_state['workflow_type'], parent_state['task_name'])
+    print(f"   [ACTIVE SKILL]   {skill_name} ({skill_path}): {skill_hint}")
     print("==================================================================")
 
 
@@ -253,12 +346,15 @@ def cmd_status(args):
         return
 
     parent = state.get("parent_workflow")
+    skill_name, skill_path, skill_hint = get_node_bound_skill(state.get("active_node"), state.get("workflow_type"), state.get("task_name"))
     print("==================================================================")
     if parent:
         print("  QUANT PROTOCOL STATE GRAPH: NESTED STAGING DEFECT")
         print(f"  Defect ID:       {state['workflow_id']}")
         print(f"  Defect Task:     {state.get('task_name', '')}")
         print(f"  Active Node:     {state.get('active_node', '')}")
+        print(f"  Bound Skill:     {skill_name} ({skill_path})")
+        print(f"  Skill Directive: {skill_hint}")
         print(f"  Reproduction:    {state.get('reproduction_test') or '[None Registered]'}")
         print(f"  Parent Workflow: {parent.get('task_name')} ({parent.get('workflow_id')})")
         print(f"  Parent Status:   SUSPENDED at {parent.get('active_node')}")
@@ -267,6 +363,8 @@ def cmd_status(args):
         print(f"Workflow Type:    {state.get('workflow_type', '').upper()}")
         print(f"Task Name:        {state.get('task_name', '')}")
         print(f"Active Node:      {state.get('active_node', '')}")
+        print(f"Bound Skill:      {skill_name} ({skill_path})")
+        print(f"Skill Directive:  {skill_hint}")
         print(f"Reproduction Test:{state.get('reproduction_test') or '[None Registered]'}")
     print("------------------------------------------------------------------")
     print("Guards & Checkpoints:")
@@ -295,6 +393,8 @@ def cmd_plan_approve(args):
     append_audit(state, "PLAN_APPROVED", "User/Director approved implementation plan")
     save_state(state)
     print(f"[OK] Plan Approved. Graph advanced to node: {state['active_node']}.")
+    skill_name, skill_path, skill_hint = get_node_bound_skill(state['active_node'], state['workflow_type'], state['task_name'])
+    print(f"   [ACTIVE SKILL] {skill_name} ({skill_path}): {skill_hint}")
 
 
 def _run_test_file(test_path):
@@ -341,6 +441,8 @@ def cmd_red(args):
         save_state(state)
         print(f"   Graph advanced to node: PHASE_2_SURGICAL_FIX.")
         print(f"   Source code modification is now UNLOCKED under strict YAGNI.")
+        skill_name, skill_path, skill_hint = get_node_bound_skill(state['active_node'], state['workflow_type'], state['task_name'])
+        print(f"   [ACTIVE SKILL] {skill_name} ({skill_path}): {skill_hint}")
     else:
         print(f"\n[FAIL] RED GATE FAILED: Reproduction test unexpectedly PASSED with exit code 0.", file=sys.stderr)
         print("   A valid RED gate requires a verified failure reproducing the bug.", file=sys.stderr)
@@ -368,6 +470,8 @@ def cmd_green(args):
         append_audit(state, "GREEN_STATE_VERIFIED", f"Test {test_path} passed with exit code 0")
         save_state(state)
         print(f"   Graph advanced to node: PHASE_4_AUDIT.")
+        skill_name, skill_path, skill_hint = get_node_bound_skill(state['active_node'], state['workflow_type'], state['task_name'])
+        print(f"   [ACTIVE SKILL] {skill_name} ({skill_path}): {skill_hint}")
     else:
         print(f"\n[FAIL] GREEN GATE FAILED: Reproduction test is still failing (exit code {rc}).", file=sys.stderr)
         sys.exit(1)
@@ -402,6 +506,8 @@ def cmd_audit(args):
     append_audit(state, "AUDIT_APPROVED", f"Diff approved: {len(modified_files)} files modified")
     save_state(state)
     print("[OK] Adversarial Audit Passed. Ready for Staging deployment.")
+    skill_name, skill_path, skill_hint = get_node_bound_skill(state['active_node'], state['workflow_type'], state['task_name'])
+    print(f"   [ACTIVE SKILL] {skill_name} ({skill_path}): {skill_hint}")
 
 
 def cmd_staging_verify(args):
@@ -434,6 +540,8 @@ def cmd_staging_verify(args):
         print("==================================================================")
         print(f"   Defect '{defect_name}' has been successfully verified on staging.")
         print(f"   Parent workflow '{parent_state.get('task_name')}' resumed at: PHASE_5_STAGING.")
+        parent_skill, parent_path, parent_hint = get_node_bound_skill(parent_state['active_node'], parent_state['workflow_type'], parent_state['task_name'])
+        print(f"   [ACTIVE SKILL]   {parent_skill} ({parent_path}): {parent_hint}")
         print("   Run 'python scripts/protocol_graph.py staging-verify' when full parent staging acceptance is confirmed.")
         print("==================================================================")
         return
@@ -443,6 +551,8 @@ def cmd_staging_verify(args):
     append_audit(state, "STAGING_VERIFIED", "Staging in-situ health confirmed on port 8096")
     save_state(state)
     print("[OK] Staging Verified. Graph advanced to: PHASE_6_PRODUCTION_GATE.")
+    skill_name, skill_path, skill_hint = get_node_bound_skill(state['active_node'], state['workflow_type'], state['task_name'])
+    print(f"   [ACTIVE SKILL] {skill_name} ({skill_path}): {skill_hint}")
     print("[LOCK] Production push to master is locked awaiting explicit human command.")
 
 
