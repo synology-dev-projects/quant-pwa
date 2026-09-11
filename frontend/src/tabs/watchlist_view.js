@@ -55,7 +55,7 @@ export class WatchlistView {
                 type="text"
                 id="watchlistTickerInput"
                 class="watchlist-input"
-                placeholder="ENTER TICKER (e.g. ADEA, NVDA, AAPL, SPY)..."
+                placeholder="ENTER TICKER (e.g. NVDA, SPY)..."
                 maxlength="12"
                 autocomplete="off"
                 autocapitalize="characters"
@@ -66,7 +66,7 @@ export class WatchlistView {
               <div id="watchlistAutocompleteMenu" class="watchlist-autocomplete-menu" style="display:none;"></div>
             </div>
             <button type="submit" id="watchlistAddBtn" class="watchlist-btn-add">
-              <span>+ Add Ticker</span>
+              <span>+ Add</span>
             </button>
           </form>
           <div id="watchlistValidationMsg" class="watchlist-validation-msg" role="status" aria-live="polite"></div>
@@ -452,23 +452,25 @@ export class WatchlistView {
 
       return `
         <div class="watchlist-ticker-card" data-ticker="${t.ticker}">
-          <div class="watchlist-card-left">
-            <span class="watchlist-ticker-symbol" data-ticker="${t.ticker}" title="Open in Cockpit">${t.ticker}</span>
-            <div class="watchlist-index-badges">
-              ${indexPills}
+          <div class="watchlist-card-top">
+            <div class="watchlist-symbol-col">
+              <span class="watchlist-ticker-symbol" data-ticker="${t.ticker}" title="Open in Cockpit">${t.ticker}</span>
+            </div>
+            <div class="watchlist-card-price" id="watchlistPrice_${t.ticker}">
+              <span class="watchlist-spot-price" id="spotPrice_${t.ticker}">${displayPrice}</span>
+              <span class="watchlist-change-badge ${changeClass}" id="changeBadge_${t.ticker}">${displayChange}</span>
+            </div>
+            <div class="watchlist-card-actions">
+              <button type="button" class="watchlist-drilldown-btn" data-ticker="${t.ticker}" title="Inspect ${t.ticker} in Cockpit">
+                Cockpit ↗
+              </button>
+              <button type="button" class="watchlist-remove-btn" data-ticker="${t.ticker}" title="Remove ${t.ticker}" aria-label="Remove ${t.ticker}">
+                &times;
+              </button>
             </div>
           </div>
-          <div class="watchlist-card-price" id="watchlistPrice_${t.ticker}">
-            <span class="watchlist-spot-price" id="spotPrice_${t.ticker}">${displayPrice}</span>
-            <span class="watchlist-change-badge ${changeClass}" id="changeBadge_${t.ticker}">${displayChange}</span>
-          </div>
-          <div class="watchlist-card-actions">
-            <button type="button" class="watchlist-drilldown-btn" data-ticker="${t.ticker}" title="Inspect ${t.ticker} in Cockpit">
-              Cockpit ↗
-            </button>
-            <button type="button" class="watchlist-remove-btn" data-ticker="${t.ticker}" title="Remove ${t.ticker}" aria-label="Remove ${t.ticker}">
-              &times;
-            </button>
+          <div class="watchlist-index-badges">
+            ${indexPills}
           </div>
         </div>
       `;

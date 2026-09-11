@@ -155,6 +155,7 @@
   text-transform: uppercase;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.15s ease;
   box-sizing: border-box;
 }
@@ -172,6 +173,11 @@
   box-shadow: 0 0 10px rgba(255, 183, 0, 0.15);
 }
 
+.watchlist-pill-name {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .watchlist-pill-count {
   display: inline-flex;
   align-items: center;
@@ -184,6 +190,7 @@
   color: inherit;
   font-size: 0.68rem;
   font-weight: 800;
+  flex-shrink: 0;
 }
 
 .watchlist-pill.active .watchlist-pill-count {
@@ -205,14 +212,15 @@
   justify-content: center;
   min-height: 44px;
   min-width: 44px;
-  padding: 0 0.75rem;
+  padding: 0 0.65rem;
   border-radius: 4px;
   font-family: var(--font-mono, monospace);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   cursor: pointer;
   outline: none;
+  white-space: nowrap;
   transition: all 0.15s ease;
   box-sizing: border-box;
 }
@@ -416,7 +424,7 @@
    4. Bloomberg Table Header
    ============================================================================== */
 .watchlist-table-header {
-  display: flex;
+  display: none; /* Hidden on mobile to eliminate misaligned column headers */
   align-items: center;
   justify-content: space-between;
   padding: 0.35rem 0.75rem;
@@ -438,7 +446,7 @@
 }
 
 .wth-col.col-symbol {
-  width: 80px;
+  width: 90px;
   flex-shrink: 0;
 }
 
@@ -458,7 +466,7 @@
 }
 
 .wth-col.col-actions {
-  width: 90px;
+  width: 120px;
   justify-content: flex-end;
 }
 
@@ -468,15 +476,15 @@
 .watchlist-grid {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
   box-sizing: border-box;
 }
 
 .watchlist-ticker-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.35rem 0.75rem;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.55rem 0.75rem;
   background: #0d1117;
   border: 1px solid #21262d;
   border-radius: 4px;
@@ -489,23 +497,31 @@
   border-color: #388bfd;
 }
 
-.watchlist-card-left {
+/* Card Top: Symbol on Left, Price/Change & Actions on Right */
+.watchlist-card-top {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  flex: 1;
-  min-width: 0;
+  justify-content: space-between;
+  gap: 0.4rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.watchlist-symbol-col {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .watchlist-ticker-symbol {
   font-family: var(--font-mono, monospace);
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   font-weight: 800;
   color: #f0f6fc;
   letter-spacing: 0.05em;
   cursor: pointer;
-  width: 80px;
-  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .watchlist-ticker-symbol:hover {
@@ -513,11 +529,125 @@
   text-decoration: underline;
 }
 
+/* Card Price: Spot Price & % Change */
+.watchlist-card-price {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  justify-content: flex-end;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.watchlist-spot-price {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f0f6fc;
+  text-align: right;
+  letter-spacing: 0.02em;
+  min-width: 65px;
+}
+
+.watchlist-change-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 58px;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-sizing: border-box;
+}
+
+.watchlist-change-badge.positive {
+  background: rgba(0, 230, 118, 0.12);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  color: #00e676;
+}
+
+.watchlist-change-badge.negative {
+  background: rgba(255, 82, 82, 0.12);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+  color: #ff5252;
+}
+
+.watchlist-change-badge.neutral {
+  background: rgba(139, 148, 158, 0.1);
+  border: 1px solid rgba(139, 148, 158, 0.25);
+  color: #8b949e;
+}
+
+/* Card Actions: Cockpit ↗ & Remove (WCAG >= 44px) */
+.watchlist-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.watchlist-drilldown-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 0.55rem;
+  background: rgba(56, 139, 253, 0.12);
+  border: 1px solid rgba(56, 139, 253, 0.3);
+  border-radius: 4px;
+  color: #58a6ff;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.watchlist-drilldown-btn:hover {
+  background: rgba(56, 139, 253, 0.25);
+  color: #fff;
+  border-color: #58a6ff;
+}
+
+.watchlist-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #6e7681;
+  font-size: 1.15rem;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.watchlist-remove-btn:hover {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: rgba(248, 81, 73, 0.3);
+  color: #f85149;
+}
+
+/* Card Bottom: Index Badges Cleanly Displayed on Row 2 */
 .watchlist-index-badges {
   display: flex;
   align-items: center;
   gap: 0.3rem;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .watchlist-index-badge {
@@ -565,105 +695,63 @@
   color: #fdba74;
 }
 
-.watchlist-card-price {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  font-family: var(--font-mono, monospace);
-  font-variant-numeric: tabular-nums;
-  justify-content: flex-end;
-}
+/* ==============================================================================
+   Desktop Alignment (>= 768px): Full 5-Column Bloomberg Table Row
+   ============================================================================== */
+@media (min-width: 768px) {
+  .watchlist-table-header {
+    display: flex;
+  }
 
-.watchlist-spot-price {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #f0f6fc;
-  min-width: 80px;
-  text-align: right;
-  letter-spacing: 0.02em;
-}
+  .watchlist-ticker-card {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.35rem 0.75rem;
+  }
 
-.watchlist-change-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 65px;
-  padding: 0.15rem 0.4rem;
-  border-radius: 3px;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  box-sizing: border-box;
-}
+  .watchlist-card-top {
+    display: contents;
+  }
 
-.watchlist-change-badge.positive {
-  background: rgba(0, 230, 118, 0.12);
-  border: 1px solid rgba(0, 230, 118, 0.3);
-  color: #00e676;
-}
+  .watchlist-symbol-col {
+    order: 1;
+    width: 90px;
+    flex-shrink: 0;
+  }
 
-.watchlist-change-badge.negative {
-  background: rgba(255, 82, 82, 0.12);
-  border: 1px solid rgba(255, 82, 82, 0.3);
-  color: #ff5252;
-}
+  .watchlist-ticker-symbol {
+    font-size: 0.95rem;
+  }
 
-.watchlist-change-badge.neutral {
-  background: rgba(139, 148, 158, 0.1);
-  border: 1px solid rgba(139, 148, 158, 0.25);
-  color: #8b949e;
-}
+  .watchlist-index-badges {
+    order: 2;
+    width: auto;
+    flex: 1;
+    padding: 0 0.5rem;
+  }
 
-.watchlist-card-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin-left: 0.75rem;
-}
+  .watchlist-card-price {
+    order: 3;
+    width: 170px;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
 
-.watchlist-drilldown-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0 0.6rem;
-  background: rgba(56, 139, 253, 0.1);
-  border: 1px solid rgba(56, 139, 253, 0.3);
-  border-radius: 4px;
-  color: #58a6ff;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.72rem;
-  font-weight: 700;
-  cursor: pointer;
-  outline: none;
-  transition: all 0.15s ease;
-  box-sizing: border-box;
-}
+  .watchlist-spot-price {
+    min-width: 80px;
+  }
 
-.watchlist-drilldown-btn:hover {
-  background: rgba(56, 139, 253, 0.25);
-  color: #fff;
-  border-color: #58a6ff;
-}
+  .watchlist-change-badge {
+    min-width: 65px;
+  }
 
-.watchlist-remove-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: #6e7681;
-  font-size: 1.15rem;
-  cursor: pointer;
-  outline: none;
-  transition: all 0.15s ease;
-  box-sizing: border-box;
+  .watchlist-card-actions {
+    order: 4;
+    width: 120px;
+    justify-content: flex-end;
+  }
 }
 
 .watchlist-remove-btn:hover {
