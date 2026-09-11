@@ -71,6 +71,7 @@ def main():
         ("GET", "/api/health", None),
         ("GET", "/api/flow/status", None),
         ("GET", "/api/quant-levels/status", None),
+        ("GET", "/api/quant-levels/dates?ticker=SPX", None),
         ("GET", "/mcp/sse", None),
         ("POST", "/mcp/sse", {"jsonrpc": "2.0", "id": 1, "method": "ping"}),
         ("GET", "/mcp/messages", None),
