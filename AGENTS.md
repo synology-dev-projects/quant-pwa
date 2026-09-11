@@ -38,3 +38,9 @@
      * **Pre-Commit Code Audit (`PHASE_4_AUDIT`)**: Follow `.agents/skills/no-mistakes-reviewer/SKILL.md` for adversarial diff inspection across security, precision, concurrency, and test coverage.
      * **Staging & Docker Deployment (`PHASE_5_STAGING`)**: Follow `.agents/skills/docker/SKILL.md` (and `.agents/skills/synology-nas-guardian/SKILL.md`) for zero-bloat multi-stage Docker builds, strict `< 350MB` RAM budgets, and healthcheck watchdogs.
      * **Production Gate (`PHASE_6_PRODUCTION_GATE`)**: Follow `.agents/skills/architecture-review-agent/SKILL.md` for 1,000 DAU enterprise scalability validation.
+
+8. **Quant Developer Cycle Skills (`/grill-me`, `/refactor-plan`, `/deslop`, `/handoff`)**:
+   - **Intake & Scoping**: Trigger `/grill-me` on any non-trivial requirement to interview the user, clarify boundaries, and eliminate assumption-based slop before writing code.
+   - **Architectural Refactoring**: Trigger `/refactor-plan` (`.agents/skills/refactor-plan/SKILL.md`) to freeze behavior with characterization tests and slice changes into independent, low-risk commits.
+   - **Code Hygiene & Deslop**: Trigger `/deslop` (`.agents/skills/deslop/SKILL.md`) before committing to scrub narrative comments, inline single-caller wrappers, enforce Zero Trade Advice, and verify the full regression test suite.
+   - **Context Compaction**: Trigger `/handoff` (`.agents/skills/handoff/SKILL.md`) at the end of a session or when context reaches >40k tokens to generate a clean-reset prompt for fresh sessions.

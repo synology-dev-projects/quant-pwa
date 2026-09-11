@@ -3,56 +3,67 @@ name: handoff
 description: >-
   MANDATORY: Activate this skill whenever the user types /handoff, asks to prepare
   a handoff, compact context, or summarize current progress for a clean session reset.
-  Generates a dense, structured handoff artifact to prevent context-window decay.
+  Generates a high-density, Quant-PWA specific handoff artifact to prevent context decay.
 ---
 
-# 📋 Session Handoff & Context Reset Protocol (`/handoff`)
+# 📋 Quant PWA Session Handoff & Context Reset Protocol (`/handoff`)
 
-As conversations grow in size (>50k tokens), AI coding models suffer from **context window decay**—hallucinating constraints, repeating discarded patterns, and producing lower-density output. 
+As conversations grow in size (>40k tokens), AI coding models suffer from **context window decay**—hallucinating constraints, repeating discarded approaches, and degrading response speed.
 
-This skill constructs a high-density, standardized **Handoff Document** that allows starting a brand new, lightning-fast session with zero loss of momentum.
+This skill compiles an authoritative, high-density **Quant PWA Handoff Document** (`handoff.md`) allowing you to start a fresh chat session with 100% intelligence and zero lost momentum.
 
 ## Core Directives
 
-1. **High Information Density**: No conversational pleasantries. Everything must be monospace, tabular, or telegraphic bullet points.
-2. **Exact Git Reality**: Report the exact branch, latest commit hash, staged/unstaged diff stats, and active protocol node.
-3. **Reproducible Commands**: Include exact shell commands to run tests, start servers, or verify current state.
+1. **Exact Git & Protocol Ground Truth**:
+   - Report active branch (`develop2` vs `master`).
+   - Report latest commit hash and message.
+   - Report protocol state via `python scripts/protocol_graph.py status`.
+   - Report target production version (e.g. `v1.1.20`).
+2. **Multi-Environment Status**:
+   - Dev / Staging: Port `8096` (`http://192.168.1.68:8096`).
+   - Production: Port `8095` (`http://192.168.1.68:8095`).
+3. **High Information Density**:
+   - Zero conversational pleasantries.
+   - Crisp monospace bullet points, test commands, and exact file paths.
 
 ---
 
 ## Handoff Template Specification
 
-When `/handoff` is triggered, create `handoff.md` with the following structure:
+When `/handoff` is invoked, generate `handoff.md` with this exact structure:
 
 ```markdown
 # Session Handoff: [Task / Feature Name]
 
-## 1. Ground Truth & Git State
-- **Workspace**: `path/to/repo`
-- **Active Branch**: `develop2` (or current branch)
-- **Latest Commit**: `hash` - `commit message`
+## 1. Ground Truth & Environment State
+- **Workspace**: `C:\Coding\VSCode\Quant System\quant-pwa`
+- **Active Branch**: `develop2` (Rule 3 Protection Active - never on `master`)
+- **Latest Commit**: `hash` - `feat(...): description`
 - **Working Tree**: Clean / Dirty (list modified files)
-- **Protocol Graph State**: Active Node (e.g. `PHASE_2_SEQUENCING`, `PHASE_6_PRODUCTION_GATE`)
+- **Protocol Graph State**: `ACTIVE_NODE` (e.g. `PHASE_2_SEQUENCING`, `PHASE_6_PRODUCTION_GATE`)
+- **App Version**: `vX.Y.Z` (Build `YYYY-MM-DD-NN`)
+- **NAS Deployment Ports**: Production :8095 | Staging :8096
 
 ## 2. What Was Accomplished This Session
-- [x] Feature / Bug 1 implemented and verified
-- [x] Version bumped to vX.Y.Z
-- [x] Unit tests passed (N/N green)
+- [x] Feature / Bug fixed and verified
+- [x] Version parity strictly synchronized across 5 files
+- [x] Test suite passing: Backend (N/N) | Frontend (N/N) | Layout (171/171)
 
 ## 3. Active Architectural Decisions & Invariants
-- Invariant 1 (e.g. Minimum 10 records for ordinal ranking)
-- Invariant 2 (e.g. Rule 3 Master Branch Protection strictly active)
-- Storage / Query choices (e.g. Single-scan CTEs instead of client joins)
+- **Rule 3 Master Branch Protection**: Push only to `develop2`. Merge to `master` strictly requires human authorization ("approve").
+- **Zero Trade Advice**: Purely quantitative microstructure; no buy/sell recommendations.
+- **Single Source of Truth**: Shared calculations reside in `gateway/app/core/`.
+- **Hardware Footprint**: Synology NAS `< 350MB` RAM budget maintained.
 
-## 4. Current Blockers / Next Steps (In Priority Order)
+## 4. Current Blockers & Next Immediate Steps
 1. Next immediate step to execute
 2. Following step
 3. Verification command to run
 
-## 5. Quick-Resume Prompt for Next Session
-Copy and paste this into the fresh session:
-> "Resume work on [Task Name]. State is at [Active Node]. Please view `handoff.md` and [implementation_plan.md / walkthrough.md] and proceed with Step 1."
+## 5. Quick-Resume Prompt for Fresh Session
+Copy and paste this into a new chat:
+> "Resume work on [Task Name]. State is at [Active Node]. Review `handoff.md` and [implementation_plan.md / walkthrough.md]. Begin with Step 1."
 ```
 
 ## Post-Handoff Guidance
-Remind the user to start a fresh chat/session for peak agent intelligence and paste the quick-resume prompt.
+Remind the user to open a new conversation for peak agent reasoning speed and paste the quick-resume prompt.

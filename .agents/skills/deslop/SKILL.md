@@ -3,58 +3,67 @@ name: deslop
 description: >-
   MANDATORY: Activate this skill whenever the user types /deslop, asks to deslop,
   declutter, clean up AI code, remove narrative comments, or strip redundant wrappers
-  from the codebase. Enforces the 4-Pass Surgical Pruning Protocol with zero regression.
+  from the Quant PWA codebase. Enforces the 4-Pass Surgical Pruning Protocol and
+  strict Quant Domain Invariants (Zero Trade Advice, ADHD Brevity, 44px Touch Targets,
+  Version Parity).
 ---
 
-# 🧹 The 4-Pass Code Deslop Protocol (`/deslop`)
+# 🧹 The Quant PWA Code Deslop Protocol (`/deslop`)
 
-This skill defines the rigorous, non-destructive methodology for purging AI-generated "slop", conversational filler, defensive over-wrapping, and zombie code while guaranteeing 100% behavioral equivalence.
+This skill defines the rigorous, non-destructive pruning methodology tailor-made for the **Quant PWA & Gateway** architecture. It purges AI-generated slop, conversational filler, defensive over-wrapping, and zombie code while guaranteeing 100% behavioral equivalence and strict Quant Domain Invariants.
 
-## Core Directives & Invariants
+## Quant System Core Invariants
 
-1. **Behavioral Invariance (Zero Regressions)**:
-   - Deslopping is strictly structural and stylistic. It must NEVER alter runtime behavior, API schemas, database contracts, or mathematical results.
-   - You MUST run the complete unit test suite before starting and after finishing.
+1. **Zero Trade Advice Mandate**:
+   - Scrub any subjective or advisory trading language ("bullish setup", "consider entering", "profit target", "breakout trigger", "good risk/reward").
+   - Retain ONLY purely quantitative, descriptive microstructure and Greek terminology (e.g. "Spot @ $218.36 above Zero Flip @ $211.20 in Positive Gamma (+GEX)").
 
-2. **"Delete Anything That Doesn't Break a Test" (The Pocock Razor)**:
-   - If speculative defensive checks (`if x is not None and len(x) > 0 and ...`), helper functions, or fallback wrappers can be removed without failing any unit tests or breaking static typing, they are slop and should be pruned.
+2. **ADHD-Friendly Brevity Mandate**:
+   - Strip wordy preambles, introductory filler, and conversational fluff.
+   - Enforce bolded metrics and scannable sub-bullets (max 3 bullets, digestible in < 10 seconds).
 
-3. **Strict Ban on Narrative Comments**:
-   - Delete all comments that merely narrate *what* the code does (e.g. `# Loop through items`, `# Initialize dictionary`, `# Function to fetch data`).
-   - Retain ONLY comments that explain *why* non-obvious code exists (e.g. domain business invariants, specific regulatory/exchange quirks, bug workarounds, mathematical derivations).
+3. **Behavioral Invariance & Regression Lock**:
+   - Deslopping is purely structural. It must NEVER alter calculation results, API contracts, or database queries.
+   - Run unit tests before and after to verify zero regressions.
+
+4. **Version Parity Invariant**:
+   - Deslopping must never alter or drift version strings across the 5 synchronized version files. Verify with `python scripts/bump_version.py --check`.
+
+5. **Touch Target & Zero-Overflow Invariant**:
+   - Frontend styling cleanup must maintain 44px minimum tap targets and zero horizontal layout overflows across 375px, 768px, and 1280px viewports (`audit_layout.js`).
+
+6. **Synology NAS Memory Budget (< 350MB RAM)**:
+   - Strip unneeded in-memory cache duplicates, giant object retention in global scopes, or leaky event listeners.
 
 ---
 
 ## The 4-Pass Execution Sequence
 
 ### Pass 1: Automated AST & Mechanical Sweep
-Always execute automated linter/AST engines first before touching manual logic:
+Run deterministic tools first:
 
-* **Python Subsystems (`gateway/`)**:
+* **Backend Gateway (`gateway/`)**:
   ```bash
-  # Purges unused imports (F401), unused variables (F841), and commented-out dead code (ERA001)
   ruff check --select F401,F841,ERA001 --fix gateway/
   ```
+  *(Removes unused imports F401, unused variables F841, and commented-out code ERA001).*
 
-* **Frontend Subsystems (`frontend/`)**:
-  - Scan for orphaned `console.log()` statements left from debugging.
-  - Scan for unreferenced variables or zombie imports in ES modules.
+* **Frontend (`frontend/`)**:
+  - Remove all leftover debugging `console.log()` statements.
+  - Check ES module imports for unreferenced symbols.
 
 ---
 
 ### Pass 2: Comment De-conversationalizing & Narrative Purge
-Inspect the target file(s) and strip LLM conversational noise:
+Scan touched files and delete all narrative "what" comments:
 
-* **DELETE (AI Preamble & Narrations)**:
+* **DELETE (AI Narration & Redundancy)**:
   ```python
   # ❌ SLOP:
-  # This function takes the spot price and computes the zero flip level
-  # We first validate that spot is greater than 0
-  if spot <= 0:
-      return 0.0
-  # Now we loop through all strikes to aggregate total gamma
-  for strike in strikes:
-      ...
+  # Loop over records to filter out zero strike flow
+  filtered = [r for r in records if r.get("strike", 0) > 0]
+  # Return the filtered records list
+  return filtered
   ```
 
 * **KEEP (Domain Invariants & "Why" Only)**:
@@ -67,29 +76,35 @@ Inspect the target file(s) and strip LLM conversational noise:
 
 ---
 
-### Pass 3: Structural Pruning (YAGNI & Single Source of Truth)
-Eliminate unnecessary indirection introduced by AI coding:
+### Pass 3: Structural Pruning & Single Source of Truth
+Eliminate unnecessary indirection:
 
 1. **Inline Single-Caller Trivial Wrappers**:
-   - If a private helper function `_calculate_temp_val(x)` is only called by one function and consists of 1–2 trivial lines, inline it directly into the caller.
+   - If a private helper function `_format_date_temp(d)` has exactly 1 call site and is 1–2 lines, inline it.
 
 2. **Flatten Defensive Over-Wrapping**:
-   - Replace 3 nested `try/except Exception: pass` blocks with explicit, typed error boundaries or let errors propagate to the gateway exception handlers.
+   - Replace triple-nested `try/except Exception: pass` blocks with typed exception handling or let gateway global middleware catch them.
 
 3. **Prune Speculative Fallback Cascades**:
-   - Remove dead fallback branches that were added "just in case" but can never be triggered in real execution.
+   - Remove fake gaussian curve fallbacks or dead code branches that can never execute in production.
 
 4. **Consolidate Copy-Paste Divergence**:
-   - If identical currency formatting, date arithmetic, or scoring logic is duplicated across multiple views, import it from the shared core single source of truth (e.g., `app.core.flow_criteria`).
+   - Enforce single sources of truth. Shared quantitative math must reside in `gateway/app/core/` (e.g. `flow_criteria.py`), never copy-pasted between routers.
 
 ---
 
 ### Pass 4: Verification & Regression Lock
-Before marking the deslop operation complete:
-1. Run all unit tests for the touched module:
-   ```bash
-   pytest gateway/tests/ -v
-   node frontend/tests/audit_layout.js
-   ```
-2. Verify git diff is clean, compact, and focused purely on reduction of lines of code (`git diff --stat`).
-3. Report the net line reduction and verified tests to the user.
+Run the complete verification matrix before marking deslop complete:
+```bash
+# 1. Backend test suite
+pytest gateway/tests/ -v
+
+# 2. Frontend layout & DOM integration
+node frontend/tests/audit_layout.js
+node frontend/tests/test_flow_view.js
+node frontend/tests/test_cockpit_view.js
+
+# 3. Version parity check
+python scripts/bump_version.py --check
+```
+Verify git diff is clean, compact, and net-reductive (`git diff --stat`).
