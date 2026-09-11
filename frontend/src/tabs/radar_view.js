@@ -62,8 +62,8 @@ export class RadarView {
 
         <!-- Unified GEX/DEX & Options Flow Matrix Table -->
         <div class="radar-table-card">
-          <div class="radar-table-wrapper quant-table-wrapper" id="radarTableWrapper">
-            <table class="radar-table flow-table" id="radarTable">
+          <div class="radar-table-wrapper" id="radarTableWrapper">
+            <table class="radar-table" id="radarTable">
               <thead>
                 <tr>
                   <th data-col="ticker" class="sortable col-ticker">TICKER</th>
