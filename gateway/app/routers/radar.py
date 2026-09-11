@@ -227,16 +227,9 @@ def get_unified_radar_table(
             flow_rows = conn.execute(q_flow, {"dates_3d": dates_3d, "dates_7d": dates_7d}).mappings().all()
             flow_map = {str(r["symbol"]).upper(): r for r in flow_rows}
 
-        # 6. Active flow symbols on clean_date
-        q_active_flow = sa.text("""
-            SELECT DISTINCT symbol 
-            FROM unusual_option_flow_te 
-            WHERE trade_date = :target_date_str AND strike_price > 0
-        """)
-        active_flow_symbols = set(conn.execute(q_active_flow, {"target_date_str": clean_date}).scalars().all())
+        # 6. Confluence symbols: strictly include curated watchlist tickers with GEX/DEX levels
+        all_symbols = sorted(snap_map.keys())
 
-        # Combine all symbols from snapshot or active on session date
-        all_symbols = sorted(set(snap_map.keys()) | set(s.upper() for s in active_flow_symbols))
 
         rows: List[RadarUnifiedRow] = []
         for sym in all_symbols:

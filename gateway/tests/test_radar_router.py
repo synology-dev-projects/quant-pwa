@@ -30,11 +30,13 @@ def setup_radar_fixtures():
                     flow_id, trade_date, symbol, strike_price, order_type, premium
                 ) VALUES 
                 ('fixture_flow_1', '2026-09-09', 'AAPL', 240.0, 'BUY_CALL', 500000.0),
-                ('fixture_flow_2', '2026-09-09', 'NVDA', 220.0, 'BUY_CALL', 1200000.0)
+                ('fixture_flow_2', '2026-09-09', 'NVDA', 220.0, 'BUY_CALL', 1200000.0),
+                ('fixture_flow_3', '2026-09-09', 'IBIT', 50.0, 'BUY_CALL', 9000000.0)
                 ON CONFLICT DO NOTHING;
             """))
     except Exception:
         pass
+
 
 
 def test_radar_auth_rejection_missing_header():
@@ -117,3 +119,24 @@ def test_get_unified_radar_table_specific_date():
     if data["rows"]:
         tickers = {r["ticker"] for r in data["rows"]}
         assert "AAPL" in tickers or "NVDA" in tickers
+
+
+def test_radar_excludes_flow_only_tickers_without_snapshot():
+    token, _ = create_session_token()
+    res = client.get("/api/radar/unified-table?date=2026-09-09", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    data = res.json()
+    rows = data.get("rows", [])
+    tickers = {r["ticker"] for r in rows}
+
+    # IBIT had $9M flow on 2026-09-09 but NO gexdex_snapshot entry.
+    # It MUST be excluded from the Confluence Radar unified table.
+    assert "IBIT" not in tickers
+
+    # All returned rows must have authentic GEX/DEX snapshot data (no N/A spot price)
+    for r in rows:
+        assert r["formatted_spot_price"] != "N/A"
+        assert r["spot_price"] is not None
+        assert r["call_wall"] is not None
+        assert r["put_wall"] is not None
+
