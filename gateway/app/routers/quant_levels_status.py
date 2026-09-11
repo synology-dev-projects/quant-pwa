@@ -1,13 +1,15 @@
 import logging
 from datetime import datetime, date, timedelta, time
 from zoneinfo import ZoneInfo
-from typing import Optional, Any
+from typing import Optional, Any, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+import pandas as pd
 
 from common_lib.config.main_config import load_config
 from common_lib.connectors import postgres
 from app.core.auth import get_current_user
+from app.core.quote_feed import get_batch_quotes
 
 logger = logging.getLogger("quant.gateway.quant_levels_status")
 
@@ -29,6 +31,43 @@ class QuantLevelSyncResponse(BaseModel):
     status: str
     message: str
     rows_upserted: Optional[int] = None
+
+
+class QuantLevelItem(BaseModel):
+    start_price: float
+    end_price: Optional[float] = None
+    price_display: str
+    type: str  # "BUY", "SELL", or "PIVOT"
+    comments: Optional[str] = None
+    web_link: Optional[str] = None
+    distance_pts: float
+    distance_pct: float
+    relative_position: str  # "ABOVE_SPOT", "BELOW_SPOT", or "AT_SPOT"
+    is_immediate_support: bool = False
+    is_immediate_resistance: bool = False
+
+
+class QuantLevelSummary(BaseModel):
+    ticker: str
+    as_of_date: Optional[str] = None
+    spot_price: Optional[float] = None
+    immediate_resistance: Optional[float] = None
+    immediate_support: Optional[float] = None
+    channel_width: Optional[float] = None
+    total_levels: int
+    buy_levels_count: int
+    sell_levels_count: int
+
+
+class QuantLevelDataResponse(BaseModel):
+    status: str
+    ticker: str
+    as_of_date: Optional[str] = None
+    available_dates: List[str] = []
+    spot_price: Optional[float] = None
+    summary: QuantLevelSummary
+    levels: List[QuantLevelItem] = []
+    message: Optional[str] = None
 
 
 def get_expected_quant_levels_date(ref_dt: Optional[datetime] = None) -> date:
@@ -186,3 +225,245 @@ async def trigger_quant_levels_sync(current_user: str = Depends(get_current_user
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Pipeline execution failed: {str(ex)}"
         )
+
+
+@router.get("/dates", response_model=List[str])
+async def get_quant_levels_dates(ticker: str = "SPX"):
+    """
+    Returns distinct available historical as-of dates for SPX in descending order.
+    The Quant Levels tab is strictly locked to ticker SPX.
+    """
+    clean_ticker = "SPX"
+    try:
+        config = load_config()
+        query = """
+            SELECT DISTINCT datetime::date AS d
+            FROM quant_lvl_data_te
+            WHERE ticker = :ticker
+            ORDER BY d DESC;
+        """
+        df = postgres.sql(config, query, params={"ticker": clean_ticker})
+        if df.empty:
+            return []
+        dates = [
+            str(row["d"]).split()[0]
+            for _, row in df.iterrows()
+            if pd_not_na(row["d"])
+        ]
+        return dates
+    except Exception as ex:
+        logger.warning(f"Error fetching quant level dates for {clean_ticker}: {ex}")
+        return []
+
+
+@router.get("/data", response_model=QuantLevelDataResponse)
+async def get_quant_levels_data(
+    ticker: str = "SPX",
+    as_of_date: Optional[str] = None
+):
+    """
+    Fetches structured quant levels strictly locked to ticker SPX, enriched with live spot prices,
+    spot distance deltas, and immediate support/resistance flags.
+    """
+    clean_ticker = "SPX"
+
+    config = load_config()
+    target_date: Optional[date] = None
+
+    # 1. Fetch available dates for SPX
+    dates_query = """
+        SELECT DISTINCT datetime::date AS d
+        FROM quant_lvl_data_te
+        WHERE ticker = :ticker
+        ORDER BY d DESC;
+    """
+    try:
+        df_dates = postgres.sql(config, dates_query, params={"ticker": clean_ticker})
+        available_dates = [
+            str(row["d"]).split()[0]
+            for _, row in df_dates.iterrows()
+            if pd_not_na(row["d"])
+        ] if not df_dates.empty else []
+    except Exception as ex:
+        logger.warning(f"Failed fetching dates for {clean_ticker}: {ex}")
+        available_dates = []
+
+    # Resolve target date
+    if as_of_date and as_of_date.strip():
+        try:
+            target_date = datetime.strptime(as_of_date.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            target_date = None
+    elif available_dates:
+        try:
+            target_date = datetime.strptime(available_dates[0], "%Y-%m-%d").date()
+        except ValueError:
+            target_date = None
+
+    # 2. Concurrently fetch spot price
+    spot_price: Optional[float] = None
+    quote_syms = [clean_ticker]
+    if clean_ticker == "SPX":
+        quote_syms.append("^SPX")
+    elif clean_ticker == "NDX":
+        quote_syms.append("^NDX")
+
+    try:
+        quotes = await get_batch_quotes(quote_syms)
+        for sym in quote_syms:
+            if sym in quotes and quotes[sym].get("price"):
+                spot_price = float(quotes[sym]["price"])
+                break
+    except Exception as ex:
+        logger.warning(f"Failed fetching spot price for {clean_ticker}: {ex}")
+
+    # 3. Query quant levels from postgres
+    try:
+        df_levels = postgres.get_quant_levels(config, ticker=clean_ticker, as_of_date=target_date)
+    except Exception as ex:
+        logger.error(f"Error querying quant levels for {clean_ticker}: {ex}")
+        df_levels = pd.DataFrame()
+
+    if df_levels.empty:
+        summary = QuantLevelSummary(
+            ticker=clean_ticker,
+            as_of_date=str(target_date) if target_date else None,
+            spot_price=spot_price,
+            immediate_resistance=None,
+            immediate_support=None,
+            channel_width=None,
+            total_levels=0,
+            buy_levels_count=0,
+            sell_levels_count=0
+        )
+        return QuantLevelDataResponse(
+            status="empty",
+            ticker=clean_ticker,
+            as_of_date=str(target_date) if target_date else None,
+            available_dates=available_dates,
+            spot_price=spot_price,
+            summary=summary,
+            levels=[],
+            message=f"No quant levels found for {clean_ticker} as of {target_date or 'latest'}."
+        )
+
+    # Filter to exact target_date if resolved and DATETIME present
+    if target_date is not None and "DATETIME" in df_levels.columns:
+        df_levels["DATE_ONLY"] = pd.to_datetime(df_levels["DATETIME"]).dt.date
+        date_filtered = df_levels[df_levels["DATE_ONLY"] == target_date].copy()
+        if not date_filtered.empty:
+            df_levels = date_filtered
+        else:
+            # Fallback to latest available date in DataFrame
+            max_d = pd.to_datetime(df_levels["DATETIME"]).dt.date.max()
+            df_levels = df_levels[pd.to_datetime(df_levels["DATETIME"]).dt.date == max_d].copy()
+            target_date = max_d
+    elif "DATETIME" in df_levels.columns:
+        max_d = pd.to_datetime(df_levels["DATETIME"]).dt.date.max()
+        df_levels = df_levels[pd.to_datetime(df_levels["DATETIME"]).dt.date == max_d].copy()
+        target_date = max_d
+
+    # Convert to structured items
+    items: List[QuantLevelItem] = []
+    buy_count = 0
+    sell_count = 0
+
+    df_levels["START_LVL_PRICE"] = pd.to_numeric(df_levels["START_LVL_PRICE"], errors="coerce")
+    df_levels = df_levels.dropna(subset=["START_LVL_PRICE"])
+    df_levels = df_levels.sort_values(by="START_LVL_PRICE", ascending=False)
+
+    ref_spot = spot_price or (
+        float(df_levels["START_LVL_PRICE"].median()) if not df_levels.empty else 0.0
+    )
+
+    for _, row in df_levels.iterrows():
+        start_p = float(row["START_LVL_PRICE"])
+        end_p = float(row["END_LVL_PRICE"]) if pd_not_na(row.get("END_LVL_PRICE")) else None
+
+        raw_ind = str(row.get("BUY_SELL_IND") or "").strip().upper()
+        if raw_ind in ("BUY", "LONG"):
+            lvl_type = "BUY"
+            buy_count += 1
+        elif raw_ind in ("SELL", "SHORT"):
+            lvl_type = "SELL"
+            sell_count += 1
+        else:
+            lvl_type = "PIVOT"
+
+        comments = str(row.get("COMMENTS") or "").strip() or None
+        web_link = str(row.get("WEB_LINK") or "").strip() or None
+
+        mid_p = (start_p + end_p) / 2.0 if end_p is not None else start_p
+        dist_pts = round(mid_p - ref_spot, 2)
+        dist_pct = round((dist_pts / ref_spot) * 100, 2) if ref_spot > 0 else 0.0
+
+        if abs(dist_pct) <= 0.1:
+            rel_pos = "AT_SPOT"
+        elif dist_pts > 0:
+            rel_pos = "ABOVE_SPOT"
+        else:
+            rel_pos = "BELOW_SPOT"
+
+        price_display = f"{start_p:,.2f}"
+        if end_p is not None and abs(end_p - start_p) > 0.01:
+            price_display = f"{start_p:,.2f} - {end_p:,.2f}"
+
+        items.append(QuantLevelItem(
+            start_price=start_p,
+            end_price=end_p,
+            price_display=price_display,
+            type=lvl_type,
+            comments=comments,
+            web_link=web_link,
+            distance_pts=dist_pts,
+            distance_pct=dist_pct,
+            relative_position=rel_pos
+        ))
+
+    # Identify immediate support & resistance
+    # items are sorted start_price DESC
+    imm_res: Optional[QuantLevelItem] = None
+    imm_sup: Optional[QuantLevelItem] = None
+
+    for item in reversed(items):
+        mid_p = (item.start_price + item.end_price) / 2.0 if item.end_price else item.start_price
+        if mid_p >= ref_spot:
+            imm_res = item
+            break
+
+    for item in items:
+        mid_p = (item.start_price + item.end_price) / 2.0 if item.end_price else item.start_price
+        if mid_p <= ref_spot:
+            imm_sup = item
+            break
+
+    if imm_res:
+        imm_res.is_immediate_resistance = True
+    if imm_sup:
+        imm_sup.is_immediate_support = True
+
+    imm_res_val = imm_res.start_price if imm_res else None
+    imm_sup_val = imm_sup.start_price if imm_sup else None
+    channel_w = round(imm_res_val - imm_sup_val, 2) if (imm_res_val and imm_sup_val) else None
+
+    summary = QuantLevelSummary(
+        ticker=clean_ticker,
+        as_of_date=str(target_date) if target_date else None,
+        spot_price=spot_price,
+        immediate_resistance=imm_res_val,
+        immediate_support=imm_sup_val,
+        channel_width=channel_w,
+        total_levels=len(items),
+        buy_levels_count=buy_count,
+        sell_levels_count=sell_count
+    )
+
+    return QuantLevelDataResponse(
+        status="ok",
+        ticker=clean_ticker,
+        as_of_date=str(target_date) if target_date else None,
+        available_dates=available_dates,
+        spot_price=spot_price,
+        summary=summary,
+        levels=items
+    )

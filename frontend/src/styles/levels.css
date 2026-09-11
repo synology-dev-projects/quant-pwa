@@ -1,0 +1,404 @@
+/* ==========================================================================
+   SPX QUANT LEVELS TAB STYLING (PWA-01)
+   Bloomberg-Grade Institutional Dark Mode Theme
+   Strictly Locked to Ticker SPX
+   ========================================================================== */
+
+.levels-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* --- Header / Action Bar --- */
+.levels-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.levels-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.levels-ticker-badge {
+  background: rgba(255, 179, 0, 0.15);
+  color: #ffb300;
+  border: 1px solid rgba(255, 179, 0, 0.4);
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+
+.levels-main-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f0f4f8;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.levels-subtitle {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.levels-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.levels-date-select {
+  background: #1e293b;
+  color: #f1f5f9;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.levels-date-select:focus {
+  border-color: #38bdf8;
+}
+
+.levels-refresh-btn {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.15s ease;
+}
+
+.levels-refresh-btn:hover {
+  background: #334155;
+  color: #f8fafc;
+}
+
+/* --- Hero Metric Cards --- */
+.levels-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.levels-hero-card {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.levels-card-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.levels-card-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.levels-card-value.res-val {
+  color: #f87171;
+}
+
+.levels-card-value.sup-val {
+  color: #4ade80;
+}
+
+.levels-card-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+/* --- Interactive Visual Price Ladder --- */
+.levels-ladder-section {
+  background: #0b1120;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.levels-ladder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.levels-ladder-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+.levels-ladder-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  position: relative;
+}
+
+/* Level Row on Ladder */
+.ladder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.85rem;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ladder-row:hover {
+  background: rgba(30, 41, 59, 0.8);
+}
+
+.ladder-row.type-sell {
+  border-left: 3px solid #ef4444;
+}
+
+.ladder-row.type-buy {
+  border-left: 3px solid #22c55e;
+}
+
+.ladder-row.type-pivot {
+  border-left: 3px solid #38bdf8;
+}
+
+.ladder-row.immediate-res {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.1);
+}
+
+.ladder-row.immediate-sup {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.3);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.1);
+}
+
+.ladder-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ladder-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.ladder-tag.tag-sell {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.ladder-tag.tag-buy {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.ladder-tag.tag-pivot {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+}
+
+.ladder-price {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.ladder-comment {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-left: 0.5rem;
+}
+
+.ladder-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ladder-delta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}
+
+.ladder-delta.delta-above {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ladder-delta.delta-below {
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.ladder-delta.delta-spot {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+/* Spot Indicator Marker on Ladder */
+.ladder-spot-marker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.85rem;
+  margin: 0.25rem 0;
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border: 1px dashed #fbbf24;
+  border-radius: 6px;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.2);
+}
+
+.spot-marker-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #fbbf24;
+  font-weight: 700;
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.spot-marker-pulse {
+  width: 7px;
+  height: 7px;
+  background: #fbbf24;
+  border-radius: 50%;
+  animation: spotPulse 1.8s infinite;
+}
+
+@keyframes spotPulse {
+  0% { transform: scale(0.9); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.4; }
+  100% { transform: scale(0.9); opacity: 1; }
+}
+
+.spot-marker-price {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #fffbeb;
+}
+
+/* --- Structured Table View --- */
+.levels-table-wrapper {
+  overflow-x: auto;
+  background: #0b1120;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.levels-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.levels-table th {
+  background: #0f172a;
+  color: #94a3b8;
+  font-weight: 600;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.levels-table td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+}
+
+.levels-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.source-link {
+  color: #38bdf8;
+  text-decoration: none;
+  font-size: 0.75rem;
+}
+
+.source-link:hover {
+  text-decoration: underline;
+}
+
+/* Empty State */
+.levels-empty-state {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  background: #0f172a;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+}
+
+.levels-empty-title {
+  color: #f1f5f9;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+}
+
+.levels-empty-desc {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  margin-bottom: 1.25rem;
+}

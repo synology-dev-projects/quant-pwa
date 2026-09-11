@@ -4,6 +4,7 @@ import { CockpitView } from './tabs/cockpit_view.js?v=30';
 import { RadarView } from './tabs/radar_view.js?v=31';
 import { FlowView } from './tabs/flow_view.js?v=32';
 import { WatchlistView } from './tabs/watchlist_view.js?v=33';
+import { LevelsView } from './tabs/levels_view.js?v=34';
 import { Lightbox } from './components/lightbox.js?v=30';
 import { LockScreen } from './components/lock_screen.js?v=30';
 import { SettingsModal } from './components/settings_modal.js?v=30';
@@ -15,6 +16,7 @@ class App {
     this.radarView = new RadarView();
     this.flowView = new FlowView();
     this.watchlistView = new WatchlistView();
+    this.levelsView = new LevelsView();
     this.lightbox = new Lightbox();
     window.quantLightbox = this.lightbox;
 
@@ -84,6 +86,9 @@ class App {
     if (this.watchlistView && AppState.getActiveTab() === 'watchlists') {
       this.watchlistView.loadWatchlists();
     }
+    if (this.levelsView && AppState.getActiveTab() === 'levels') {
+      this.levelsView.loadLevelsData();
+    }
   }
 
   initTabs() {
@@ -101,6 +106,11 @@ class App {
       if (tabId === 'flow' && this.flowView) {
         if (!this.flowView.currentData) {
           this.flowView.loadFlowData();
+        }
+      }
+      if (tabId === 'levels' && this.levelsView) {
+        if (!this.levelsView.currentData) {
+          this.levelsView.loadInitialData();
         }
       }
       if (tabId === 'watchlists' && this.watchlistView) {
@@ -146,9 +156,17 @@ class App {
       render: (container) => this.watchlistView.render(container)
     });
 
+    // 5. SPX Quant Levels Tab (PWA-01 - Locked to SPX)
+    this.tabManager.registerTab({
+      id: 'levels',
+      title: 'SPX Levels',
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v18M16 3v18M8 7h8M8 12h8M8 17h8"></path></svg>`,
+      render: (container) => this.levelsView.render(container)
+    });
+
     // Activate initial tab from localStorage
     const savedTab = AppState.getActiveTab();
-    const validTabs = ['flow', 'cockpit', 'radar', 'watchlists'];
+    const validTabs = ['flow', 'cockpit', 'radar', 'watchlists', 'levels'];
     const activeTab = validTabs.includes(savedTab) ? savedTab : 'flow';
     this.tabManager.switchTab(activeTab);
   }

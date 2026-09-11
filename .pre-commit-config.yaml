@@ -37,6 +37,18 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: watchlist-dom-tests
+        name: 📋 Watchlist View DOM Tests
+        entry: node frontend/tests/test_watchlist_view.js
+        language: system
+        pass_filenames: false
+
+      - id: levels-dom-tests
+        name: 🪜 SPX Levels View DOM Tests
+        entry: node frontend/tests/test_levels_view.js
+        language: system
+        pass_filenames: false
+
       - id: layout-wcag-dom-tests
         name: 📐 Layout Geometry & WCAG Tests
         entry: node frontend/tests/audit_layout.js

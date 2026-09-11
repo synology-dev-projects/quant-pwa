@@ -50,6 +50,8 @@ jobs:
           echo "Using Node binary: $NODE_BIN"
           "$NODE_BIN" frontend/tests/test_settings_flow_modal.js
           "$NODE_BIN" frontend/tests/test_cockpit_view.js
+          "$NODE_BIN" frontend/tests/test_watchlist_view.js
+          "$NODE_BIN" frontend/tests/test_levels_view.js
           "$NODE_BIN" frontend/tests/test_vertical_table_ui.js
           "$NODE_BIN" frontend/tests/test_auth_guard.js
           "$NODE_BIN" frontend/tests/audit_layout.js
@@ -102,6 +104,7 @@ jobs:
           cp -r scripts "$TARGET_PATH/"
           cp docker-compose.yml "$TARGET_PATH/"
           cp version.json "$TARGET_PATH/"
+          [ -d docs ] && cp -r docs "$TARGET_PATH/"
           [ -f .pre-commit-config.yaml ] && cp .pre-commit-config.yaml "$TARGET_PATH/"
           
           echo "🔒 Setting permissions for user 1026 (rachardv)..."
@@ -255,3 +258,53 @@ jobs:
           fi
           
           echo "🎉 Stage 4 Launch & Smoke Probing Complete for ${{ github.ref_name }}!"
+
+      # ========================================================================
+      # STAGE 5: Automated Living Documentation & Architecture Sync (DEPLOY-03)
+      # ========================================================================
+      - name: "Stage 5: Automated Living Architecture Documentation Sync"
+        if: github.ref_name == 'master'
+        run: |
+          echo "📚 Initiating automated living architecture documentation sync (DEPLOY-03)..."
+          ARCH_DIR="/volume2/homes/rachardv/git-repos/master/quant-architecture"
+          if [ -d "$ARCH_DIR" ]; then
+            cd "$ARCH_DIR"
+            echo "🔄 Synchronizing architecture docs on Synology NAS..."
+            git checkout master 2>/dev/null || true
+            git pull origin master 2>/dev/null || true
+            
+            if [ -d "${{ env.DEPLOY_DIR }}/docs" ]; then
+              cp -r "${{ env.DEPLOY_DIR }}/docs/"* "$ARCH_DIR/docs/" 2>/dev/null || true
+            fi
+
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "📝 Detected living documentation updates. Committing and pushing to quant-architecture..."
+              git config user.name "Quant Doc Bot"
+              git config user.email "bot@quant.internal"
+              git commit -am "docs: auto-sync living architecture from ${{ github.sha }}"
+              git push origin master || echo "⚠️ Could not push to remote origin master. Committed locally."
+              echo "✅ quant-architecture successfully updated!"
+            else
+              echo "✅ Living documentation in quant-architecture is already fully synchronized."
+            fi
+          elif [ -n "${{ secrets.DOCS_SYNC_PAT }}" ]; then
+            echo "📥 Cloning quant-architecture via DOCS_SYNC_PAT..."
+            TMP_DIR="/tmp/quant-architecture"
+            rm -rf "$TMP_DIR"
+            git clone "https://x-access-token:${{ secrets.DOCS_SYNC_PAT }}@github.com/synology-dev-projects/quant-architecture.git" "$TMP_DIR"
+            if [ -d "${{ env.DEPLOY_DIR }}/docs" ]; then
+              cp -r "${{ env.DEPLOY_DIR }}/docs/"* "$TMP_DIR/docs/" 2>/dev/null || true
+            fi
+            cd "$TMP_DIR"
+            if [ -n "$(git status --porcelain)" ]; then
+              git config user.name "Quant Doc Bot"
+              git config user.email "bot@quant.internal"
+              git commit -am "docs: auto-sync living architecture from ${{ github.sha }}"
+              git push origin master
+              echo "✅ quant-architecture pushed to GitHub origin master via PAT!"
+            fi
+            rm -rf "$TMP_DIR"
+          else
+            echo "ℹ️ quant-architecture directory not found at $ARCH_DIR and no DOCS_SYNC_PAT provided; skipping auto-sync."
+          fi
+          echo "🎉 Stage 5 Documentation Sync Complete!"
