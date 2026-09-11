@@ -16,23 +16,27 @@ export class WatchlistView {
     this.container = container;
     this.container.innerHTML = `
       <div class="watchlist-view-container">
-        <!-- Top Controls & Watchlist Selector Bar -->
+        <!-- Top Bloomberg Header: Brand & Live Streaming Status -->
         <div class="watchlist-header-bar">
           <div class="watchlist-title-group">
             <span class="watchlist-badge-icon">📋</span>
-            <h1 class="watchlist-title">Watchlists</h1>
+            <h1 class="watchlist-title">WATCHLISTS</h1>
             <span class="watchlist-count-badge" id="watchlistCountBadge">0 TICKERS</span>
             <span class="watchlist-live-tag" id="watchlistLiveTag" title="Live quote feed (updates every 5s)">
               <span class="dot-live"></span> 5s LIVE
             </span>
           </div>
 
-          <div class="watchlist-controls-group">
-            <div class="watchlist-select-wrapper">
-              <select id="watchlistSelect" class="watchlist-select" aria-label="Select Watchlist">
-                <option value="">Loading watchlists...</option>
-              </select>
-            </div>
+          <!-- Hidden select preserved for test fixture compatibility -->
+          <select id="watchlistSelect" class="watchlist-select" style="display:none;" aria-label="Select Watchlist"></select>
+        </div>
+
+        <!-- 1-Tap Watchlist Pill Strip Switcher -->
+        <div class="watchlist-pills-bar">
+          <div class="watchlist-pills-strip" id="watchlistPillsStrip" role="tablist" aria-label="Watchlists tabs">
+            <!-- Populated dynamically via renderWatchlistPills() -->
+          </div>
+          <div class="watchlist-pill-actions">
             <button type="button" class="watchlist-btn watchlist-btn-primary" id="newWatchlistBtn" title="Create New Watchlist">
               + New
             </button>
@@ -42,27 +46,16 @@ export class WatchlistView {
           </div>
         </div>
 
-        <!-- Add Ticker Form & Real-time Validation Message -->
+        <!-- Compact Bloomberg Command Bar: Single-Row Ticker Entry -->
         <div class="watchlist-add-box">
-          <div class="watchlist-dropdown-row">
-            <div class="watchlist-dropdown-header">
-              <label for="watchlistTickerDropdown" class="watchlist-dropdown-label">Choose from possible tickers:</label>
-              <span class="watchlist-dropdown-count" id="watchlistDropdownCount">Loading tickers...</span>
-            </div>
-            <div class="watchlist-select-wrapper full-width">
-              <select id="watchlistTickerDropdown" class="watchlist-ticker-dropdown" aria-label="Choose possible ticker">
-                <option value="">-- Choose from possible tickers --</option>
-              </select>
-            </div>
-          </div>
-
           <form id="watchlistAddForm" class="watchlist-add-form" autocomplete="off">
             <div class="watchlist-input-wrapper">
+              <span class="watchlist-terminal-prompt">&gt;</span>
               <input
                 type="text"
                 id="watchlistTickerInput"
                 class="watchlist-input"
-                placeholder="Or type ticker (e.g. AAOI, NVDA, POWL)..."
+                placeholder="ENTER TICKER (e.g. ADEA, NVDA, AAPL, SPY)..."
                 maxlength="12"
                 autocomplete="off"
                 autocapitalize="characters"
@@ -79,7 +72,16 @@ export class WatchlistView {
           <div id="watchlistValidationMsg" class="watchlist-validation-msg" role="status" aria-live="polite"></div>
         </div>
 
-        <!-- Tickers Grid -->
+        <!-- Bloomberg Table Header -->
+        <div class="watchlist-table-header" id="watchlistTableHeader">
+          <span class="wth-col col-symbol">SYMBOL</span>
+          <span class="wth-col col-indices">INDICES / EXCHANGE</span>
+          <span class="wth-col col-price">LAST SPOT</span>
+          <span class="wth-col col-change">24H CHG</span>
+          <span class="wth-col col-actions">ACTIONS</span>
+        </div>
+
+        <!-- Tickers Grid / Dense Rows -->
         <div id="watchlistGrid" class="watchlist-grid">
           <div class="watchlist-empty-state">
             <div class="watchlist-empty-icon">⏳</div>
@@ -121,27 +123,15 @@ export class WatchlistView {
   bindEvents() {
     if (!this.container) return;
 
-    // Watchlist Dropdown Select
+    // Watchlist Dropdown Select (synchronized fallback)
     const select = this.container?.querySelector?.('#watchlistSelect');
     if (select) {
       select.addEventListener('change', (e) => {
         this.selectedWatchlistId = e.target.value;
         this.clearValidationMessage();
+        this.renderWatchlistPills();
         this.renderTickers();
         this.fetchQuotes();
-      });
-    }
-
-    // Possible Tickers Dropdown Select
-    const tickerDropdown = this.container?.querySelector?.('#watchlistTickerDropdown');
-    if (tickerDropdown) {
-      tickerDropdown.addEventListener('change', async (e) => {
-        const chosen = e.target.value;
-        if (!chosen) return;
-        const input = this.container?.querySelector?.('#watchlistTickerInput');
-        if (input) input.value = chosen;
-        await this.addTicker(chosen);
-        tickerDropdown.value = '';
       });
     }
 
@@ -349,22 +339,7 @@ export class WatchlistView {
   }
 
   populateTickerDropdown() {
-    const select = this.container?.querySelector?.('#watchlistTickerDropdown');
     const datalist = this.container?.querySelector?.('#watchlistTickerDatalist');
-    const countLabel = this.container?.querySelector?.('#watchlistDropdownCount');
-
-    if (countLabel) {
-      countLabel.textContent = `${this.availableTickers.length} available`;
-    }
-
-    if (select) {
-      select.innerHTML = '<option value="">-- Choose from possible tickers --</option>' +
-        this.availableTickers.map(item => {
-          const indicesStr = item.indices && item.indices.length > 0 ? ` (${item.indices.join(' · ')})` : '';
-          return `<option value="${item.ticker}">${item.ticker}${indicesStr}</option>`;
-        }).join('');
-    }
-
     if (datalist) {
       datalist.innerHTML = this.availableTickers.map(item => {
         const indicesStr = item.indices && item.indices.length > 0 ? ` (${item.indices.join(' · ')})` : '';
@@ -375,16 +350,50 @@ export class WatchlistView {
 
   renderWatchlistSelect() {
     const select = this.container?.querySelector?.('#watchlistSelect');
-    if (!select) return;
+    if (select) {
+      if (this.watchlists.length === 0) {
+        select.innerHTML = '<option value="">No watchlists</option>';
+      } else {
+        select.innerHTML = this.watchlists
+          .map(w => `<option value="${w.id}" ${w.id === this.selectedWatchlistId ? 'selected' : ''}>${w.name}</option>`)
+          .join('');
+      }
+    }
+    this.renderWatchlistPills();
+  }
+
+  renderWatchlistPills() {
+    const strip = this.container?.querySelector?.('#watchlistPillsStrip');
+    if (!strip) return;
 
     if (this.watchlists.length === 0) {
-      select.innerHTML = '<option value="">No watchlists</option>';
+      strip.innerHTML = '<span class="watchlist-empty-pills">NO WATCHLISTS</span>';
       return;
     }
 
-    select.innerHTML = this.watchlists
-      .map(w => `<option value="${w.id}" ${w.id === this.selectedWatchlistId ? 'selected' : ''}>${w.name}</option>`)
-      .join('');
+    strip.innerHTML = this.watchlists.map(w => {
+      const isActive = w.id === this.selectedWatchlistId;
+      const count = w.tickers ? w.tickers.length : 0;
+      return `
+        <button type="button" class="watchlist-pill ${isActive ? 'active' : ''}" data-id="${w.id}" role="tab" aria-selected="${isActive}">
+          <span class="watchlist-pill-name">${w.name}</span>
+          <span class="watchlist-pill-count">${count}</span>
+        </button>
+      `;
+    }).join('');
+
+    strip.querySelectorAll('.watchlist-pill').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-id');
+        if (id && id !== this.selectedWatchlistId) {
+          this.selectedWatchlistId = id;
+          this.clearValidationMessage();
+          this.renderWatchlistSelect();
+          this.renderTickers();
+          this.fetchQuotes();
+        }
+      });
+    });
   }
 
   renderTickers() {

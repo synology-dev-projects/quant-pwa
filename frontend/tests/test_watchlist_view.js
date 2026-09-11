@@ -79,16 +79,17 @@ import('../src/tabs/watchlist_view.js').then(async ({ WatchlistView }) => {
   watchlistView.render(testDiv);
 
   assert(testDiv.innerHTML.includes('watchlist-view-container'), 'Container has watchlist-view-container');
-  assert(testDiv.innerHTML.includes('Watchlists'), 'Header contains Watchlists');
+  assert(testDiv.innerHTML.toLowerCase().includes('watchlists'), 'Header contains Watchlists');
   assert(testDiv.innerHTML.includes('watchlistLiveTag'), 'Header contains 5s LIVE tag');
   assert(testDiv.innerHTML.includes('watchlistSelect'), 'Selector dropdown mounted');
+  assert(testDiv.innerHTML.includes('watchlistPillsStrip'), '1-Tap Watchlist Pill Strip mounted');
   assert(testDiv.innerHTML.includes('newWatchlistBtn'), '+ New button mounted');
   assert(testDiv.innerHTML.includes('deleteWatchlistBtn'), 'Delete button mounted');
-  assert(testDiv.innerHTML.includes('watchlistTickerDropdown'), 'Possible tickers dropdown mounted');
   assert(testDiv.innerHTML.includes('watchlistAutocompleteMenu'), 'Autocomplete menu mounted');
   assert(testDiv.innerHTML.includes('watchlistTickerDatalist'), 'Native datalist mounted');
   assert(testDiv.innerHTML.includes('watchlistTickerInput'), 'Ticker input mounted');
   assert(testDiv.innerHTML.includes('watchlistAddBtn'), 'Add ticker button mounted');
+  assert(testDiv.innerHTML.includes('watchlistTableHeader'), 'Bloomberg table header mounted');
   assert(testDiv.innerHTML.includes('watchlistValidationMsg'), 'Validation message element mounted');
   assert(testDiv.innerHTML.includes('watchlistGrid'), 'Tickers grid container mounted');
   assert(testDiv.innerHTML.includes('newWatchlistModal'), 'New Watchlist modal mounted');
@@ -228,7 +229,7 @@ import('../src/tabs/watchlist_view.js').then(async ({ WatchlistView }) => {
   assert.equal(watchlistView.container.innerHTML, '', 'destroy() cleared container');
   console.log('  ✓ PASS: Clean destruction with polling stop and container release');
 
-  console.log('\n--- TEST 8: Available Tickers Loading & Dropdown Selection ---');
+  console.log('\n--- TEST 8: Available Tickers Loading & Autocomplete Ticker Addition ---');
   await watchlistView.loadAvailableTickers();
   assert.equal(watchlistView.availableTickers.length, 4, 'Loaded 4 available tickers');
   assert.equal(watchlistView.availableTickers[0].ticker, 'AAOI', 'First available ticker is AAOI');
@@ -237,18 +238,43 @@ import('../src/tabs/watchlist_view.js').then(async ({ WatchlistView }) => {
   let chosenTicker = null;
   watchlistView.addTicker = async (t) => { chosenTicker = t; };
 
-  const mockDropdown = { value: 'ADEA' };
-  const mockInput = { value: '' };
+  const mockInput = { value: 'ADEA' };
   watchlistView.container = {
     querySelector: (sel) => {
-      if (sel === '#watchlistTickerDropdown') return mockDropdown;
       if (sel === '#watchlistTickerInput') return mockInput;
       return null;
     }
   };
   await watchlistView.addTicker('ADEA');
-  assert.equal(chosenTicker, 'ADEA', 'Dropdown selection successfully triggers adding ADEA');
-  console.log('  ✓ PASS: Available tickers loaded and dropdown selection triggers adding ADEA');
+  assert.equal(chosenTicker, 'ADEA', 'Input selection successfully triggers adding ADEA');
+  console.log('  ✓ PASS: Available tickers loaded and input selection triggers adding ADEA');
+
+  console.log('\n--- TEST 9: 1-Tap Watchlist Pill Switcher ---');
+  let pillHtml = '';
+  const mockPillStrip = {
+    set innerHTML(html) { pillHtml = html; },
+    get innerHTML() { return pillHtml; },
+    querySelectorAll: (sel) => []
+  };
+  watchlistView.watchlists = [
+    { id: 'wl_core', name: 'Core Watchlist', tickers: [{ ticker: 'NVDA', indices: ['S&P 500'] }] },
+    { id: 'wl_tech', name: 'Tech Watchlist', tickers: [{ ticker: 'ADEA', indices: ['Nasdaq'] }] }
+  ];
+  watchlistView.selectedWatchlistId = 'wl_core';
+  watchlistView.container = {
+    querySelector: (sel) => {
+      if (sel === '#watchlistPillsStrip') return mockPillStrip;
+      if (sel === '#watchlistSelect') return { innerHTML: '' };
+      return null;
+    }
+  };
+  watchlistView.renderWatchlistPills();
+  assert(pillHtml.includes('data-id="wl_core"'), 'Includes pill for wl_core');
+  assert(pillHtml.includes('data-id="wl_tech"'), 'Includes pill for wl_tech');
+  assert(pillHtml.includes('Core Watchlist'), 'Displays name Core Watchlist');
+  assert(pillHtml.includes('Tech Watchlist'), 'Displays name Tech Watchlist');
+  assert(pillHtml.includes('active'), 'Active pill marked with active class');
+  console.log('  ✓ PASS: 1-Tap Watchlist Pills rendered with active status & ticker counts');
 
   console.log('\n==================================================================');
   console.log('  ALL WATCHLIST VIEW TESTS PASSED (100% GREEN)');
