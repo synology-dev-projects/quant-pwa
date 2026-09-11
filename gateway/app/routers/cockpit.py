@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.engine.service import gexdex_service, get_strike_distribution
+from app.core.synthesis import synthesis_registry
 
 logger = logging.getLogger("quant.gateway.cockpit")
 
@@ -197,6 +198,13 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
         },
         "metrics": metrics
     }
+    synthesis_markdown = ""
+    try:
+        synthesis_markdown = synthesis_registry.generate_deterministic_synthesis(clean_ticker, raw_payload)
+    except Exception as synth_err:
+        logger.warning(f"Error generating deterministic synthesis for {clean_ticker}: {synth_err}")
+    raw_payload["synthesis_markdown"] = synthesis_markdown
+
     return _sanitize_for_json(raw_payload)
 
 
@@ -287,58 +295,14 @@ async def _stream_synthesis_impl(request: Request, clean_ticker: str, precompute
         logger.info(f"Computing Cockpit payload on the fly for {clean_ticker} synthesis stream")
         cockpit_payload = await get_cockpit_full_payload(clean_ticker)
 
-    prompt = _build_synthesis_prompt(clean_ticker, cockpit_payload)
-
     async def sse_generator():
         try:
-            if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY.strip():
-                try:
-                    from google import genai
-                    from google.genai import types
-
-                    client = genai.Client(
-                        api_key=settings.GEMINI_API_KEY,
-                        http_options=types.HttpOptions(timeout=60000, retry_options=types.HttpRetryOptions(attempts=1))
-                    )
-
-                    model_name = settings.TIER1_FAST_WORKER_MODEL or "gemini-3.5-flash-lite"
-                    gen_config = types.GenerateContentConfig(
-                        temperature=0.2,
-                        system_instruction="You are Quant AI, an elite institutional options microstructure strategist."
-                    )
-
-                    response_stream = await client.aio.models.generate_content_stream(
-                        model=model_name,
-                        contents=prompt,
-                        config=gen_config
-                    )
-
-                    async for chunk in response_stream:
-                        if await request.is_disconnected():
-                            logger.info(f"Client disconnected during synthesis stream for {clean_ticker}")
-                            return
-                        if chunk.text:
-                            payload_json = json.dumps({"type": "token", "content": chunk.text})
-                            yield f"data: {payload_json}\n\n"
-
-                    yield "data: [DONE]\n\n"
-                    return
-                except Exception as genai_err:
-                    logger.warning(f"Gemini API streaming error for {clean_ticker}: {genai_err}. Falling back to deterministic synthesis.")
-
-            # Fallback deterministic synthesis stream
-            fallback_text = _generate_deterministic_synthesis(clean_ticker, cockpit_payload)
-            words = fallback_text.split(" ")
-            for i, word in enumerate(words):
-                if await request.is_disconnected():
-                    return
-                space = " " if i < len(words) - 1 else ""
-                token_payload = json.dumps({"type": "token", "content": word + space})
-                yield f"data: {token_payload}\n\n"
-                await asyncio.sleep(0.005)
-
+            # Deterministic quantitative synthesis (0ms LLM latency)
+            synth_text = cockpit_payload.get("synthesis_markdown") or _generate_deterministic_synthesis(clean_ticker, cockpit_payload)
+            payload_json = json.dumps({"type": "token", "content": synth_text})
+            yield f"data: {payload_json}\n\n"
             yield "data: [DONE]\n\n"
-
+            return
         except Exception as e:
             logger.error(f"Synthesis stream failure for {clean_ticker}: {e}")
             err_payload = json.dumps({"type": "error", "message": str(e)})

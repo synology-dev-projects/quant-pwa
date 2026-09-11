@@ -237,8 +237,16 @@ export class FlowView {
         this.currentData = data;
         this.renderSessionHeader();
         this.renderActiveTables();
-        this.streamFlowSynthesis();
+        if (data && data.synthesis_markdown) {
+          const synthBox = this.container.querySelector('#flowSynthesisMarkdown');
+          if (synthBox) {
+            synthBox.innerHTML = renderMarkdown(data.synthesis_markdown);
+          }
+        } else {
+          this.streamFlowSynthesis();
+        }
       } else {
+
         throw new Error(`Server returned HTTP ${res?.status || 500}`);
       }
     } catch (e) {

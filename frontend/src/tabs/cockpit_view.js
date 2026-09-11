@@ -351,19 +351,21 @@ export class CockpitView {
       const badge = this.container?.querySelector('#heroTickerBadge');
       if (badge) badge.textContent = cleanTicker;
 
-      const liveTag = this.container?.querySelector('#panelLiveTag');
-      if (liveTag) {
-        liveTag.innerHTML = `<span class="status-dot dot-live pulse"></span><span class="tag-text">STREAMING</span>`;
-      }
+      if (!cached.synthesis_markdown) {
+        const liveTag = this.container?.querySelector('#panelLiveTag');
+        if (liveTag) {
+          liveTag.innerHTML = `<span class="status-dot dot-live pulse"></span><span class="tag-text">STREAMING</span>`;
+        }
 
-      const synthBox = this.container?.querySelector('#synthesisMarkdown');
-      if (synthBox) {
-        synthBox.innerHTML = `
-          <div class="cockpit-loading-block">
-            <div class="typing-indicator"><span></span><span></span><span></span></div>
-            <span class="loading-label">Synthesizing quantitative confluence thesis for ${cleanTicker}...</span>
-          </div>
-        `;
+        const synthBox = this.container?.querySelector('#synthesisMarkdown');
+        if (synthBox) {
+          synthBox.innerHTML = `
+            <div class="cockpit-loading-block">
+              <div class="typing-indicator"><span></span><span></span><span></span></div>
+              <span class="loading-label">Synthesizing quantitative confluence thesis for ${cleanTicker}...</span>
+            </div>
+          `;
+        }
       }
     } else {
       if (forceRefresh) {
@@ -377,8 +379,8 @@ export class CockpitView {
     // First, retrieve the calculated GEX + Flow data (1 server calculation)
     const data = await this.loadCockpitData(cleanTicker, forceRefresh);
 
-    // Second, stream the quantitative thesis passing the pre-computed payload (0ms backend calculation)
-    if (this.currentTicker === cleanTicker) {
+    // Second, stream the quantitative thesis passing the pre-computed payload (fallback if not bundled)
+    if (this.currentTicker === cleanTicker && (!data || !data.synthesis_markdown)) {
       await this.streamSynthesis(cleanTicker, data);
     }
   }
@@ -588,6 +590,16 @@ ${notableFlowMd}
 
   renderDataPanels(data) {
     if (!this.container || !data) return;
+
+    // Instant Deterministic Synthesis: Render immediately if provided in main payload (< 20ms Time-to-First-Paint)
+    if (data.synthesis_markdown) {
+      const synthBox = this.container.querySelector('#synthesisMarkdown');
+      if (synthBox) synthBox.innerHTML = renderMarkdown(data.synthesis_markdown);
+      const liveTag = this.container.querySelector('#panelLiveTag');
+      if (liveTag) {
+        liveTag.innerHTML = `<span class="status-dot dot-live"></span><span class="tag-text">LIVE</span>`;
+      }
+    }
 
     // 1. Key Levels Strip & QuantChart in Panel 2
     this.renderExposureChart(data);

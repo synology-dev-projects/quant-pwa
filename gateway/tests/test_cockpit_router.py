@@ -195,6 +195,8 @@ def test_cockpit_data_success(auth_header, mock_gex_data, mock_flow_df):
         assert "flow" in data
         assert data["flow"]["total_count"] == 3
         assert len(data["flow"]["records"]) == 3
+        assert "synthesis_markdown" in data
+        assert "### Microstructure Snapshot" in data["synthesis_markdown"]
 
         metrics = data["metrics"]
         assert metrics["spot_price"] == 130.0
@@ -344,15 +346,6 @@ def test_synthesis_prompt_zero_trade_advice_and_adhd_brevity():
 
 
 def test_stream_cockpit_synthesis_with_precomputed_payload(auth_header, mock_gex_data, mock_flow_df):
-    mock_chunk = MagicMock()
-    mock_chunk.text = "Precomputed stream token."
-
-    async def fake_async_stream(*args, **kwargs):
-        yield mock_chunk
-
-    mock_client = MagicMock()
-    mock_client.aio.models.generate_content_stream = AsyncMock(return_value=fake_async_stream())
-
     metrics = _calculate_cockpit_metrics(mock_gex_data, mock_flow_df)
     precomputed_payload = {
         "metrics": metrics,
@@ -364,8 +357,7 @@ def test_stream_cockpit_synthesis_with_precomputed_payload(auth_header, mock_gex
     }
 
     with patch("app.routers.cockpit.get_strike_distribution") as mock_gex, \
-         patch("app.routers.cockpit._fetch_postgres_flow_sync") as mock_flow, \
-         patch("google.genai.Client", return_value=mock_client):
+         patch("app.routers.cockpit._fetch_postgres_flow_sync") as mock_flow:
 
         response = client.post(
             "/api/cockpit/synthesis/stream",
@@ -376,5 +368,6 @@ def test_stream_cockpit_synthesis_with_precomputed_payload(auth_header, mock_gex
         # GEX calculation and Postgres fetch should NOT have been called
         mock_gex.assert_not_called()
         mock_flow.assert_not_called()
-        assert "Precomputed stream token." in response.text
+        assert "### Microstructure Snapshot" in response.text
+        assert "[DONE]" in response.text
 

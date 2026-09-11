@@ -24,6 +24,7 @@ def test_flow_aggregate_structure():
     data = res.json()
     assert "as_of_date" in data
     assert "latest_market_day" in data
+    assert "synthesis_markdown" in data
     assert "window_3d" in data
     assert "window_1w" in data
     assert "window_7d" in data

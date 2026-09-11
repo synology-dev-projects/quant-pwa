@@ -228,9 +228,18 @@ def get_flow_aggregate(
             window_3d = _fetch_window_aggregates(conn, dates_3d)
             window_1w = _fetch_window_aggregates(conn, dates_1w)
 
+            synthesis_markdown = ""
+            if resolved_as_of:
+                try:
+                    features = flow_synthesis_registry.extract_all_features(conn, resolved_as_of)
+                    synthesis_markdown = flow_synthesis_registry.generate_deterministic_synthesis(features)
+                except Exception as synth_err:
+                    logger.warning(f"Error computing flow synthesis in aggregate payload: {synth_err}")
+
             return {
                 "as_of_date": resolved_as_of,
                 "latest_market_day": str(get_last_market_day()),
+                "synthesis_markdown": synthesis_markdown,
                 "window_3d": window_3d,
                 "window_1w": window_1w,
                 "window_7d": window_1w,  # Backward-compatible alias for 1W
@@ -250,12 +259,11 @@ async def stream_flow_synthesis(
     _: str = Depends(get_current_user)
 ):
     """
-    Streams the Flow Executive Synthesis (Notable Flow) using Gemini API or deterministic fallback.
-    Delivers Server-Sent Events (SSE) tokens for real-time rendering on the Flow Hero Card.
+    Streams the Flow Executive Synthesis (Notable Flow) directly from PostgreSQL queries.
+    Delivers Server-Sent Events (SSE) instantly for real-time rendering on the Flow Hero Card.
     """
     async def sse_generator():
         try:
-            # 1. Resolve target session date and database engine
             target_date = as_of_date
             features = {}
             try:
@@ -289,55 +297,13 @@ async def stream_flow_synthesis(
                 target_date = target_date or str(date.today())
                 features = {}
 
-            # 2. Try Gemini API Streaming if configured
-            if settings.GEMINI_API_KEY:
-                try:
-                    from google import genai
-                    from google.genai import types
-
-                    prompt = flow_synthesis_registry.build_synthesis_prompt(target_date, features)
-                    client = genai.Client(
-                        api_key=settings.GEMINI_API_KEY,
-                        http_options=types.HttpOptions(timeout=60000, retry_options=types.HttpRetryOptions(attempts=1))
-                    )
-
-                    model_name = settings.TIER1_FAST_WORKER_MODEL or "gemini-3.5-flash-lite"
-                    gen_config = types.GenerateContentConfig(
-                        temperature=0.0,
-                        system_instruction="You are Quant AI, an elite institutional options flow strategist. Always format structured quantitative data exactly to the requested markdown schema."
-                    )
-
-                    response_stream = await client.aio.models.generate_content_stream(
-                        model=model_name,
-                        contents=prompt,
-                        config=gen_config
-                    )
-
-                    async for chunk in response_stream:
-                        if await request.is_disconnected():
-                            logger.info("Client disconnected during flow synthesis stream")
-                            return
-                        if chunk.text:
-                            payload_json = json.dumps({"type": "token", "content": chunk.text})
-                            yield f"data: {payload_json}\n\n"
-
-                    yield "data: [DONE]\n\n"
-                    return
-                except Exception as genai_err:
-                    logger.warning(f"Gemini API error during flow synthesis: {genai_err}. Falling back to deterministic generator.")
-
-            # 3. Fallback deterministic generator
-            fallback_text = flow_synthesis_registry.generate_deterministic_synthesis(features)
-            words = fallback_text.split(" ")
-            for i, word in enumerate(words):
-                if await request.is_disconnected():
-                    return
-                space = " " if i < len(words) - 1 else ""
-                token_payload = json.dumps({"type": "token", "content": word + space})
-                yield f"data: {token_payload}\n\n"
-                await asyncio.sleep(0.005)
-
+            # Direct instant deterministic synthesis from database features (0ms LLM latency)
+            synth_text = flow_synthesis_registry.generate_deterministic_synthesis(features)
+            payload_json = json.dumps({"type": "token", "content": synth_text})
+            yield f"data: {payload_json}\n\n"
             yield "data: [DONE]\n\n"
+            return
+
 
         except Exception as e:
             logger.error(f"Flow synthesis streaming failure: {e}", exc_info=True)
