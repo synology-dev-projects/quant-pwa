@@ -76,13 +76,11 @@ export class RadarView {
                   <th data-col="call_wall" class="sortable col-num">CALL WALL</th>
                   <th data-col="put_wall" class="sortable col-num">PUT WALL</th>
                   <th data-col="zero_flip" class="sortable col-num">ZERO FLIP</th>
-                  <th data-col="net_gex" class="sortable col-prem">NET GEX</th>
-                  <th data-col="gamma_regime" class="sortable col-regime">REGIME</th>
                 </tr>
               </thead>
               <tbody id="radarTableBody">
                 <tr>
-                  <td colspan="12" class="radar-loading-cell">
+                  <td colspan="10" class="radar-loading-cell">
                     <div class="cockpit-loading-block">
                       <div class="typing-indicator"><span></span><span></span><span></span></div>
                       <span class="loading-label">Loading Confluence Radar unified matrix...</span>
@@ -209,7 +207,7 @@ export class RadarView {
     if (tbody) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="12" class="radar-loading-cell">
+          <td colspan="10" class="radar-loading-cell">
             <div class="cockpit-loading-block">
               <div class="typing-indicator"><span></span><span></span><span></span></div>
               <span class="loading-label">Loading Confluence Radar unified matrix...</span>
@@ -226,7 +224,7 @@ export class RadarView {
     if (tbody) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="12" class="radar-empty-cell error">
+          <td colspan="10" class="radar-empty-cell error">
             ⚠️ Failed to load Confluence Radar data. Please retry.
           </td>
         </tr>
@@ -268,16 +266,12 @@ export class RadarView {
 
   handleSort(column) {
     if (this.sortColumn === column) {
-      if (this.sortDirection === 'desc') {
-        this.sortDirection = 'asc';
-      } else if (this.sortDirection === 'asc') {
-        this.sortDirection = 'natural';
-      } else {
-        this.sortDirection = 'desc';
-      }
+      // Toggle directly between desc and asc on every press
+      this.sortDirection = this.sortDirection === 'desc' ? 'asc' : 'desc';
     } else {
       this.sortColumn = column;
-      this.sortDirection = 'desc';
+      // Default to 'asc' for ticker (A-Z) and 'desc' for numerical metric columns
+      this.sortDirection = column === 'ticker' ? 'asc' : 'desc';
     }
 
     this.updateHeaderSortClasses();
@@ -290,7 +284,7 @@ export class RadarView {
     headers.forEach(th => {
       const col = th.getAttribute('data-col');
       th.classList.remove('sort-desc', 'sort-asc');
-      if (col === this.sortColumn && this.sortDirection !== 'natural') {
+      if (col === this.sortColumn) {
         th.classList.add(this.sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
       }
     });
@@ -299,34 +293,44 @@ export class RadarView {
   getSortedRows() {
     if (!this.currentData || !this.currentData.rows) return [];
     const rows = [...this.currentData.rows];
-
-    if (this.sortDirection === 'natural') {
-      return rows;
-    }
-
-    const col = this.sortColumn;
+    const col = this.sortColumn || 'premium_7d';
     const isAsc = this.sortDirection === 'asc';
 
-    rows.sort((a, b) => {
-      let valA = a[col];
-      let valB = b[col];
-
-      // Handle numeric parses for ratios or null values
-      if (valA === null || valA === undefined || valA === 'N/A') valA = isAsc ? Infinity : -Infinity;
-      if (valB === null || valB === undefined || valB === 'N/A') valB = isAsc ? Infinity : -Infinity;
-
-      if (typeof valA === 'string' && typeof valB === 'string') {
-        const numA = parseFloat(valA);
-        const numB = parseFloat(valB);
-        if (!isNaN(numA) && !isNaN(numB)) {
-          return isAsc ? numA - numB : numB - numA;
+    const parseVal = (item, column) => {
+      const raw = item ? item[column] : null;
+      if (raw === null || raw === undefined || raw === 'N/A' || raw === '') {
+        return null;
+      }
+      if (typeof raw === 'number') {
+        return raw;
+      }
+      if (typeof raw === 'string') {
+        const cleaned = raw.replace(/[$,]/g, '').trim();
+        const parsed = Number(cleaned);
+        if (!isNaN(parsed) && cleaned !== '') {
+          return parsed;
         }
-        return isAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        return raw.toUpperCase();
+      }
+      return raw;
+    };
+
+    rows.sort((a, b) => {
+      const valA = parseVal(a, col);
+      const valB = parseVal(b, col);
+
+      // Nulls always sort to the end regardless of direction
+      if (valA === null && valB === null) return 0;
+      if (valA === null) return 1;
+      if (valB === null) return -1;
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return isAsc ? valA - valB : valB - valA;
       }
 
-      if (valA < valB) return isAsc ? -1 : 1;
-      if (valA > valB) return isAsc ? 1 : -1;
-      return 0;
+      const strA = String(valA);
+      const strB = String(valB);
+      return isAsc ? strA.localeCompare(strB) : strB.localeCompare(strA);
     });
 
     return rows;
@@ -341,7 +345,7 @@ export class RadarView {
     if (rows.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="12" class="radar-empty-cell">
+          <td colspan="10" class="radar-empty-cell">
             No qualifying tickers found for session ${this.selectedDate || 'current'}.
           </td>
         </tr>
@@ -350,11 +354,6 @@ export class RadarView {
     }
 
     tbody.innerHTML = rows.map(r => {
-      const gexClass = (r.net_gex || 0) > 0 ? 'metric-green' : ((r.net_gex || 0) < 0 ? 'metric-blood' : '');
-      const regimeClass = r.gamma_regime === 'Positive' || r.gamma_regime === 'PINNED / LOW VOL' 
-        ? 'regime-bull' 
-        : (r.gamma_regime === 'Negative' || r.gamma_regime === 'HIGH VOL' ? 'regime-bear' : 'regime-neutral');
-
       return `
         <tr data-ticker="${r.ticker}" title="Open ${r.ticker} in Cockpit">
           <td class="col-ticker">
@@ -369,8 +368,6 @@ export class RadarView {
           <td class="col-num">${r.formatted_call_wall}</td>
           <td class="col-num">${r.formatted_put_wall}</td>
           <td class="col-num">${r.formatted_zero_flip}</td>
-          <td class="col-prem"><span class="${gexClass}">${r.formatted_net_gex}</span></td>
-          <td class="col-regime"><span class="radar-regime-pill ${regimeClass}">${r.gamma_regime}</span></td>
         </tr>
       `;
     }).join('');

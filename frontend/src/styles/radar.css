@@ -199,22 +199,41 @@
 
 .radar-table thead th.sortable {
   cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
 }
 
 .radar-table thead th.sortable:hover {
   color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.06);
+}
+
+.radar-table thead th.sortable::after {
+  content: " ⇅";
+  opacity: 0.35;
+  font-size: 0.65rem;
+  display: inline-block;
+  margin-left: 4px;
+  vertical-align: middle;
 }
 
 .radar-table thead th.sort-desc::after {
   content: " ▼";
+  opacity: 1;
   color: #38bdf8;
   font-size: 0.65rem;
+  display: inline-block;
+  margin-left: 4px;
+  vertical-align: middle;
 }
 
 .radar-table thead th.sort-asc::after {
   content: " ▲";
+  opacity: 1;
   color: #38bdf8;
   font-size: 0.65rem;
+  display: inline-block;
+  margin-left: 4px;
+  vertical-align: middle;
 }
 
 /* Column Alignments */
