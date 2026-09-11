@@ -25,6 +25,7 @@ services:
           - quant-db-${CONTAINER_PREFIX:-prod}
 
   quant-gateway:
+    image: quant-gateway-${CONTAINER_PREFIX:-prod}:latest
     build:
       context: ./gateway
       dockerfile: Dockerfile
@@ -62,6 +63,7 @@ services:
           - quant-gateway-${CONTAINER_PREFIX:-prod}
 
   quant-frontend:
+    image: quant-frontend-${CONTAINER_PREFIX:-prod}:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile

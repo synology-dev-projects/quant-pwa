@@ -158,6 +158,10 @@ jobs:
           echo "🐳 Pre-cleaning Docker Compose stack (${{ env.COMPOSE_PROJECT_NAME }})..."
           docker compose down --remove-orphans || true
           
+          echo "🏷️ Preserving existing images as rollback candidates..."
+          docker tag "quant-gateway-${{ env.CONTAINER_PREFIX }}:latest" "quant-gateway-${{ env.CONTAINER_PREFIX }}:rollback" 2>/dev/null || true
+          docker tag "quant-frontend-${{ env.CONTAINER_PREFIX }}:latest" "quant-frontend-${{ env.CONTAINER_PREFIX }}:rollback" 2>/dev/null || true
+
           echo "🏗️ Building Docker images..."
           docker compose build
           
@@ -171,6 +175,40 @@ jobs:
       - name: "Stage 4: Launch Containers & Execute Live Smoke Probes"
         run: |
           cd "${{ env.DEPLOY_DIR }}"
+
+          trigger_rollback() {
+            local REASON="$1"
+            echo "❌ $REASON"
+            docker logs quant-gateway-${{ env.CONTAINER_PREFIX }} --tail 50 2>/dev/null || true
+            docker logs quant-frontend-${{ env.CONTAINER_PREFIX }} --tail 30 2>/dev/null || true
+            
+            echo "🔄 Initiating automated rollback to previous stable images..."
+            ROLLED_BACK=false
+            if docker image inspect "quant-gateway-${{ env.CONTAINER_PREFIX }}:rollback" >/dev/null 2>&1; then
+              docker tag "quant-gateway-${{ env.CONTAINER_PREFIX }}:rollback" "quant-gateway-${{ env.CONTAINER_PREFIX }}:latest"
+              ROLLED_BACK=true
+            fi
+            if docker image inspect "quant-frontend-${{ env.CONTAINER_PREFIX }}:rollback" >/dev/null 2>&1; then
+              docker tag "quant-frontend-${{ env.CONTAINER_PREFIX }}:rollback" "quant-frontend-${{ env.CONTAINER_PREFIX }}:latest"
+              ROLLED_BACK=true
+            fi
+
+            if [ "$ROLLED_BACK" = true ]; then
+              echo "🔄 Recreating containers with restored rollback images..."
+              docker compose ${{ env.COMPOSE_PROFILE_CMD }} up -d --force-recreate
+              echo "⚠️ Stack restored to previous rollback image."
+            else
+              echo "⚠️ No rollback images found to restore."
+            fi
+
+            NTFY_URL="${{ secrets.NTFY_ENDPOINT || 'https://richntfynotifier.synology.me' }}/quant_alerts"
+            curl -s -H "Title: 🚨 Deployment Rollback: ${{ github.ref_name }}" \
+                 -H "Priority: 5" \
+                 -H "Tags: rotating_light,warning" \
+                 -d "$REASON on Synology NAS (${{ github.ref_name }} / ${{ env.CONTAINER_PREFIX }}). Automated rollback executed." \
+                 "$NTFY_URL" || true
+            exit 1
+          }
           
           echo "🚀 Starting containers (${{ env.COMPOSE_PROJECT_NAME }})..."
           docker compose ${{ env.COMPOSE_PROFILE_CMD }} up -d --force-recreate
@@ -191,17 +229,17 @@ jobs:
           done
           
           if [ -z "$HOST_IP" ]; then
-            echo "❌ Gateway failed to respond with status:ok on port ${{ env.FRONTEND_PORT }}."
-            docker logs quant-gateway-${{ env.CONTAINER_PREFIX }} --tail 50
-            docker logs quant-frontend-${{ env.CONTAINER_PREFIX }} --tail 30
-            exit 1
+            trigger_rollback "Gateway health check timed out on port ${{ env.FRONTEND_PORT }}"
           fi
 
           echo "🔍 Running 14-Endpoint Post-Deployment Smoke Test Suite against http://${HOST_IP}:${{ env.FRONTEND_PORT }}..."
           PY_BIN="python3"
           command -v python3 >/dev/null 2>&1 || PY_BIN="python"
           
-          "$PY_BIN" scripts/smoke_test.py --host "$HOST_IP" --port ${{ env.FRONTEND_PORT }}
+          if ! "$PY_BIN" scripts/smoke_test.py --host "$HOST_IP" --port ${{ env.FRONTEND_PORT }}; then
+            trigger_rollback "Live smoke test suite failed on http://${HOST_IP}:${{ env.FRONTEND_PORT }}"
+          fi
+
           echo "✅ All 14 Live Smoke Probes Passed Successfully on $HOST_IP:${{ env.FRONTEND_PORT }}!"
 
           # Clean Up Ephemeral Develop Container on Master Deploy
