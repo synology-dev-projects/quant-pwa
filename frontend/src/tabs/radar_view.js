@@ -336,6 +336,17 @@ export class RadarView {
     return rows;
   }
 
+  getRatioClass(ratioVal) {
+    if (ratioVal === null || ratioVal === undefined || ratioVal === 'N/A' || ratioVal === '') {
+      return '';
+    }
+    const num = Number(String(ratioVal).replace(/[$,]/g, '').trim());
+    if (isNaN(num)) return '';
+    if (num > 3.0) return 'ratio-high ratio-green';
+    if (num < 1.0) return 'ratio-low ratio-red';
+    return 'ratio-mid ratio-yellow';
+  }
+
   renderRows() {
     if (!this.container || !this.currentData) return;
     const tbody = this.container.querySelector('#radarTableBody');
@@ -354,13 +365,14 @@ export class RadarView {
     }
 
     tbody.innerHTML = rows.map(r => {
+      const ratioClass = this.getRatioClass(r.call_put_ratio);
       return `
         <tr data-ticker="${r.ticker}" title="Open ${r.ticker} in Cockpit">
           <td class="col-ticker">
             <span class="flow-ticker-btn radar-ticker-btn">${r.ticker}</span>
           </td>
           <td class="col-num">${r.formatted_spot_price}</td>
-          <td class="col-ratio"><span class="radar-ratio-pill">${r.call_put_ratio}</span></td>
+          <td class="col-ratio"><span class="radar-ratio-pill ${ratioClass}">${r.call_put_ratio}</span></td>
           <td class="col-num"><strong class="flow-metric-primary">${r.prints_3d}</strong></td>
           <td class="col-num"><strong class="flow-metric-primary">${r.prints_7d}</strong></td>
           <td class="col-prem"><span class="flow-metric-secondary">${r.formatted_premium_3d}</span></td>

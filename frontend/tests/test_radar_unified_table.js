@@ -211,8 +211,28 @@ import('../src/tabs/radar_view.js').then(({ RadarView }) => {
   assert.equal(global.window.lastSearchedTicker, 'NVDA', 'CockpitView triggered search for NVDA');
   console.log('  ✓ PASS: Click-to-Cockpit drilldown dispatched cleanly');
 
-  // 4. Teardown
-  console.log('\n--- TEST 4: Lifecycle Teardown ---');
+  // 4. C/P Ratio Highlighting Rules (> 3 green, 1-3 yellow, < 1 red)
+  console.log('\n--- TEST 4: C/P Ratio Color Highlighting ---');
+  assert(radar.getRatioClass('3.5').includes('ratio-high'), 'Ratio > 3 gets ratio-high');
+  assert(radar.getRatioClass('3.5').includes('ratio-green'), 'Ratio > 3 gets ratio-green');
+  assert(radar.getRatioClass('6.63').includes('ratio-high'), 'Ratio 6.63 gets ratio-high');
+  
+  assert(radar.getRatioClass('0.93').includes('ratio-low'), 'Ratio < 1 gets ratio-low');
+  assert(radar.getRatioClass('0.93').includes('ratio-red'), 'Ratio < 1 gets ratio-red');
+  assert(radar.getRatioClass('0.45').includes('ratio-low'), 'Ratio 0.45 gets ratio-low');
+  
+  assert(radar.getRatioClass('1.0').includes('ratio-mid'), 'Ratio 1.0 gets ratio-mid');
+  assert(radar.getRatioClass('1.88').includes('ratio-mid'), 'Ratio 1.88 gets ratio-mid');
+  assert(radar.getRatioClass('1.88').includes('ratio-yellow'), 'Ratio 1.88 gets ratio-yellow');
+  assert(radar.getRatioClass('3.0').includes('ratio-mid'), 'Ratio 3.0 gets ratio-mid');
+
+  assert.equal(radar.getRatioClass('N/A'), '', 'N/A gets empty class');
+  assert.equal(radar.getRatioClass(null), '', 'Null gets empty class');
+  assert.equal(radar.getRatioClass(''), '', 'Empty gets empty class');
+  console.log('  ✓ PASS: C/P ratio color thresholds verified (> 3 green, 1-3 yellow, < 1 red)');
+
+  // 5. Teardown
+  console.log('\n--- TEST 5: Lifecycle Teardown ---');
   radar.destroy();
   assert.equal(testDiv.innerHTML, '', 'destroy() successfully cleared container');
   console.log('  ✓ PASS: Lifecycle teardown confirmed');
