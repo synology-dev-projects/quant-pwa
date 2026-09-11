@@ -30,6 +30,7 @@ from app.routers.flow_aggregate import router as flow_aggregate_router
 from app.routers.quant_levels_status import router as quant_levels_status_router
 from app.routers.snapshot_status import router as snapshot_status_router
 from app.routers.scanner import router as scanner_router
+from app.routers.radar import router as radar_router
 from app.routers.pipelines_router import router as pipelines_router
 from app.tools.gexdex_tool import run_cache_warmer_loop
 from app.engine.service import gexdex_service
@@ -145,6 +146,9 @@ app.include_router(
 
 # Mount Market Confluence Scanner Router
 app.include_router(scanner_router)
+
+# Mount Confluence Radar Unified Table Router
+app.include_router(radar_router)
 
 # Mount Pipelines & DAG Dependency Management Router
 app.include_router(

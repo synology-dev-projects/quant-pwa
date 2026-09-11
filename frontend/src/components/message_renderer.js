@@ -185,6 +185,10 @@ function buildTableHtml(tableRows) {
 export function initInteractiveTables(container = document) {
   const wrappers = container.querySelectorAll ? container.querySelectorAll('.quant-table-wrapper') : [];
   wrappers.forEach(wrapper => {
+    // Explicitly ignore tables that manage their own sorting/data (e.g. Confluence Radar)
+    if (wrapper.classList.contains('radar-table-wrapper') || (wrapper.closest && wrapper.closest('.radar-view-container')) || wrapper.id === 'radarTableWrapper') {
+      return;
+    }
     if (wrapper.dataset.initialized === 'true' && wrapper._tableController) return;
 
     const tbody = wrapper.querySelector('tbody');
@@ -442,8 +446,13 @@ if (typeof window !== 'undefined') {
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
   document.addEventListener('click', (e) => {
     const tableWrapper = e.target && e.target.closest ? e.target.closest('.quant-table-wrapper') : null;
-    if (tableWrapper && (!tableWrapper.dataset.initialized || !tableWrapper._tableController)) {
-      initInteractiveTables(tableWrapper.parentElement || document);
+    if (tableWrapper) {
+      if (tableWrapper.classList.contains('radar-table-wrapper') || (tableWrapper.closest && tableWrapper.closest('.radar-view-container')) || tableWrapper.id === 'radarTableWrapper') {
+        return;
+      }
+      if (!tableWrapper.dataset.initialized || !tableWrapper._tableController) {
+        initInteractiveTables(tableWrapper.parentElement || document);
+      }
     }
   }, true);
 }

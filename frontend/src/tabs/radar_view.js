@@ -1,34 +1,402 @@
-﻿export class RadarView {
+import { fetchWithAuth } from '../state.js?v=30';
+
+export class RadarView {
   constructor() {
     this.container = null;
+    this.currentData = null;
+    this.availableDates = [];
+    this.selectedDate = null;
+    this.sortColumn = 'premium_7d';
+    this.sortDirection = 'desc'; // 'desc' | 'asc' | 'natural'
     this.isLoading = false;
   }
 
   render(container) {
     this.container = container;
     this.container.innerHTML = `
-      <div class="radar-view-container radar-debloated">
+      <div class="radar-view-container">
+        <!-- Top Controls & Session Header Bar -->
         <div class="radar-header-bar">
           <div class="radar-title-group">
             <span class="radar-badge-icon">🎯</span>
             <h1 class="radar-title">Confluence Radar</h1>
             <span class="radar-session-tag" id="radarSessionTag">
               <span class="status-dot dot-live"></span>
-              <span class="tag-text" id="radarSessionText">STANDBY</span>
+              <span class="tag-text" id="radarSessionText">RESOLVING...</span>
             </span>
+          </div>
+
+          <div class="radar-controls-group">
+            <div class="radar-date-picker-wrap">
+              <label for="radarDateSelect" class="radar-control-label">SESSION:</label>
+              <select id="radarDateSelect" class="radar-date-select">
+                <option value="">LATEST</option>
+              </select>
+            </div>
+            <button type="button" class="radar-refresh-btn" id="radarRefreshBtn" title="Reload Unified Table">↻</button>
           </div>
         </div>
 
-        <div class="radar-clean-slate" id="radarCleanSlate">
-          <div class="radar-placeholder-card">
-            <div class="placeholder-icon">⚡</div>
-            <h2>GEX/DEX Snapshot Pipeline</h2>
-            <p>Confluence Radar debloated. Downstream snapshot ingestion engine active.</p>
-            <div class="placeholder-status-pill">Awaiting Snapshot Feed</div>
+        <!-- Info Ribbon with Included Dates & Metric Stats -->
+        <div class="radar-info-ribbon" id="radarInfoRibbon">
+          <div class="radar-ribbon-item">
+            <span class="ribbon-label">TRAIL 3D:</span>
+            <strong class="ribbon-val" id="radarDates3d">-</strong>
+          </div>
+          <div class="radar-ribbon-item">
+            <span class="ribbon-label">TRAIL 7D:</span>
+            <strong class="ribbon-val" id="radarDates7d">-</strong>
+          </div>
+          <div class="radar-ribbon-item">
+            <span class="ribbon-label">TICKERS:</span>
+            <strong class="ribbon-val" id="radarTotalTickers">0</strong>
+          </div>
+          <div class="radar-ribbon-item">
+            <span class="ribbon-label">TOP FLOW:</span>
+            <strong class="ribbon-val accent-gold" id="radarTopFlow">-</strong>
+          </div>
+          <div class="radar-ribbon-hint">
+            <span>💡 Click any ticker to inspect in Cockpit ↗</span>
+          </div>
+        </div>
+
+        <!-- Unified GEX/DEX & Options Flow Matrix Table -->
+        <div class="radar-table-card">
+          <div class="radar-table-wrapper" id="radarTableWrapper">
+            <table class="radar-table" id="radarTable">
+              <thead>
+                <tr>
+                  <th data-col="ticker" class="sortable col-ticker">TICKER</th>
+                  <th data-col="spot_price" class="sortable col-num">SPOT</th>
+                  <th data-col="call_put_ratio" class="sortable col-ratio">C/P RATIO</th>
+                  <th data-col="prints_3d" class="sortable col-num">PRINTS (3D)</th>
+                  <th data-col="prints_7d" class="sortable col-num">PRINTS (7D)</th>
+                  <th data-col="premium_3d" class="sortable col-prem">PREM (3D)</th>
+                  <th data-col="premium_7d" class="sortable col-prem sort-desc">PREM (7D)</th>
+                  <th data-col="call_wall" class="sortable col-num">CALL WALL</th>
+                  <th data-col="put_wall" class="sortable col-num">PUT WALL</th>
+                  <th data-col="zero_flip" class="sortable col-num">ZERO FLIP</th>
+                </tr>
+              </thead>
+              <tbody id="radarTableBody">
+                <tr>
+                  <td colspan="10" class="radar-loading-cell">
+                    <div class="cockpit-loading-block">
+                      <div class="typing-indicator"><span></span><span></span><span></span></div>
+                      <span class="loading-label">Loading Confluence Radar unified matrix...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
     `;
+
+    this.bindEvents();
+    if (typeof window !== 'undefined' && window.location && window.location.origin) {
+      this.loadAvailableDates();
+    }
+  }
+
+  bindEvents() {
+    if (!this.container || typeof this.container.querySelector !== 'function') return;
+
+    // Refresh Button
+    const refreshBtn = this.container.querySelector('#radarRefreshBtn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        this.loadScanData(this.selectedDate);
+      });
+    }
+
+    // Date Selector
+    const dateSelect = this.container.querySelector('#radarDateSelect');
+    if (dateSelect) {
+      dateSelect.addEventListener('change', (e) => {
+        this.selectedDate = e.target.value || null;
+        this.loadScanData(this.selectedDate);
+      });
+    }
+
+    // Table Header Sorting
+    const thead = this.container.querySelector('#radarTable thead');
+    if (thead) {
+      thead.addEventListener('click', (e) => {
+        const th = e.target.closest('th.sortable');
+        if (!th) return;
+        const col = th.getAttribute('data-col');
+        if (!col) return;
+        this.handleSort(col);
+      });
+    }
+
+    // Row / Ticker Click-to-Cockpit Drilldown
+    const tbody = this.container.querySelector('#radarTableBody');
+    if (tbody) {
+      tbody.addEventListener('click', (e) => {
+        const row = e.target.closest('tr[data-ticker]');
+        if (!row) return;
+        const ticker = row.getAttribute('data-ticker');
+        if (ticker) {
+          this.drillDownToCockpit(ticker);
+        }
+      });
+    }
+  }
+
+  async loadAvailableDates() {
+    try {
+      const res = await fetchWithAuth('/api/radar/dates');
+      if (res && res.ok) {
+        this.availableDates = await res.json();
+        this.renderDateSelect();
+      }
+    } catch (err) {
+      console.warn('[RadarView] Failed to load available dates:', err);
+    }
+  }
+
+  renderDateSelect() {
+    if (!this.container) return;
+    const select = this.container.querySelector('#radarDateSelect');
+    if (!select) return;
+
+    if (!this.availableDates || this.availableDates.length === 0) {
+      select.innerHTML = '<option value="">LATEST</option>';
+      return;
+    }
+
+    select.innerHTML = this.availableDates.map(d => `
+      <option value="${d}" ${d === this.selectedDate ? 'selected' : ''}>${d}</option>
+    `).join('');
+  }
+
+  async loadScanData(targetDate = null) {
+    if (!this.container || this.isLoading) return;
+    this.isLoading = true;
+    this.renderLoadingState();
+
+    try {
+      const url = targetDate ? `/api/radar/unified-table?date=${encodeURIComponent(targetDate)}` : '/api/radar/unified-table';
+      const res = await fetchWithAuth(url);
+      if (res && res.ok) {
+        this.currentData = await res.json();
+        this.selectedDate = this.currentData.session_date;
+        if (this.currentData.available_dates) {
+          this.availableDates = this.currentData.available_dates;
+          this.renderDateSelect();
+        }
+        this.renderHeaderAndRibbon();
+        this.renderRows();
+      } else {
+        this.renderErrorState();
+      }
+    } catch (err) {
+      console.error('[RadarView] Load unified table error:', err);
+      this.renderErrorState();
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  renderLoadingState() {
+    if (!this.container) return;
+    const tbody = this.container.querySelector('#radarTableBody');
+    if (tbody) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="10" class="radar-loading-cell">
+            <div class="cockpit-loading-block">
+              <div class="typing-indicator"><span></span><span></span><span></span></div>
+              <span class="loading-label">Loading Confluence Radar unified matrix...</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  renderErrorState() {
+    if (!this.container) return;
+    const tbody = this.container.querySelector('#radarTableBody');
+    if (tbody) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="10" class="radar-empty-cell error">
+            ⚠️ Failed to load Confluence Radar data. Please retry.
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  renderHeaderAndRibbon() {
+    if (!this.container || !this.currentData) return;
+
+    // Session Tag
+    const sessionText = this.container.querySelector('#radarSessionText');
+    if (sessionText) {
+      sessionText.textContent = `SESSION: ${this.currentData.session_date}`;
+    }
+
+    // Ribbon Stats
+    const d3 = this.container.querySelector('#radarDates3d');
+    if (d3) {
+      d3.textContent = (this.currentData.dates_3d || []).join(', ') || '-';
+    }
+
+    const d7 = this.container.querySelector('#radarDates7d');
+    if (d7) {
+      const dArr = this.currentData.dates_7d || [];
+      d7.textContent = dArr.length > 0 ? `${dArr[dArr.length - 1]} → ${dArr[0]} (${dArr.length}d)` : '-';
+    }
+
+    const totalEl = this.container.querySelector('#radarTotalTickers');
+    if (totalEl) {
+      totalEl.textContent = `${this.currentData.total_tickers || 0}`;
+    }
+
+    const topFlowEl = this.container.querySelector('#radarTopFlow');
+    if (topFlowEl) {
+      topFlowEl.textContent = this.currentData.top_flow_ticker || '-';
+    }
+  }
+
+  handleSort(column) {
+    if (this.sortColumn === column) {
+      // Toggle directly between desc and asc on every press
+      this.sortDirection = this.sortDirection === 'desc' ? 'asc' : 'desc';
+    } else {
+      this.sortColumn = column;
+      // Default to 'asc' for ticker (A-Z) and 'desc' for numerical metric columns
+      this.sortDirection = column === 'ticker' ? 'asc' : 'desc';
+    }
+
+    this.updateHeaderSortClasses();
+    this.renderRows();
+  }
+
+  updateHeaderSortClasses() {
+    if (!this.container) return;
+    const headers = this.container.querySelectorAll('#radarTable th.sortable');
+    headers.forEach(th => {
+      const col = th.getAttribute('data-col');
+      th.classList.remove('sort-desc', 'sort-asc');
+      if (col === this.sortColumn) {
+        th.classList.add(this.sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+      }
+    });
+  }
+
+  getSortedRows() {
+    if (!this.currentData || !this.currentData.rows) return [];
+    const rows = [...this.currentData.rows];
+    const col = this.sortColumn || 'premium_7d';
+    const isAsc = this.sortDirection === 'asc';
+
+    const parseVal = (item, column) => {
+      const raw = item ? item[column] : null;
+      if (raw === null || raw === undefined || raw === 'N/A' || raw === '') {
+        return null;
+      }
+      if (typeof raw === 'number') {
+        return raw;
+      }
+      if (typeof raw === 'string') {
+        const cleaned = raw.replace(/[$,]/g, '').trim();
+        const parsed = Number(cleaned);
+        if (!isNaN(parsed) && cleaned !== '') {
+          return parsed;
+        }
+        return raw.toUpperCase();
+      }
+      return raw;
+    };
+
+    rows.sort((a, b) => {
+      const valA = parseVal(a, col);
+      const valB = parseVal(b, col);
+
+      // Nulls always sort to the end regardless of direction
+      if (valA === null && valB === null) return 0;
+      if (valA === null) return 1;
+      if (valB === null) return -1;
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return isAsc ? valA - valB : valB - valA;
+      }
+
+      const strA = String(valA);
+      const strB = String(valB);
+      return isAsc ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+
+    return rows;
+  }
+
+  getRatioClass(ratioVal) {
+    if (ratioVal === null || ratioVal === undefined || ratioVal === 'N/A' || ratioVal === '') {
+      return '';
+    }
+    const num = Number(String(ratioVal).replace(/[$,]/g, '').trim());
+    if (isNaN(num)) return '';
+    if (num > 3.0) return 'ratio-high ratio-green';
+    if (num < 1.0) return 'ratio-low ratio-red';
+    return 'ratio-mid ratio-yellow';
+  }
+
+  renderRows() {
+    if (!this.container || !this.currentData) return;
+    const tbody = this.container.querySelector('#radarTableBody');
+    if (!tbody) return;
+
+    const rows = this.getSortedRows();
+    if (rows.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="10" class="radar-empty-cell">
+            No qualifying tickers found for session ${this.selectedDate || 'current'}.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = rows.map(r => {
+      const ratioClass = this.getRatioClass(r.call_put_ratio);
+      return `
+        <tr data-ticker="${r.ticker}" title="Open ${r.ticker} in Cockpit">
+          <td class="col-ticker">
+            <span class="flow-ticker-btn radar-ticker-btn">${r.ticker}</span>
+          </td>
+          <td class="col-num">${r.formatted_spot_price}</td>
+          <td class="col-ratio"><span class="radar-ratio-pill ${ratioClass}">${r.call_put_ratio}</span></td>
+          <td class="col-num"><strong class="flow-metric-primary">${r.prints_3d}</strong></td>
+          <td class="col-num"><strong class="flow-metric-primary">${r.prints_7d}</strong></td>
+          <td class="col-prem"><span class="flow-metric-secondary">${r.formatted_premium_3d}</span></td>
+          <td class="col-prem"><strong class="flow-metric-primary metric-gold">${r.formatted_premium_7d}</strong></td>
+          <td class="col-num">${r.formatted_call_wall}</td>
+          <td class="col-num">${r.formatted_put_wall}</td>
+          <td class="col-num">${r.formatted_zero_flip}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  drillDownToCockpit(ticker) {
+    if (!ticker) return;
+    if (typeof window !== 'undefined' && window.quantApp) {
+      if (window.quantApp.tabManager) {
+        window.quantApp.tabManager.switchTab('cockpit');
+      }
+      if (window.quantApp.cockpitView && typeof window.quantApp.cockpitView.searchTicker === 'function') {
+        const input = typeof document !== 'undefined' ? document.querySelector('#cockpitSearchInput') : null;
+        if (input) input.value = ticker;
+        window.quantApp.cockpitView.searchTicker(ticker);
+      }
+    }
   }
 
   destroy() {
