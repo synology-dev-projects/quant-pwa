@@ -157,6 +157,124 @@
   box-sizing: border-box;
 }
 
+/* Possible Tickers Dropdown Row */
+.watchlist-dropdown-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.watchlist-dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.watchlist-dropdown-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+
+.watchlist-dropdown-count {
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.watchlist-select-wrapper.full-width {
+  width: 100%;
+  display: block;
+}
+
+.watchlist-ticker-dropdown {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 2rem 0 0.85rem;
+  background: #171f2e;
+  border: 1px solid #2d3d5a;
+  border-radius: 6px;
+  color: #f1f5f9;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.watchlist-ticker-dropdown:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+/* Autocomplete Input Wrapper & Menu */
+.watchlist-input-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  box-sizing: border-box;
+}
+
+.watchlist-input-wrapper .watchlist-input {
+  width: 100%;
+}
+
+.watchlist-autocomplete-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #161f30;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  box-sizing: border-box;
+}
+
+.watchlist-autocomplete-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.15s ease;
+}
+
+.watchlist-autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.watchlist-autocomplete-item:hover,
+.watchlist-autocomplete-item:active {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.watchlist-autocomplete-item .auto-ticker {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.watchlist-autocomplete-item .auto-indices {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
 .watchlist-add-form {
   display: flex;
   align-items: center;

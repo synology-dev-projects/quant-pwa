@@ -42,6 +42,10 @@ def test_index_validator():
     assert valid is True
     assert "Russell 2000" in indices
 
+    valid, indices = validate_ticker_in_indices("AAOI")
+    assert valid is True
+    assert "Russell 2000" in indices
+
     # Invalid tickers (micro-caps / penny stocks / fake symbols)
     valid, indices = validate_ticker_in_indices("PURR")
     assert valid is False
@@ -146,3 +150,28 @@ def test_remove_ticker_and_delete_watchlist(auth_header):
     # Delete non-existent watchlist should return 404
     resp = client.delete(f"/api/watchlists/{wl_id}", headers=auth_header)
     assert resp.status_code == 404
+
+
+def test_add_aaoi_and_get_available_tickers(auth_header):
+    # 1. Verify GET /api/watchlists/available-tickers
+    resp = client.get("/api/watchlists/available-tickers", headers=auth_header)
+    assert resp.status_code == 200
+    tickers = resp.json()
+    assert isinstance(tickers, list)
+    assert len(tickers) >= 500
+    syms = {t["ticker"] for t in tickers}
+    assert "AAOI" in syms
+    assert "NVDA" in syms
+    assert "SPY" in syms
+    assert "PURR" not in syms
+
+    # 2. Add AAOI to a watchlist
+    resp = client.post("/api/watchlists", json={"name": "Tech SmallCaps"}, headers=auth_header)
+    assert resp.status_code == 201
+    wl_id = resp.json()["id"]
+
+    resp = client.post(f"/api/watchlists/{wl_id}/tickers", json={"ticker": "AAOI"}, headers=auth_header)
+    assert resp.status_code == 201
+    item = resp.json()
+    assert item["ticker"] == "AAOI"
+    assert "Russell 2000" in item["indices"]

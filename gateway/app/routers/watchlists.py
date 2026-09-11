@@ -175,6 +175,18 @@ def get_all_watchlists(current_user: str = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Failed to query watchlists: {ex}")
 
 
+class AvailableTickerItem(BaseModel):
+    ticker: str
+    indices: List[str] = Field(default_factory=list)
+
+
+@router.get("/available-tickers", response_model=List[AvailableTickerItem])
+def get_available_tickers(current_user: str = Depends(get_current_user)):
+    """Returns all supported index and options flow tickers for client-side dropdown selection."""
+    from app.core.index_validator import get_all_available_tickers as _get_tickers
+    return [AvailableTickerItem(**item) for item in _get_tickers()]
+
+
 @router.post("", response_model=WatchlistResponse, status_code=status.HTTP_201_CREATED)
 def create_watchlist(req: CreateWatchlistRequest, current_user: str = Depends(get_current_user)):
     clean_name = req.name.strip()

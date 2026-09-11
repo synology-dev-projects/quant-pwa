@@ -9,6 +9,7 @@ export class WatchlistView {
     this.quotes = {};
     this.pollInterval = null;
     this.visibilityHandler = null;
+    this.availableTickers = [];
   }
 
   render(container) {
@@ -43,17 +44,34 @@ export class WatchlistView {
 
         <!-- Add Ticker Form & Real-time Validation Message -->
         <div class="watchlist-add-box">
+          <div class="watchlist-dropdown-row">
+            <div class="watchlist-dropdown-header">
+              <label for="watchlistTickerDropdown" class="watchlist-dropdown-label">Choose from possible tickers:</label>
+              <span class="watchlist-dropdown-count" id="watchlistDropdownCount">Loading tickers...</span>
+            </div>
+            <div class="watchlist-select-wrapper full-width">
+              <select id="watchlistTickerDropdown" class="watchlist-ticker-dropdown" aria-label="Choose possible ticker">
+                <option value="">-- Choose from possible tickers --</option>
+              </select>
+            </div>
+          </div>
+
           <form id="watchlistAddForm" class="watchlist-add-form" autocomplete="off">
-            <input
-              type="text"
-              id="watchlistTickerInput"
-              class="watchlist-input"
-              placeholder="Enter ticker (e.g. NVDA, SPY, POWL)..."
-              maxlength="12"
-              autocomplete="off"
-              autocapitalize="characters"
-              spellcheck="false"
-            />
+            <div class="watchlist-input-wrapper">
+              <input
+                type="text"
+                id="watchlistTickerInput"
+                class="watchlist-input"
+                placeholder="Or type ticker (e.g. AAOI, NVDA, POWL)..."
+                maxlength="12"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                list="watchlistTickerDatalist"
+              />
+              <datalist id="watchlistTickerDatalist"></datalist>
+              <div id="watchlistAutocompleteMenu" class="watchlist-autocomplete-menu" style="display:none;"></div>
+            </div>
             <button type="submit" id="watchlistAddBtn" class="watchlist-btn-add">
               <span>+ Add Ticker</span>
             </button>
@@ -97,6 +115,7 @@ export class WatchlistView {
 
     this.bindEvents();
     this.loadWatchlists();
+    this.loadAvailableTickers();
   }
 
   bindEvents() {
@@ -113,6 +132,19 @@ export class WatchlistView {
       });
     }
 
+    // Possible Tickers Dropdown Select
+    const tickerDropdown = this.container?.querySelector?.('#watchlistTickerDropdown');
+    if (tickerDropdown) {
+      tickerDropdown.addEventListener('change', async (e) => {
+        const chosen = e.target.value;
+        if (!chosen) return;
+        const input = this.container?.querySelector?.('#watchlistTickerInput');
+        if (input) input.value = chosen;
+        await this.addTicker(chosen);
+        tickerDropdown.value = '';
+      });
+    }
+
     // Add Ticker Form
     const form = this.container?.querySelector?.('#watchlistAddForm');
     if (form) {
@@ -122,8 +154,66 @@ export class WatchlistView {
         if (!input) return;
         const ticker = input.value.trim().toUpperCase();
         if (!ticker) return;
+        const autoMenu = this.container?.querySelector?.('#watchlistAutocompleteMenu');
+        if (autoMenu) autoMenu.style.display = 'none';
         await this.addTicker(ticker);
       });
+    }
+
+    // Interactive Autocomplete Suggestions on Input
+    const input = this.container?.querySelector?.('#watchlistTickerInput');
+    const autoMenu = this.container?.querySelector?.('#watchlistAutocompleteMenu');
+    if (input && autoMenu) {
+      input.addEventListener('input', () => {
+        const val = input.value.trim().toUpperCase();
+        if (!val || !this.availableTickers || this.availableTickers.length === 0) {
+          autoMenu.style.display = 'none';
+          autoMenu.innerHTML = '';
+          return;
+        }
+        const matches = this.availableTickers
+          .filter(t => t.ticker.startsWith(val))
+          .slice(0, 10);
+
+        if (matches.length === 0) {
+          autoMenu.style.display = 'none';
+          autoMenu.innerHTML = '';
+          return;
+        }
+
+        autoMenu.innerHTML = matches.map(m => `
+          <div class="watchlist-autocomplete-item" data-ticker="${m.ticker}">
+            <span class="auto-ticker">${m.ticker}</span>
+            <span class="auto-indices">${(m.indices || []).join(' · ')}</span>
+          </div>
+        `).join('');
+        autoMenu.style.display = 'block';
+
+        autoMenu.querySelectorAll('.watchlist-autocomplete-item').forEach(item => {
+          item.addEventListener('click', async () => {
+            const t = item.getAttribute('data-ticker');
+            if (t) {
+              input.value = t;
+              autoMenu.style.display = 'none';
+              await this.addTicker(t);
+            }
+          });
+        });
+      });
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && autoMenu) {
+          autoMenu.style.display = 'none';
+        }
+      });
+
+      if (typeof document !== 'undefined') {
+        document.addEventListener('click', (e) => {
+          if (!input.contains(e.target) && !autoMenu.contains(e.target)) {
+            autoMenu.style.display = 'none';
+          }
+        });
+      }
     }
 
     // New Watchlist Modal Triggers
@@ -241,6 +331,45 @@ export class WatchlistView {
       this.showValidationMessage(`Unable to load watchlists: ${err.message}`, true);
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  async loadAvailableTickers() {
+    try {
+      const gatewayUrl = AppState.getGatewayUrl();
+      const res = await fetchWithAuth(`${gatewayUrl}/api/watchlists/available-tickers`);
+      if (res && res.ok) {
+        const data = await res.json();
+        this.availableTickers = Array.isArray(data) ? data : [];
+        this.populateTickerDropdown();
+      }
+    } catch (err) {
+      console.warn('[Watchlist] Could not load available tickers:', err);
+    }
+  }
+
+  populateTickerDropdown() {
+    const select = this.container?.querySelector?.('#watchlistTickerDropdown');
+    const datalist = this.container?.querySelector?.('#watchlistTickerDatalist');
+    const countLabel = this.container?.querySelector?.('#watchlistDropdownCount');
+
+    if (countLabel) {
+      countLabel.textContent = `${this.availableTickers.length} available`;
+    }
+
+    if (select) {
+      select.innerHTML = '<option value="">-- Choose from possible tickers --</option>' +
+        this.availableTickers.map(item => {
+          const indicesStr = item.indices && item.indices.length > 0 ? ` (${item.indices.join(' · ')})` : '';
+          return `<option value="${item.ticker}">${item.ticker}${indicesStr}</option>`;
+        }).join('');
+    }
+
+    if (datalist) {
+      datalist.innerHTML = this.availableTickers.map(item => {
+        const indicesStr = item.indices && item.indices.length > 0 ? ` (${item.indices.join(' · ')})` : '';
+        return `<option value="${item.ticker}">${item.ticker}${indicesStr}</option>`;
+      }).join('');
     }
   }
 

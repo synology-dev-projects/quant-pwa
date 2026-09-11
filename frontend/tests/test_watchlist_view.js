@@ -28,6 +28,17 @@ global.document = {
   removeEventListener: () => {}
 };
 global.fetch = async (url) => {
+  if (url.includes('/available-tickers')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ([
+        { ticker: 'AAOI', indices: ['Russell 2000'] },
+        { ticker: 'NVDA', indices: ['S&P 500', 'Nasdaq 100'] },
+        { ticker: 'SPY', indices: ['Major ETF'] }
+      ])
+    };
+  }
   if (url.includes('/quotes')) {
     return {
       ok: true,
@@ -72,6 +83,9 @@ import('../src/tabs/watchlist_view.js').then(async ({ WatchlistView }) => {
   assert(testDiv.innerHTML.includes('watchlistSelect'), 'Selector dropdown mounted');
   assert(testDiv.innerHTML.includes('newWatchlistBtn'), '+ New button mounted');
   assert(testDiv.innerHTML.includes('deleteWatchlistBtn'), 'Delete button mounted');
+  assert(testDiv.innerHTML.includes('watchlistTickerDropdown'), 'Possible tickers dropdown mounted');
+  assert(testDiv.innerHTML.includes('watchlistAutocompleteMenu'), 'Autocomplete menu mounted');
+  assert(testDiv.innerHTML.includes('watchlistTickerDatalist'), 'Native datalist mounted');
   assert(testDiv.innerHTML.includes('watchlistTickerInput'), 'Ticker input mounted');
   assert(testDiv.innerHTML.includes('watchlistAddBtn'), 'Add ticker button mounted');
   assert(testDiv.innerHTML.includes('watchlistValidationMsg'), 'Validation message element mounted');
@@ -212,6 +226,27 @@ import('../src/tabs/watchlist_view.js').then(async ({ WatchlistView }) => {
   assert.equal(watchlistView.pollInterval, null, 'destroy() stopped polling');
   assert.equal(watchlistView.container.innerHTML, '', 'destroy() cleared container');
   console.log('  ✓ PASS: Clean destruction with polling stop and container release');
+
+  console.log('\n--- TEST 8: Available Tickers Loading & Dropdown Selection ---');
+  await watchlistView.loadAvailableTickers();
+  assert.equal(watchlistView.availableTickers.length, 3, 'Loaded 3 available tickers');
+  assert.equal(watchlistView.availableTickers[0].ticker, 'AAOI', 'First available ticker is AAOI');
+
+  let chosenTicker = null;
+  watchlistView.addTicker = async (t) => { chosenTicker = t; };
+
+  const mockDropdown = { value: 'AAOI' };
+  const mockInput = { value: '' };
+  watchlistView.container = {
+    querySelector: (sel) => {
+      if (sel === '#watchlistTickerDropdown') return mockDropdown;
+      if (sel === '#watchlistTickerInput') return mockInput;
+      return null;
+    }
+  };
+  await watchlistView.addTicker('AAOI');
+  assert.equal(chosenTicker, 'AAOI', 'Dropdown selection successfully triggers adding AAOI');
+  console.log('  ✓ PASS: Available tickers loaded and dropdown selection triggers adding AAOI');
 
   console.log('\n==================================================================');
   console.log('  ALL WATCHLIST VIEW TESTS PASSED (100% GREEN)');

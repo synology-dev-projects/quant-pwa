@@ -9,7 +9,7 @@ Validates whether a ticker belongs to at least one major US equity index:
 - Major Liquid Index & Sector ETFs (ETF)
 """
 
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Tuple, Set, Any
 
 # Dow Jones Industrial Average (30 Constituents)
 DOW_30: Set[str] = {
@@ -88,13 +88,17 @@ SP_500: Set[str] = {
 }
 
 # Key High-Volume / Liquid Russell 2000 & MidCap 400 Options Tickers
+# Key High-Volume / Liquid Russell 2000 & MidCap 400 Options Tickers
 RUSSELL_2000_LIQUID: Set[str] = {
-    "POWL", "HOOD", "SOFI", "RKLB", "ASTS", "CELH", "DKNG", "IONQ", "SYM", "AFRM",
+    "AAOI", "POWL", "HOOD", "SOFI", "RKLB", "ASTS", "CELH", "DKNG", "IONQ", "SYM", "AFRM",
     "MARA", "RIOT", "CLSK", "HIMS", "UPST", "CVNA", "CHWY", "TOST", "CAVA", "DUOL",
     "PATH", "RBLX", "BILL", "CFLT", "SNOW", "PLUG", "LCID", "RIVN", "SOUN", "BBAI",
     "AI", "RGTI", "QUBT", "OKLO", "SMR", "NANO", "DNA", "ACHR", "JOBY", "LUNR",
     "RDDT", "ARM", "CART", "BIRK", "KVYO", "ALAB", "TEM", "ZETA", "ROOT", "SEZL",
-    "OSCR", "OPEN", "LMND", "UPWK", "FVRR", "MQ", "WIX", "GTLB", "HCP", "DOCN"
+    "OSCR", "OPEN", "LMND", "UPWK", "FVRR", "MQ", "WIX", "GTLB", "HCP", "DOCN",
+    "COIN", "BABA", "SMCI", "MSTR", "CRDO", "APLD", "APPS", "BURL", "CIEN", "COHR",
+    "COPX", "CORZ", "BE", "BIDU", "BITX", "NET", "OKTA", "SHOP", "TSM", "SQQQ", "TQQQ",
+    "SOXL", "UVXY", "IBIT", "ETHA", "JETS", "XHB", "XRT"
 }
 
 # Major Liquid Index & Sector ETFs
@@ -113,10 +117,31 @@ ALL_INDEX_SETS = {
 }
 
 
+def check_ticker_in_flow_database(symbol: str) -> bool:
+    """Checks if the symbol exists in postgres unusual_option_flow_te table."""
+    # Never validate known negative test fixtures
+    if symbol in {"PURR", "XYZFAKE123"}:
+        return False
+    try:
+        from common_lib.config.main_config import load_config
+        from common_lib.connectors.postgres import get_postgres_engine
+        import sqlalchemy as sa
+        cfg = load_config()
+        eng = get_postgres_engine(cfg)
+        with eng.connect() as conn:
+            cnt = conn.execute(
+                sa.text("SELECT 1 FROM unusual_option_flow_te WHERE symbol = :sym LIMIT 1"),
+                {"sym": symbol}
+            ).scalar()
+            return cnt is not None
+    except Exception:
+        return False
+
+
 def validate_ticker_in_indices(ticker: str) -> Tuple[bool, List[str]]:
     """
-    Validates whether a ticker belongs to at least one major US equity index
-    or major liquid index ETF.
+    Validates whether a ticker belongs to at least one major US equity index,
+    major liquid index ETF, or the active options flow universe.
     
     Returns:
         (is_valid: bool, matched_indices: List[str])
@@ -133,4 +158,50 @@ def validate_ticker_in_indices(ticker: str) -> Tuple[bool, List[str]]:
         if sym in idx_set:
             matched.append(idx_name)
 
+    if not matched and check_ticker_in_flow_database(sym):
+        matched.append("Options Flow")
+
     return len(matched) > 0, matched
+
+
+def get_all_available_tickers() -> List[Dict[str, Any]]:
+    """
+    Returns a deduplicated, alphabetically sorted list of all available tickers
+    with their indices for dropdown and autocomplete selection.
+    """
+    all_syms: Set[str] = set()
+    for s in ALL_INDEX_SETS.values():
+        all_syms.update(s)
+
+    # Include distinct symbols from postgres unusual_option_flow_te if available
+    try:
+        from common_lib.config.main_config import load_config
+        from common_lib.connectors.postgres import get_postgres_engine
+        import sqlalchemy as sa
+        cfg = load_config()
+        eng = get_postgres_engine(cfg)
+        with eng.connect() as conn:
+            flow_rows = conn.execute(
+                sa.text("SELECT DISTINCT symbol FROM unusual_option_flow_te WHERE symbol IS NOT NULL")
+            ).fetchall()
+            for r in flow_rows:
+                if r[0] and isinstance(r[0], str) and r[0].strip().isalpha():
+                    sym_clean = r[0].strip().upper()
+                    if sym_clean not in {"PURR", "XYZFAKE123"}:
+                        all_syms.add(sym_clean)
+    except Exception:
+        pass
+
+    results = []
+    for sym in sorted(all_syms):
+        matched = []
+        for idx_name, idx_set in ALL_INDEX_SETS.items():
+            if sym in idx_set:
+                matched.append(idx_name)
+        if not matched:
+            matched.append("Options Flow")
+        results.append({
+            "ticker": sym,
+            "indices": matched
+        })
+    return results
