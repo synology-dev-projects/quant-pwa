@@ -32,6 +32,7 @@ logger = logging.getLogger("quant.gateway.flow_criteria")
 
 # Configurable Filter Thresholds
 TOP_PREMIUM_RANKS: Tuple[int, ...] = (1, 2, 3)
+MIN_TICKER_RECORDS_FOR_RANKING: int = 10
 NOTABLE_OTM_MIN_PCT: float = 10.0
 NOTABLE_OTM_MAX_DTE: int = 30
 
@@ -116,11 +117,13 @@ def format_notable_flow_markdown(
 def extract_ticker_notable_flow(
     records: List[Dict[str, Any]],
     spot: float,
-    session_date: Optional[str] = None
+    session_date: Optional[str] = None,
+    min_ticker_records: int = MIN_TICKER_RECORDS_FOR_RANKING
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Extracts Notable Flow for a single ticker (used in Cockpit).
     Evaluates only prints from session_date (or latest date in records if not passed).
+    For a flow to be rated 1st, 2nd, or 3rd, the ticker must have at least min_ticker_records (10) in the db.
     """
     if not records or spot <= 0:
         return [], []
@@ -133,29 +136,30 @@ def extract_ticker_notable_flow(
     if not session_date:
         return [], []
 
-    # 1. Rank ALL records for this ticker by premium DESC
-    sorted_by_premium = sorted(
-        records,
-        key=lambda r: float(r.get("PREMIUM") or 0.0),
-        reverse=True
-    )
-
+    # 1. Rank ALL records for this ticker by premium DESC only if ticker has at least min_ticker_records (10)
     top_premium_prints: List[Dict[str, Any]] = []
-    for rank, r in enumerate(sorted_by_premium, start=1):
-        if rank > max(TOP_PREMIUM_RANKS):
-            break
-        r_date = str(r.get("TRADE_DATE", ""))[:10]
-        if r_date == session_date:
-            prem = float(r.get("PREMIUM") or 0.0)
-            sym = str(r.get("SYMBOL", "")).upper()
-            top_premium_prints.append({
-                "symbol": sym,
-                "premium": prem,
-                "formatted_premium": format_currency(prem),
-                "rank": rank,
-                "order_type": str(r.get("ORDER_TYPE", "")),
-                "date": r_date
-            })
+    if len(records) >= min_ticker_records:
+        sorted_by_premium = sorted(
+            records,
+            key=lambda r: float(r.get("PREMIUM") or 0.0),
+            reverse=True
+        )
+
+        for rank, r in enumerate(sorted_by_premium, start=1):
+            if rank > max(TOP_PREMIUM_RANKS):
+                break
+            r_date = str(r.get("TRADE_DATE", ""))[:10]
+            if r_date == session_date:
+                prem = float(r.get("PREMIUM") or 0.0)
+                sym = str(r.get("SYMBOL", "")).upper()
+                top_premium_prints.append({
+                    "symbol": sym,
+                    "premium": prem,
+                    "formatted_premium": format_currency(prem),
+                    "rank": rank,
+                    "order_type": str(r.get("ORDER_TYPE", "")),
+                    "date": r_date
+                })
 
     # 2. Extract Notable OTM from session_date
     notable_otm_prints: List[Dict[str, Any]] = []
@@ -211,29 +215,39 @@ def extract_ticker_notable_flow(
 
 def extract_session_notable_flow_db(
     conn: sa.Connection,
-    session_date: str
+    session_date: str,
+    min_ticker_records: int = MIN_TICKER_RECORDS_FOR_RANKING
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Extracts Notable Flow across all tickers from database for session_date (used in Flow tab).
+    For a flow to be rated 1st, 2nd, or 3rd, the ticker must have at least min_ticker_records (10) in the db.
     """
     if not session_date:
         return [], []
 
-    # 1. Query prints from session_date that rank in top 3 all-time for their respective symbol
+    # 1. Query prints from session_date that rank in top 3 all-time for symbols with at least min_ticker_records (10)
     query_top_premium = sa.text("""
-        WITH ranked_flow AS (
-            SELECT 
-                flow_id,
-                trade_date,
-                symbol,
-                order_type,
-                strike_price,
-                strike_otm_pct,
-                expiration_date,
-                premium,
-                DENSE_RANK() OVER (PARTITION BY symbol ORDER BY premium DESC) as all_time_rank
+        WITH ticker_counts AS (
+            SELECT symbol, COUNT(*) AS record_count
             FROM unusual_option_flow_te
             WHERE strike_price > 0
+            GROUP BY symbol
+            HAVING COUNT(*) >= :min_records
+        ),
+        ranked_flow AS (
+            SELECT 
+                f.flow_id,
+                f.trade_date,
+                f.symbol,
+                f.order_type,
+                f.strike_price,
+                f.strike_otm_pct,
+                f.expiration_date,
+                f.premium,
+                DENSE_RANK() OVER (PARTITION BY f.symbol ORDER BY f.premium DESC) as all_time_rank
+            FROM unusual_option_flow_te f
+            JOIN ticker_counts tc ON f.symbol = tc.symbol
+            WHERE f.strike_price > 0
         )
         SELECT *
         FROM ranked_flow
@@ -244,7 +258,10 @@ def extract_session_notable_flow_db(
 
     top_premium_prints: List[Dict[str, Any]] = []
     try:
-        rows_tp = conn.execute(query_top_premium, {"session_date": session_date}).mappings().all()
+        rows_tp = conn.execute(
+            query_top_premium,
+            {"session_date": session_date, "min_records": min_ticker_records}
+        ).mappings().all()
         for r in rows_tp:
             prem = float(r["premium"])
             top_premium_prints.append({

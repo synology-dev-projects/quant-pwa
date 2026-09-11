@@ -563,13 +563,16 @@ export class CockpitView {
     const records = this.cockpitData?.flow?.records || [];
     let notableFlowMd = `• **Notable Flow**:\n  • **TOP PREMIUM**:\n    - NONE FOUND\n  • **NOTABLE OTM**:\n    - NONE FOUND`;
     if (records.length > 0) {
-      const sortedByPrem = [...records].sort((a, b) => (Number(b.PREMIUM) || 0) - (Number(a.PREMIUM) || 0));
-      const tpLines = sortedByPrem.map((r, i) => {
-        const p = Number(r.PREMIUM || 0);
-        const pStr = p >= 1e9 ? `$${(p / 1e9).toFixed(2)}B` : p >= 1e6 ? `$${(p / 1e6).toFixed(1)}M` : `$${Math.round(p / 1e3)}K`;
-        const rStr = i === 0 ? '1st' : i === 1 ? '2nd' : i === 2 ? '3rd' : `${i + 1}th`;
-        return `    - ${ticker} ${pStr} PREMIUM (${rStr})`;
-      });
+      let tpLines = [];
+      if (records.length >= 10) {
+        const sortedByPrem = [...records].sort((a, b) => (Number(b.PREMIUM) || 0) - (Number(a.PREMIUM) || 0));
+        tpLines = sortedByPrem.map((r, i) => {
+          const p = Number(r.PREMIUM || 0);
+          const pStr = p >= 1e9 ? `$${(p / 1e9).toFixed(2)}B` : p >= 1e6 ? `$${(p / 1e6).toFixed(1)}M` : `$${Math.round(p / 1e3)}K`;
+          const rStr = i === 0 ? '1st' : i === 1 ? '2nd' : i === 2 ? '3rd' : `${i + 1}th`;
+          return `    - ${ticker} ${pStr} PREMIUM (${rStr})`;
+        });
+      }
 
       const otmLines = records
         .filter(r => Math.abs(Number(r.STRIKE_OTM_PCT || 0)) >= 10.0)

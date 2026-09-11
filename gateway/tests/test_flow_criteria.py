@@ -108,6 +108,19 @@ def test_extract_ticker_notable_flow_strict_segregation_and_session_date():
             "EXPIRATION_DATE": "2026-09-18",
             "PREMIUM": 10000000.0,  # #4 all-time (pushing the $5M print to #5)
         },
+        # Additional historical records to meet the >= 10 records requirement
+        *[
+            {
+                "FLOW_ID": idx,
+                "TRADE_DATE": "2026-08-10",
+                "SYMBOL": "NVDA",
+                "ORDER_TYPE": "BUY_CALL",
+                "STRIKE_PRICE": 140.0,
+                "EXPIRATION_DATE": "2026-09-18",
+                "PREMIUM": 100000.0,
+            }
+            for idx in range(6, 12)
+        ]
     ]
 
     spot = 200.0
@@ -151,6 +164,12 @@ def test_extract_session_notable_flow_db_sqlite():
             ('2', '2026-09-04', 'SMH', 'SELL_PUT', 580.0, 2.0, '2027-01-15', 24300000.0),
             ('3', '2026-08-20', 'SMH', 'SELL_PUT', 570.0, 1.0, '2027-01-15', 30000000.0);
         """))
+        # Insert 8 more historical records for SMH so SMH has 10 total records
+        for i in range(4, 12):
+            conn.execute(sa.text(f"""
+                INSERT INTO unusual_option_flow_te VALUES
+                ('{i}', '2026-08-01', 'SMH', 'BUY_CALL', 500.0, 5.0, '2026-09-18', 100000.0);
+            """))
 
     with engine.connect() as conn:
         tp, otm = extract_session_notable_flow_db(conn, "2026-09-04")
@@ -207,11 +226,81 @@ def test_notable_flow_unlimited_prints():
             """))
 
     with engine.connect() as conn:
-        tp, otm = extract_session_notable_flow_db(conn, "2026-09-04")
-        # All 10 symbols qualify for all_time_rank <= 3, and all 5 OTM prints qualify.
-        # Previously both were capped at 3 with [:3]. Now unlimited prints are preserved.
+        # Pass min_ticker_records=1 to test unlimited prints retrieval across 5 symbols
+        tp, otm = extract_session_notable_flow_db(conn, "2026-09-04", min_ticker_records=1)
+        # All 10 symbols qualify for all_time_rank <= 3 with min_ticker_records=1, and all 5 OTM prints qualify.
         assert len(tp) == 10
         assert len(otm) == 5
+
+
+def test_min_records_threshold_enforcement():
+    """Verify that a ticker with < 10 records is NOT ranked 1st/2nd/3rd, but >= 10 is ranked."""
+    # 1. Cockpit in-memory extract_ticker_notable_flow test
+    records_9 = [
+        {
+            "FLOW_ID": i,
+            "TRADE_DATE": "2026-09-04",
+            "SYMBOL": "RARE",
+            "ORDER_TYPE": "BUY_CALL",
+            "STRIKE_PRICE": 100.0,
+            "EXPIRATION_DATE": "2026-09-18",
+            "PREMIUM": 5000000.0,
+        }
+        for i in range(9)
+    ]
+    tp_9, _ = extract_ticker_notable_flow(records_9, spot=100.0, session_date="2026-09-04")
+    assert len(tp_9) == 0, "Ticker with 9 records must NOT have top premium ranks"
+
+    records_10 = list(records_9) + [{
+        "FLOW_ID": 10,
+        "TRADE_DATE": "2026-09-04",
+        "SYMBOL": "RARE",
+        "ORDER_TYPE": "BUY_CALL",
+        "STRIKE_PRICE": 100.0,
+        "EXPIRATION_DATE": "2026-09-18",
+        "PREMIUM": 6000000.0,
+    }]
+    tp_10, _ = extract_ticker_notable_flow(records_10, spot=100.0, session_date="2026-09-04")
+    assert len(tp_10) > 0, "Ticker with 10 records must qualify for ranking"
+    assert tp_10[0]["rank"] == 1
+    assert tp_10[0]["formatted_premium"] == "$6.0M"
+
+    # 2. Database extract_session_notable_flow_db test
+    import sqlalchemy as sa
+    from app.core.flow_criteria import extract_session_notable_flow_db
+
+    engine = sa.create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(sa.text("""
+            CREATE TABLE unusual_option_flow_te (
+                flow_id TEXT PRIMARY KEY,
+                trade_date TEXT,
+                symbol TEXT,
+                order_type TEXT,
+                strike_price REAL,
+                strike_otm_pct REAL,
+                expiration_date TEXT,
+                premium REAL
+            );
+        """))
+        # Ticker LOW has 9 records
+        for i in range(9):
+            conn.execute(sa.text(f"""
+                INSERT INTO unusual_option_flow_te VALUES
+                ('low_{i}', '2026-09-04', 'LOWREC', 'BUY_CALL', 100.0, 2.0, '2026-09-18', {1000000.0 + i * 10000});
+            """))
+        # Ticker HIGH has 10 records
+        for i in range(10):
+            conn.execute(sa.text(f"""
+                INSERT INTO unusual_option_flow_te VALUES
+                ('high_{i}', '2026-09-04', 'HIGHREC', 'BUY_CALL', 100.0, 2.0, '2026-09-18', {2000000.0 + i * 10000});
+            """))
+
+    with engine.connect() as conn:
+        tp_db, _ = extract_session_notable_flow_db(conn, "2026-09-04", min_ticker_records=10)
+        symbols_in_tp = {row["symbol"] for row in tp_db}
+        assert "LOWREC" not in symbols_in_tp, "LOWREC (9 records) must be excluded from top premium rating"
+        assert "HIGHREC" in symbols_in_tp, "HIGHREC (10 records) must be included in top premium rating"
 
 
 
