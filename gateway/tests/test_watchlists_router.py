@@ -46,6 +46,10 @@ def test_index_validator():
     assert valid is True
     assert "Russell 2000" in indices
 
+    valid, indices = validate_ticker_in_indices("ADEA")
+    assert valid is True
+    assert "Nasdaq" in indices or "Russell 2000" in indices
+
     # Invalid tickers (micro-caps / penny stocks / fake symbols)
     valid, indices = validate_ticker_in_indices("PURR")
     assert valid is False
@@ -161,11 +165,12 @@ def test_add_aaoi_and_get_available_tickers(auth_header):
     assert len(tickers) >= 500
     syms = {t["ticker"] for t in tickers}
     assert "AAOI" in syms
+    assert "ADEA" in syms
     assert "NVDA" in syms
     assert "SPY" in syms
     assert "PURR" not in syms
 
-    # 2. Add AAOI to a watchlist
+    # 2. Add AAOI and ADEA to a watchlist
     resp = client.post("/api/watchlists", json={"name": "Tech SmallCaps"}, headers=auth_header)
     assert resp.status_code == 201
     wl_id = resp.json()["id"]
@@ -175,3 +180,9 @@ def test_add_aaoi_and_get_available_tickers(auth_header):
     item = resp.json()
     assert item["ticker"] == "AAOI"
     assert "Russell 2000" in item["indices"]
+
+    resp = client.post(f"/api/watchlists/{wl_id}/tickers", json={"ticker": "ADEA"}, headers=auth_header)
+    assert resp.status_code == 201
+    item_adea = resp.json()
+    assert item_adea["ticker"] == "ADEA"
+    assert "Nasdaq" in item_adea["indices"] or "Russell 2000" in item_adea["indices"]

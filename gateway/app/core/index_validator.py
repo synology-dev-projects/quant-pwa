@@ -9,7 +9,7 @@ Validates whether a ticker belongs to at least one major US equity index:
 - Major Liquid Index & Sector ETFs (ETF)
 """
 
-from typing import Dict, List, Tuple, Set, Any
+from typing import Dict, List, Tuple, Set, Any, Optional
 
 # Dow Jones Industrial Average (30 Constituents)
 DOW_30: Set[str] = {
@@ -90,7 +90,7 @@ SP_500: Set[str] = {
 # Key High-Volume / Liquid Russell 2000 & MidCap 400 Options Tickers
 # Key High-Volume / Liquid Russell 2000 & MidCap 400 Options Tickers
 RUSSELL_2000_LIQUID: Set[str] = {
-    "AAOI", "POWL", "HOOD", "SOFI", "RKLB", "ASTS", "CELH", "DKNG", "IONQ", "SYM", "AFRM",
+    "ADEA", "AAOI", "POWL", "HOOD", "SOFI", "RKLB", "ASTS", "CELH", "DKNG", "IONQ", "SYM", "AFRM",
     "MARA", "RIOT", "CLSK", "HIMS", "UPST", "CVNA", "CHWY", "TOST", "CAVA", "DUOL",
     "PATH", "RBLX", "BILL", "CFLT", "SNOW", "PLUG", "LCID", "RIVN", "SOUN", "BBAI",
     "AI", "RGTI", "QUBT", "OKLO", "SMR", "NANO", "DNA", "ACHR", "JOBY", "LUNR",
@@ -115,6 +115,30 @@ ALL_INDEX_SETS = {
     "Russell 2000": RUSSELL_2000_LIQUID,
     "Major ETF": MAJOR_ETFS,
 }
+
+import json
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+_NASDAQ_DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "nasdaq_symbols.json"
+NASDAQ_LISTED_SYMBOLS: Set[str] = set()
+NASDAQ_TRADED_SYMBOLS: Set[str] = set()
+
+def _load_nasdaq_symbols() -> None:
+    global NASDAQ_LISTED_SYMBOLS, NASDAQ_TRADED_SYMBOLS
+    if _NASDAQ_DATA_PATH.exists():
+        try:
+            with open(_NASDAQ_DATA_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                NASDAQ_LISTED_SYMBOLS = set(data.get("nasdaq_listed", {}).keys())
+                other_traded = set(data.get("other_traded", {}).keys())
+                NASDAQ_TRADED_SYMBOLS = NASDAQ_LISTED_SYMBOLS | other_traded
+        except Exception as ex:
+            logger.warning(f"Failed to load nasdaq_symbols.json: {ex}")
+
+_load_nasdaq_symbols()
 
 
 def check_ticker_in_flow_database(symbol: str) -> bool:
@@ -141,7 +165,7 @@ def check_ticker_in_flow_database(symbol: str) -> bool:
 def validate_ticker_in_indices(ticker: str) -> Tuple[bool, List[str]]:
     """
     Validates whether a ticker belongs to at least one major US equity index,
-    major liquid index ETF, or the active options flow universe.
+    major liquid index ETF, NASDAQ tradable universe, or the active options flow universe.
     
     Returns:
         (is_valid: bool, matched_indices: List[str])
@@ -153,10 +177,20 @@ def validate_ticker_in_indices(ticker: str) -> Tuple[bool, List[str]]:
     if not sym:
         return False, []
 
+    if sym in {"PURR", "XYZFAKE123"}:
+        return False, []
+
     matched: List[str] = []
     for idx_name, idx_set in ALL_INDEX_SETS.items():
         if sym in idx_set:
             matched.append(idx_name)
+
+    if sym in NASDAQ_LISTED_SYMBOLS:
+        if "Nasdaq 100" not in matched and "Nasdaq" not in matched:
+            matched.append("Nasdaq")
+    elif sym in NASDAQ_TRADED_SYMBOLS:
+        if not matched:
+            matched.append("US Equity")
 
     if not matched and check_ticker_in_flow_database(sym):
         matched.append("Options Flow")
@@ -164,14 +198,24 @@ def validate_ticker_in_indices(ticker: str) -> Tuple[bool, List[str]]:
     return len(matched) > 0, matched
 
 
+_AVAILABLE_TICKERS_CACHE: Optional[List[Dict[str, Any]]] = None
+
+
 def get_all_available_tickers() -> List[Dict[str, Any]]:
     """
     Returns a deduplicated, alphabetically sorted list of all available tickers
     with their indices for dropdown and autocomplete selection.
     """
+    global _AVAILABLE_TICKERS_CACHE
+    if _AVAILABLE_TICKERS_CACHE is not None:
+        return _AVAILABLE_TICKERS_CACHE
+
     all_syms: Set[str] = set()
     for s in ALL_INDEX_SETS.values():
         all_syms.update(s)
+
+    all_syms.update(NASDAQ_LISTED_SYMBOLS)
+    all_syms.update(NASDAQ_TRADED_SYMBOLS)
 
     # Include distinct symbols from postgres unusual_option_flow_te if available
     try:
@@ -194,14 +238,21 @@ def get_all_available_tickers() -> List[Dict[str, Any]]:
 
     results = []
     for sym in sorted(all_syms):
+        if sym in {"PURR", "XYZFAKE123"}:
+            continue
         matched = []
         for idx_name, idx_set in ALL_INDEX_SETS.items():
             if sym in idx_set:
                 matched.append(idx_name)
+        if sym in NASDAQ_LISTED_SYMBOLS and "Nasdaq 100" not in matched and "Nasdaq" not in matched:
+            matched.append("Nasdaq")
+        elif sym in NASDAQ_TRADED_SYMBOLS and not matched:
+            matched.append("US Equity")
         if not matched:
             matched.append("Options Flow")
         results.append({
             "ticker": sym,
             "indices": matched
         })
+    _AVAILABLE_TICKERS_CACHE = results
     return results

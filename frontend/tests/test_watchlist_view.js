@@ -34,6 +34,7 @@ global.fetch = async (url) => {
       status: 200,
       json: async () => ([
         { ticker: 'AAOI', indices: ['Russell 2000'] },
+        { ticker: 'ADEA', indices: ['Nasdaq', 'Russell 2000'] },
         { ticker: 'NVDA', indices: ['S&P 500', 'Nasdaq 100'] },
         { ticker: 'SPY', indices: ['Major ETF'] }
       ])
@@ -229,13 +230,14 @@ import('../src/tabs/watchlist_view.js').then(async ({ WatchlistView }) => {
 
   console.log('\n--- TEST 8: Available Tickers Loading & Dropdown Selection ---');
   await watchlistView.loadAvailableTickers();
-  assert.equal(watchlistView.availableTickers.length, 3, 'Loaded 3 available tickers');
+  assert.equal(watchlistView.availableTickers.length, 4, 'Loaded 4 available tickers');
   assert.equal(watchlistView.availableTickers[0].ticker, 'AAOI', 'First available ticker is AAOI');
+  assert.equal(watchlistView.availableTickers[1].ticker, 'ADEA', 'Second available ticker is ADEA');
 
   let chosenTicker = null;
   watchlistView.addTicker = async (t) => { chosenTicker = t; };
 
-  const mockDropdown = { value: 'AAOI' };
+  const mockDropdown = { value: 'ADEA' };
   const mockInput = { value: '' };
   watchlistView.container = {
     querySelector: (sel) => {
@@ -244,9 +246,9 @@ import('../src/tabs/watchlist_view.js').then(async ({ WatchlistView }) => {
       return null;
     }
   };
-  await watchlistView.addTicker('AAOI');
-  assert.equal(chosenTicker, 'AAOI', 'Dropdown selection successfully triggers adding AAOI');
-  console.log('  ✓ PASS: Available tickers loaded and dropdown selection triggers adding AAOI');
+  await watchlistView.addTicker('ADEA');
+  assert.equal(chosenTicker, 'ADEA', 'Dropdown selection successfully triggers adding ADEA');
+  console.log('  ✓ PASS: Available tickers loaded and dropdown selection triggers adding ADEA');
 
   console.log('\n==================================================================');
   console.log('  ALL WATCHLIST VIEW TESTS PASSED (100% GREEN)');
