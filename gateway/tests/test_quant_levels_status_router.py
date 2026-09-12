@@ -218,3 +218,151 @@ def test_run_daily_incremental_no_new_posts(mock_get_cutoff, mock_extract):
     rows = run_daily_incremental(mock_config)
     assert rows == 0
 
+
+# ==============================================================================
+# SPX QUANT LEVELS DATA COMMENT PURGE TESTS
+# ==============================================================================
+
+@patch("app.routers.quant_levels_status.postgres.get_quant_levels")
+@patch("app.routers.quant_levels_status.postgres.sql")
+@patch("app.routers.quant_levels_status.load_config")
+def test_get_quant_levels_data_sanitizes_nan_comments(mock_config, mock_sql, mock_get_levels):
+    mock_config.return_value = MagicMock()
+    mock_sql.return_value = pd.DataFrame([{"d": "2026-09-11"}])
+    mock_get_levels.return_value = pd.DataFrame([
+        {
+            "DATETIME": "2026-09-11",
+            "TICKER": "SPX",
+            "START_LVL_PRICE": 5600.0,
+            "END_LVL_PRICE": None,
+            "BUY_SELL_IND": "BUY",
+            "COMMENTS": float("nan"),
+            "WEB_LINK": "nan"
+        },
+        {
+            "DATETIME": "2026-09-11",
+            "TICKER": "SPX",
+            "START_LVL_PRICE": 5700.0,
+            "END_LVL_PRICE": None,
+            "BUY_SELL_IND": "SELL",
+            "COMMENTS": "Major supply zone",
+            "WEB_LINK": "https://example.com"
+        },
+        {
+            "DATETIME": "2026-09-11",
+            "TICKER": "SPX",
+            "START_LVL_PRICE": 5500.0,
+            "END_LVL_PRICE": None,
+            "BUY_SELL_IND": "BUY",
+            "COMMENTS": "NaN",
+            "WEB_LINK": None
+        }
+    ])
+
+    response = client.get("/api/quant-levels/data?ticker=SPX&as_of_date=2026-09-11")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    levels = data["levels"]
+    assert len(levels) == 3
+
+    # Sorted descending by START_LVL_PRICE:
+    # idx 0: 5700 (Major supply zone)
+    # idx 1: 5600 (float nan -> None)
+    # idx 2: 5500 ("NaN" -> None)
+    assert levels[0]["start_price"] == 5700.0
+    assert levels[0]["comments"] == "Major supply zone"
+    assert levels[0]["web_link"] == "https://example.com"
+
+    assert levels[1]["start_price"] == 5600.0
+    assert levels[1]["comments"] is None
+    assert levels[1]["web_link"] is None
+
+    assert levels[2]["start_price"] == 5500.0
+    assert levels[2]["comments"] is None
+
+
+# ==============================================================================
+# SPX CANDLESTICK INTRADAY 5M ENDPOINT TESTS
+# ==============================================================================
+
+@patch("httpx.AsyncClient.get")
+def test_get_quant_levels_candles_success(mock_get):
+    from zoneinfo import ZoneInfo
+    eastern = ZoneInfo("America/New_York")
+    ts = int(datetime(2026, 9, 11, 9, 30, tzinfo=eastern).timestamp())
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "chart": {
+            "result": [{
+                "timestamp": [ts, ts + 300],
+                "indicators": {
+                    "quote": [{
+                        "open": [5600.0, 5605.0],
+                        "high": [5610.0, 5615.0],
+                        "low": [5595.0, 5600.0],
+                        "close": [5605.0, 5612.0],
+                        "volume": [12000, 15000]
+                    }]
+                }
+            }]
+        }
+    }
+    mock_get.return_value = mock_resp
+
+    from app.routers.quant_levels_status import _CANDLES_CACHE
+    _CANDLES_CACHE.clear()
+
+    response = client.get("/api/quant-levels/candles?ticker=SPX&as_of_date=2026-09-11")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["ticker"] == "SPX"
+    assert data["as_of_date"] == "2026-09-11"
+    assert len(data["candles"]) == 2
+    assert data["candles"][0]["open"] == 5600.0
+    assert data["candles"][0]["close"] == 5605.0
+    assert data["candles"][0]["datetime"] == "09:30"
+
+
+@patch("httpx.AsyncClient.get")
+def test_get_quant_levels_candles_empty(mock_get):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "chart": {
+            "result": [{
+                "timestamp": [],
+                "indicators": {"quote": [{"open": [], "high": [], "low": [], "close": []}]}
+            }]
+        }
+    }
+    mock_get.return_value = mock_resp
+
+    from app.routers.quant_levels_status import _CANDLES_CACHE
+    _CANDLES_CACHE.clear()
+
+    response = client.get("/api/quant-levels/candles?ticker=SPX&as_of_date=2026-09-13")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "empty"
+    assert len(data["candles"]) == 0
+    assert "No intraday session candles available" in data["message"]
+
+
+@patch("httpx.AsyncClient.get")
+def test_get_quant_levels_candles_error(mock_get):
+    mock_get.side_effect = Exception("Yahoo Finance connection timeout")
+
+    from app.routers.quant_levels_status import _CANDLES_CACHE
+    _CANDLES_CACHE.clear()
+
+    response = client.get("/api/quant-levels/candles?ticker=SPX&as_of_date=2026-09-14")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "error"
+    assert data["candles"] == []
+    assert "Failed to retrieve SPX intraday candles" in data["message"]
+

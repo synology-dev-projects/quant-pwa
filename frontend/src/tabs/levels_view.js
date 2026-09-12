@@ -10,6 +10,14 @@
  */
 
 import { fetchWithAuth } from '../state.js';
+import { CandlestickChart } from '../components/candlestick_chart.js';
+
+export function sanitizeComment(raw) {
+  if (raw == null) return '';
+  const s = String(raw).trim();
+  if (/^(nan|none|null|nat|—|-)$/i.test(s)) return '';
+  return s;
+}
 
 export class LevelsView {
   constructor() {
@@ -19,6 +27,7 @@ export class LevelsView {
     this.selectedDate = '';
     this.currentData = null;
     this.isLoading = false;
+    this.candlestickChart = null;
   }
 
   render(container) {
@@ -211,6 +220,72 @@ export class LevelsView {
           </tbody>
         </table>
       </div>
+
+      <!-- Candlestick Chart Section -->
+      <div class="levels-candlestick-section" id="levelsCandlestickMount">
+        <div class="candlestick-loading-placeholder">
+          <div class="candlestick-pulse-spinner"></div>
+          <span>Loading SPX Intraday Candlesticks (5m)...</span>
+        </div>
+      </div>
+    `;
+
+    // Asynchronously load and mount 5-minute session candlesticks
+    this.loadCandlesData(data);
+  }
+
+  async loadCandlesData(levelsData) {
+    const mount = this.container ? this.container.querySelector('#levelsCandlestickMount') : null;
+    if (!mount) return;
+
+    let url = `/api/quant-levels/candles?ticker=${this.ticker}`;
+    const targetDate = levelsData?.as_of_date || this.selectedDate;
+    if (targetDate) {
+      url += `&as_of_date=${encodeURIComponent(targetDate)}`;
+    }
+
+    try {
+      const resp = await fetchWithAuth(url);
+      if (!resp || !resp.ok) {
+        this.renderCandlesFallback(mount, `Failed to load candles: HTTP ${resp ? resp.status : 'offline'}`);
+        return;
+      }
+      const candleResp = await resp.json();
+      const candles = Array.isArray(candleResp.candles) ? candleResp.candles : [];
+
+      if (this.candlestickChart) {
+        this.candlestickChart.destroy();
+        this.candlestickChart = null;
+      }
+
+      mount.innerHTML = '';
+      this.candlestickChart = new CandlestickChart(mount, {
+        candles,
+        levels: levelsData.levels || [],
+        spot_price: levelsData.spot_price,
+        as_of_date: targetDate,
+        ticker: this.ticker
+      });
+    } catch (err) {
+      console.warn('[LevelsView] Failed to load candlestick chart:', err);
+      this.renderCandlesFallback(mount, err.message || 'Network error fetching intraday candles.');
+    }
+  }
+
+  renderCandlesFallback(mount, message) {
+    if (!mount) return;
+    mount.innerHTML = `
+      <div class="candlestick-card fallback">
+        <div class="candlestick-card-header">
+          <span class="candlestick-badge">SPX 5M</span>
+          <span class="candlestick-title">SPX Intraday Structure Chart</span>
+        </div>
+        <div class="candlestick-empty-overlay">
+          <div class="candlestick-empty-icon">&#128200;</div>
+          <div class="candlestick-empty-title">Intraday Data Unavailable</div>
+          <div class="candlestick-empty-desc">${message || 'Session candles could not be loaded.'}</div>
+        </div>
+      </div>
     `;
   }
 
@@ -273,7 +348,7 @@ export class LevelsView {
 
     const sign = lvl.distance_pts >= 0 ? '+' : '';
     const formattedDelta = `${sign}${lvl.distance_pts.toFixed(2)} pts (${sign}${lvl.distance_pct.toFixed(2)}%)`;
-    const commentText = (lvl.comments || lvl.comment || lvl.COMMENTS || '').trim();
+    const commentText = sanitizeComment(lvl.comments || lvl.comment || lvl.COMMENTS);
 
     return `
       <div class="ladder-row ${typeClass} ${immClass}" ${commentText ? `title="Commentary: ${commentText}"` : ''}>
@@ -302,6 +377,7 @@ export class LevelsView {
     const tagClass = lvl.type === 'SELL' ? 'tag-sell' : lvl.type === 'BUY' ? 'tag-buy' : 'tag-pivot';
     const sign = lvl.distance_pts >= 0 ? '+' : '';
     const formattedDelta = `${sign}${lvl.distance_pts.toFixed(2)} pts (${sign}${lvl.distance_pct.toFixed(2)}%)`;
+    const commentText = sanitizeComment(lvl.comments || lvl.comment || lvl.COMMENTS);
 
     let sourceCell = '<span>Database</span>';
     if (lvl.web_link) {
@@ -313,7 +389,7 @@ export class LevelsView {
         <td><span class="ladder-tag ${tagClass}">${lvl.type}</span></td>
         <td><strong>${lvl.price_display}</strong></td>
         <td>${formattedDelta}</td>
-        <td>${lvl.comments || '—'}</td>
+        <td>${commentText || '—'}</td>
         <td>${sourceCell}</td>
       </tr>
     `;

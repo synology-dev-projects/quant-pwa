@@ -2,14 +2,17 @@ import { strict as assert } from 'assert';
 
 /**
  * In-Situ DOM & Interaction Test for Quant PWA SPX Levels View (PWA-01)
+ * Enhanced to verify Candlestick Chart & Comment Sanitization.
  */
 
 console.log('==================================================================');
-console.log('  PROBING SPX QUANT LEVELS VIEW COMPONENT');
+console.log('  PROBING SPX QUANT LEVELS VIEW & CANDLESTICK COMPONENT');
 console.log('==================================================================\n');
 
 // Mock browser globals
 global.window = {
+  innerWidth: 1024,
+  devicePixelRatio: 2,
   location: { origin: 'http://127.0.0.1:8000', hostname: '127.0.0.1', port: '8000' },
   localStorage: {
     getItem: (key) => {
@@ -18,16 +21,111 @@ global.window = {
     },
     setItem: () => {},
     removeItem: () => {}
-  }
+  },
+  addEventListener: () => {},
+  removeEventListener: () => {}
 };
 global.localStorage = global.window.localStorage;
-global.document = {
-  createElement: (tag) => ({
+global.requestAnimationFrame = (cb) => { cb(); return 1; };
+
+global.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
+function createMockElement(tag) {
+  const el = {
     tagName: tag.toUpperCase(),
+    className: '',
     value: '',
     textContent: '',
-    selected: false
-  })
+    innerHTML: '',
+    style: {},
+    children: [],
+    parentElement: null,
+    width: 800,
+    height: 440,
+    appendChild: function(child) {
+      this.children.push(child);
+      child.parentElement = this;
+      return child;
+    },
+    removeChild: function(child) {
+      this.children = this.children.filter(c => c !== child);
+      child.parentElement = null;
+      return child;
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    setAttribute: () => {},
+    getAttribute: () => null,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 440, right: 800, bottom: 440 }),
+    querySelector: function(sel) {
+      if (sel.startsWith('#')) {
+        const id = sel.substring(1);
+        if (this.id === id) return this;
+      }
+      if (sel.startsWith('.')) {
+        const cls = sel.substring(1);
+        if (this.className && this.className.includes(cls)) return this;
+      }
+      for (const ch of this.children) {
+        if (ch.querySelector) {
+          const res = ch.querySelector(sel);
+          if (res) return res;
+        }
+      }
+      if (sel.startsWith('#') && this.innerHTML && this.innerHTML.includes(sel.substring(1))) {
+        return { innerHTML: '', className: '', querySelector: () => null };
+      }
+      if (sel.startsWith('.') && this.innerHTML && this.innerHTML.includes(sel.substring(1))) {
+        return { innerHTML: '', className: sel.substring(1), querySelector: () => null };
+      }
+      return null;
+    },
+    querySelectorAll: function(sel) {
+      const list = [];
+      for (const ch of this.children) {
+        if (ch.querySelectorAll) {
+          list.push(...ch.querySelectorAll(sel));
+        }
+      }
+      return list;
+    },
+    getContext: () => ({
+      scale: () => {},
+      fillRect: () => {},
+      strokeRect: () => {},
+      fillText: () => {},
+      stroke: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      arc: () => {},
+      fill: () => {},
+      save: () => {},
+      restore: () => {},
+      setLineDash: () => {},
+      clearRect: () => {},
+      measureText: (txt) => ({ width: (txt || '').length * 7 }),
+      roundRect: () => {},
+      font: '',
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+      textAlign: 'center',
+      textBaseline: 'middle',
+      shadowBlur: 0,
+      shadowColor: ''
+    })
+  };
+  return el;
+}
+
+global.document = {
+  createElement: createMockElement,
+  getElementById: (id) => null
 };
 
 const mockDatesResponse = ['2026-09-11', '2026-09-10', '2026-09-09'];
@@ -97,6 +195,18 @@ const mockDataResponse = {
   }
 };
 
+const mockCandlesResponse = {
+  status: 'ok',
+  ticker: 'SPX',
+  as_of_date: '2026-09-11',
+  candles: [
+    { timestamp: 1789133400, datetime: '09:30', open: 5600.0, high: 5615.0, low: 5595.0, close: 5610.0, volume: 15000 },
+    { timestamp: 1789133700, datetime: '09:35', open: 5610.0, high: 5625.0, low: 5608.0, close: 5622.0, volume: 12000 },
+    { timestamp: 1789134000, datetime: '09:40', open: 5622.0, high: 5630.0, low: 5618.0, close: 5620.0, volume: 9000 },
+    { timestamp: 1789156800, datetime: '16:00', open: 5645.0, high: 5650.0, low: 5640.0, close: 5648.0, volume: 30000 }
+  ]
+};
+
 let requestedUrls = [];
 global.fetch = async (url) => {
   requestedUrls.push(url);
@@ -114,6 +224,13 @@ global.fetch = async (url) => {
       json: async () => mockDataResponse
     };
   }
+  if (url.includes('/api/quant-levels/candles')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => mockCandlesResponse
+    };
+  }
   return {
     ok: true,
     status: 200,
@@ -121,36 +238,33 @@ global.fetch = async (url) => {
   };
 };
 
-import('../src/tabs/levels_view.js').then(async ({ LevelsView }) => {
+Promise.all([
+  import('../src/tabs/levels_view.js'),
+  import('../src/components/candlestick_chart.js')
+]).then(async ([{ LevelsView, sanitizeComment }, { CandlestickChart }]) => {
   const levelsView = new LevelsView();
 
   console.log('--- TEST 1: SPX Ticker Lock & Shell Mounting ---');
   assert.equal(levelsView.ticker, 'SPX', 'LevelsView is strictly locked to SPX');
 
-  const container = {
-    innerHTML: '',
-    querySelector: (sel) => {
-      if (sel === '#levelsDateSelect') {
-        return {
-          innerHTML: '',
-          children: [],
-          appendChild: (c) => {},
-          addEventListener: () => {}
-        };
-      }
-      if (sel === '#levelsRefreshBtn') {
-        return {
-          addEventListener: () => {}
-        };
-      }
-      if (sel === '#levelsContentMount') {
-        return {
-          innerHTML: '',
-          querySelector: () => null
-        };
-      }
-      return null;
+  const container = createMockElement('div');
+  container.innerHTML = '';
+  container.querySelector = (sel) => {
+    if (sel === '#levelsDateSelect') {
+      return {
+        innerHTML: '',
+        children: [],
+        appendChild: () => {},
+        addEventListener: () => {}
+      };
     }
+    if (sel === '#levelsRefreshBtn') {
+      return { addEventListener: () => {} };
+    }
+    if (sel === '#levelsContentMount') {
+      return { innerHTML: '', querySelector: () => null };
+    }
+    return null;
   };
 
   levelsView.render(container);
@@ -201,14 +315,12 @@ import('../src/tabs/levels_view.js').then(async ({ LevelsView }) => {
   assert(ladderHtml.includes('SPX LIVE SPOT'), 'Marker displays SPX LIVE SPOT label');
   assert(ladderHtml.includes('$5,600.00'), 'Marker displays $5,600.00 price');
 
-  // Verify Spot Marker position between 5650.00 (SELL) and 5580.00 (PIVOT)
   const idx5650 = ladderHtml.indexOf('5650.00');
   const idxSpot = ladderHtml.indexOf('ladderSpotMarker');
   const idx5580 = ladderHtml.indexOf('5580.00');
   assert(idx5650 < idxSpot, 'Resistance 5650 comes before spot marker in descending ladder');
   assert(idxSpot < idx5580, 'Spot marker comes before support/pivot 5580 in descending ladder');
 
-  // Verify level tags and classes
   assert(ladderHtml.includes('type-sell'), 'Contains SELL row class');
   assert(ladderHtml.includes('type-buy'), 'Contains BUY row class');
   assert(ladderHtml.includes('type-pivot'), 'Contains PIVOT row class');
@@ -240,8 +352,68 @@ import('../src/tabs/levels_view.js').then(async ({ LevelsView }) => {
   assert(errorMount.innerHTML.includes('Retry Connection'), 'Retry button rendered');
   console.log('  ✓ PASS: Empty and Error states provide graceful fallback and retry triggers');
 
+  console.log('\n--- TEST 7: Comment Sanitization & Nan Suppression ---');
+  assert.equal(sanitizeComment('nan'), '', 'nan string sanitizes to empty');
+  assert.equal(sanitizeComment('NaN'), '', 'NaN string sanitizes to empty');
+  assert.equal(sanitizeComment('None'), '', 'None string sanitizes to empty');
+  assert.equal(sanitizeComment('null'), '', 'null string sanitizes to empty');
+  assert.equal(sanitizeComment('—'), '', 'em dash sanitizes to empty');
+  assert.equal(sanitizeComment(''), '', 'empty string sanitizes to empty');
+  assert.equal(sanitizeComment(null), '', 'null value sanitizes to empty');
+  assert.equal(sanitizeComment(undefined), '', 'undefined sanitizes to empty');
+  assert.equal(sanitizeComment('Valid note'), 'Valid note', 'Valid comments preserved');
+
+  const nanLevel = {
+    type: 'BUY',
+    start_price: 5500.0,
+    end_price: null,
+    price_display: '5500.00',
+    distance_pts: -100.0,
+    distance_pct: -1.79,
+    comments: 'nan',
+    web_link: null
+  };
+  const nanRowHtml = levelsView.buildLadderRowHtml(nanLevel);
+  assert(!nanRowHtml.includes('ladder-comment-row'), 'Ladder row completely suppresses comment container when comment is "nan"');
+  assert(!nanRowHtml.includes('nan'), 'No literal "nan" appears in ladder row');
+
+  const nanTableHtml = levelsView.buildTableRowHtml(nanLevel);
+  assert(nanTableHtml.includes('<td>—</td>'), 'Table row renders em dash fallback instead of "nan"');
+  assert(!nanTableHtml.includes('<td>nan</td>'), 'Table row never displays "nan"');
+  console.log('  ✓ PASS: "nan" comments are completely purged from ladder rows and cleanly fall back to "—" in tables');
+
+  console.log('\n--- TEST 8: Candlestick Chart Section Mounting ---');
+  assert(mount.innerHTML.includes('levelsCandlestickMount'), 'Candlestick mount section present at bottom of levels view');
+
+  const candlestickContainer = createMockElement('div');
+  const chartInstance = new CandlestickChart(candlestickContainer, {
+    candles: mockCandlesResponse.candles,
+    levels: mockDataResponse.levels,
+    spot_price: mockDataResponse.spot_price,
+    as_of_date: '2026-09-11',
+    ticker: 'SPX'
+  });
+
+  assert(chartInstance.canvas, 'Canvas element created in candlestick chart');
+  assert(chartInstance.wrapper.className.includes('candlestick-card'), 'Wrapper has candlestick-card class');
+  assert(chartInstance.wrapper.querySelector('.candlestick-badge'), 'Renders SPX 5M badge');
+  assert(chartInstance.wrapper.querySelector('.candlestick-legend'), 'Renders legend bar');
+
+  // Verify Metrics computation
+  const metricsMount = chartInstance.wrapper.querySelector('#candlestickMetricsMount');
+  assert(metricsMount, 'Metrics mount present');
+  assert(metricsMount.innerHTML.includes('OPEN'), 'Metrics displays OPEN');
+  assert(metricsMount.innerHTML.includes('HIGH'), 'Metrics displays HIGH');
+  assert(metricsMount.innerHTML.includes('LOW'), 'Metrics displays LOW');
+  assert(metricsMount.innerHTML.includes('LAST'), 'Metrics displays LAST');
+  assert(metricsMount.innerHTML.includes('$5,610.00') || metricsMount.innerHTML.includes('$5600.00'), 'Metrics displays open price');
+
+  chartInstance.destroy();
+  assert.equal(chartInstance.canvas, null, 'Chart cleanly destroyed');
+  console.log('  ✓ PASS: Candlestick chart component renders canvas, metrics, legend, and cleans up');
+
   console.log('\n==================================================================');
-  console.log('  ALL SPX QUANT LEVELS VIEW TESTS PASSED (100% GREEN)');
+  console.log('  ALL SPX QUANT LEVELS & CANDLESTICK TESTS PASSED (100% GREEN)');
   console.log('==================================================================');
   process.exit(0);
 }).catch((err) => {

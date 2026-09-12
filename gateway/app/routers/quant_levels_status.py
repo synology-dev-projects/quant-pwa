@@ -1,7 +1,9 @@
 import logging
+import time as time_module
 from datetime import datetime, date, timedelta, time
 from zoneinfo import ZoneInfo
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict, Tuple
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 import pandas as pd
@@ -14,6 +16,8 @@ from app.core.quote_feed import get_batch_quotes
 logger = logging.getLogger("quant.gateway.quant_levels_status")
 
 router = APIRouter(tags=["Quant Levels Ingestion Status"])
+
+_CANDLES_CACHE: Dict[str, Tuple[float, List["CandlestickBar"]]] = {}
 
 
 class QuantLevelStatusResponse(BaseModel):
@@ -67,6 +71,24 @@ class QuantLevelDataResponse(BaseModel):
     spot_price: Optional[float] = None
     summary: QuantLevelSummary
     levels: List[QuantLevelItem] = []
+    message: Optional[str] = None
+
+
+class CandlestickBar(BaseModel):
+    timestamp: int
+    datetime: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: Optional[int] = 0
+
+
+class QuantLevelCandlesResponse(BaseModel):
+    status: str
+    ticker: str
+    as_of_date: str
+    candles: List[CandlestickBar] = []
     message: Optional[str] = None
 
 
@@ -390,8 +412,12 @@ async def get_quant_levels_data(
         else:
             lvl_type = "PIVOT"
 
-        comments = str(row.get("COMMENTS") or "").strip() or None
-        web_link = str(row.get("WEB_LINK") or "").strip() or None
+        comments = str(row.get("COMMENTS")).strip() if pd_not_na(row.get("COMMENTS")) else None
+        if comments == "":
+            comments = None
+        web_link = str(row.get("WEB_LINK")).strip() if pd_not_na(row.get("WEB_LINK")) else None
+        if web_link == "":
+            web_link = None
 
         mid_p = (start_p + end_p) / 2.0 if end_p is not None else start_p
         dist_pts = round(mid_p - ref_spot, 2)
@@ -467,3 +493,110 @@ async def get_quant_levels_data(
         summary=summary,
         levels=items
     )
+
+
+@router.get("/candles", response_model=QuantLevelCandlesResponse)
+async def get_quant_levels_candles(
+    ticker: str = "SPX",
+    as_of_date: Optional[str] = None
+):
+    """
+    Fetches 5-minute intraday candlestick bars for SPX for the specified as_of_date
+    (or latest available session) from Yahoo Finance (^GSPC) during regular trading hours (09:30 - 16:15 ET).
+    Results are cached in memory.
+    """
+    clean_ticker = "SPX"
+    eastern = ZoneInfo("America/New_York")
+    now_eastern = datetime.now(eastern)
+
+    target_date: date
+    if as_of_date and as_of_date.strip():
+        try:
+            target_date = datetime.strptime(as_of_date.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            target_date = get_expected_quant_levels_date(now_eastern)
+    else:
+        target_date = get_expected_quant_levels_date(now_eastern)
+
+    target_str = target_date.strftime("%Y-%m-%d")
+    cache_key = f"{clean_ticker}_{target_str}"
+
+    # Check in-memory cache
+    if cache_key in _CANDLES_CACHE:
+        cached_time, cached_bars = _CANDLES_CACHE[cache_key]
+        is_today = (target_date == now_eastern.date())
+        if not is_today or (time_module.time() - cached_time < 30.0):
+            return QuantLevelCandlesResponse(
+                status="ok" if cached_bars else "empty",
+                ticker=clean_ticker,
+                as_of_date=target_str,
+                candles=cached_bars,
+                message=None if cached_bars else f"No candles found for {target_str}."
+            )
+
+    try:
+        dt_start = datetime(target_date.year, target_date.month, target_date.day, 9, 30, tzinfo=eastern)
+        dt_end = datetime(target_date.year, target_date.month, target_date.day, 16, 15, tzinfo=eastern)
+        p1 = int(dt_start.timestamp()) - 300
+        p2 = int(dt_end.timestamp()) + 300
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1={p1}&period2={p2}&interval=5m"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json"
+        }
+        bars: List[CandlestickBar] = []
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data.get("chart", {}).get("result", [])
+                if results:
+                    res0 = results[0]
+                    timestamps = res0.get("timestamp", [])
+                    indicators = res0.get("indicators", {}).get("quote", [{}])[0]
+                    opens = indicators.get("open", [])
+                    highs = indicators.get("high", [])
+                    lows = indicators.get("low", [])
+                    closes = indicators.get("close", [])
+                    volumes = indicators.get("volume", [])
+
+                    for i, ts in enumerate(timestamps):
+                        if i >= len(opens) or i >= len(highs) or i >= len(lows) or i >= len(closes):
+                            break
+                        o, h, l, c = opens[i], highs[i], lows[i], closes[i]
+                        if o is None or h is None or l is None or c is None:
+                            continue
+                        bar_dt = datetime.fromtimestamp(ts, eastern)
+                        if bar_dt.date() != target_date:
+                            continue
+                        bar_time = bar_dt.time()
+                        if bar_time < time(9, 30) or bar_time > time(16, 15):
+                            continue
+                        vol = int(volumes[i]) if (i < len(volumes) and volumes[i] is not None) else 0
+                        bars.append(CandlestickBar(
+                            timestamp=ts,
+                            datetime=bar_dt.strftime("%H:%M"),
+                            open=round(float(o), 2),
+                            high=round(float(h), 2),
+                            low=round(float(l), 2),
+                            close=round(float(c), 2),
+                            volume=vol
+                        ))
+
+        _CANDLES_CACHE[cache_key] = (time_module.time(), bars)
+        return QuantLevelCandlesResponse(
+            status="ok" if bars else "empty",
+            ticker=clean_ticker,
+            as_of_date=target_str,
+            candles=bars,
+            message=None if bars else f"No intraday session candles available for {target_str}."
+        )
+    except Exception as ex:
+        logger.warning(f"Error fetching SPX candles for {target_str}: {ex}")
+        return QuantLevelCandlesResponse(
+            status="error",
+            ticker=clean_ticker,
+            as_of_date=target_str,
+            candles=[],
+            message=f"Failed to retrieve SPX intraday candles: {str(ex)}"
+        )
