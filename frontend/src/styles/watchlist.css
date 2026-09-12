@@ -1,21 +1,21 @@
 /* ==============================================================================
    Quant PWA: Institutional Watchlists Tab Styling
-   Theme: High-Density Dark Bloomberg Terminal Aesthetic
+   Theme: Sleek Quant AI Dark Glass Aesthetic (Cockpit & Flow Aligned)
    ============================================================================== */
 
 .watchlist-view-container {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  padding: 0.65rem;
+  gap: 0.5rem;
+  padding: 0.75rem;
   height: 100%;
   overflow-y: auto;
   box-sizing: border-box;
-  background: #04070b;
+  background: #0d1117;
 }
 
 /* ==============================================================================
-   1. Top Bloomberg Header Bar: Title & 5s Live Status
+   1. Header Bar: Title & 5s Live Status
    ============================================================================== */
 .watchlist-header-bar {
   display: flex;
@@ -23,87 +23,67 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.5rem;
-  padding: 0.35rem 0.65rem;
-  background: #080d14;
-  border: 1px solid #1c2635;
-  border-radius: 3px;
-  box-shadow: inset 0 1px 0 rgba(255, 183, 0, 0.35);
+  padding: 0.45rem 0.75rem;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
   box-sizing: border-box;
 }
 
 .watchlist-title-group {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.6rem;
   flex-wrap: wrap;
-}
-
-.bb-terminal-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.12rem 0.4rem;
-  background: #ffb700;
-  color: #04070b;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.72rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  border-radius: 2px;
-  text-transform: uppercase;
-  user-select: none;
 }
 
 .watchlist-title {
   margin: 0;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.92rem;
-  font-weight: 900;
-  letter-spacing: 0.09em;
-  color: #ffb700;
-  text-transform: uppercase;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f0f6fc;
 }
 
 .watchlist-count-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.12rem 0.4rem;
-  background: rgba(0, 229, 255, 0.1);
-  border: 1px solid rgba(0, 229, 255, 0.35);
-  border-radius: 2px;
-  font-size: 0.68rem;
-  font-weight: 800;
-  color: #00e5ff;
+  padding: 0.15rem 0.45rem;
+  background: rgba(56, 139, 253, 0.12);
+  border: 1px solid rgba(56, 139, 253, 0.35);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #58a6ff;
   font-family: var(--font-mono, monospace);
-  letter-spacing: 0.05em;
 }
 
 .watchlist-live-tag {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.12rem 0.45rem;
+  padding: 0.15rem 0.5rem;
   background: rgba(0, 230, 118, 0.1);
-  border: 1px solid rgba(0, 230, 118, 0.35);
-  border-radius: 2px;
-  font-size: 0.68rem;
-  font-weight: 800;
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
   color: #00e676;
-  letter-spacing: 0.05em;
   font-family: var(--font-mono, monospace);
 }
 
 .watchlist-live-tag.paused {
   background: rgba(110, 128, 152, 0.1);
   border-color: rgba(110, 128, 152, 0.25);
-  color: #8ba0b8;
+  color: #8b949e;
 }
 
 .watchlist-live-tag .dot-live {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #00e676;
-  box-shadow: 0 0 6px rgba(0, 230, 118, 0.8);
+  box-shadow: 0 0 6px rgba(0, 230, 118, 0.7);
   animation: pulseDot 2s infinite ease-in-out;
 }
 
@@ -119,35 +99,24 @@
 }
 
 /* ==============================================================================
-   2. 1-Tap Horizontal Bloomberg Watchlist Function Sheets Strip
+   2. 1-Tap Horizontal Watchlist Tabs Strip (Compact & Inline Deletion)
    ============================================================================== */
 .watchlist-pills-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.45rem;
-  padding: 0.3rem 0.5rem;
-  background: #080d14;
-  border: 1px solid #1c2635;
-  border-radius: 3px;
+  gap: 0.4rem;
+  padding: 0.25rem 0.4rem;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
   box-sizing: border-box;
-}
-
-.bb-sheet-tag {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.68rem;
-  font-weight: 900;
-  color: #ffb700;
-  letter-spacing: 0.08em;
-  padding-left: 0.2rem;
-  flex-shrink: 0;
-  user-select: none;
 }
 
 .watchlist-pills-strip {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.35rem;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -163,45 +132,35 @@
 .watchlist-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0 0.75rem;
-  background: #0d1420;
-  border: 1px solid #212e42;
-  border-radius: 2px;
-  color: #94a3b8;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  gap: 0.35rem;
+  min-height: 36px;
+  padding: 0 0.55rem;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #8b949e;
+  font-size: 0.78rem;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
   transition: all 0.15s ease;
   box-sizing: border-box;
+  outline: none;
+  user-select: none;
 }
 
 .watchlist-pill:hover {
-  background: #141f2e;
-  border-color: #ffb700;
+  background: #283141;
+  border-color: #58a6ff;
   color: #f0f6fc;
 }
 
 .watchlist-pill.active {
-  background: rgba(255, 183, 0, 0.14);
-  border-color: #ffb700;
-  color: #ffb700;
-  box-shadow: inset 0 -2px 0 #ffb700, 0 0 12px rgba(255, 183, 0, 0.12);
-}
-
-.bb-tab-idx {
-  color: #ffb700;
-  font-weight: 900;
-  margin-right: 0.25rem;
-  font-size: 0.72rem;
-  user-select: none;
+  background: rgba(56, 139, 253, 0.15);
+  border-color: #388bfd;
+  color: #58a6ff;
+  box-shadow: 0 0 8px rgba(56, 139, 253, 0.2);
 }
 
 .watchlist-pill-name {
@@ -216,17 +175,44 @@
   min-width: 17px;
   height: 17px;
   padding: 0 0.25rem;
-  border-radius: 2px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.08);
   color: inherit;
   font-size: 0.65rem;
-  font-weight: 800;
+  font-weight: 700;
   flex-shrink: 0;
 }
 
 .watchlist-pill.active .watchlist-pill-count {
-  background: rgba(255, 183, 0, 0.25);
-  color: #ffb700;
+  background: rgba(56, 139, 253, 0.25);
+  color: #58a6ff;
+}
+
+/* Inline Tab Delete Button (×) */
+.watchlist-tab-del-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin-left: 0.15rem;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: all 0.12s ease;
+  outline: none;
+}
+
+.watchlist-tab-del-btn:hover {
+  opacity: 1;
+  color: #f85149;
+  background: rgba(248, 81, 73, 0.18);
 }
 
 .watchlist-pill-actions {
@@ -244,11 +230,9 @@
   min-height: 44px;
   min-width: 44px;
   padding: 0 0.65rem;
-  border-radius: 2px;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
   cursor: pointer;
   outline: none;
   white-space: nowrap;
@@ -257,42 +241,47 @@
 }
 
 .watchlist-btn-primary {
-  background: rgba(0, 229, 255, 0.12);
-  border: 1px solid rgba(0, 229, 255, 0.4);
-  color: #00e5ff;
+  background: rgba(56, 139, 253, 0.12);
+  border: 1px solid rgba(56, 139, 253, 0.4);
+  color: #58a6ff;
 }
 
 .watchlist-btn-primary:hover {
-  background: rgba(0, 229, 255, 0.25);
+  background: rgba(56, 139, 253, 0.25);
   color: #fff;
-  border-color: #00e5ff;
+  border-color: #58a6ff;
 }
 
 .watchlist-btn-danger {
-  background: rgba(255, 61, 0, 0.12);
-  border: 1px solid rgba(255, 61, 0, 0.4);
-  color: #ff3d00;
+  background: rgba(248, 81, 73, 0.12);
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  color: #f85149;
 }
 
 .watchlist-btn-danger:hover {
-  background: rgba(255, 61, 0, 0.25);
+  background: rgba(248, 81, 73, 0.25);
   color: #fff;
-  border-color: #ff3d00;
+  border-color: #f85149;
+}
+
+.watchlist-btn-add-tab {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1;
 }
 
 /* ==============================================================================
-   3. Compact Bloomberg Command Bar: Ticker Entry & Autocomplete
+   3. Streamlined Command Bar: Ticker Entry & Autocomplete
    ============================================================================== */
 .watchlist-add-box {
-  background: #080d14;
-  border: 1px solid #1c2635;
-  border-radius: 3px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
   padding: 0.35rem 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   box-sizing: border-box;
-  box-shadow: inset 0 1px 0 rgba(255, 183, 0, 0.15);
 }
 
 .watchlist-add-form {
@@ -308,26 +297,16 @@
   flex: 1;
   display: flex;
   align-items: center;
-  background: #0c121c;
-  border: 1px solid #222f42;
-  border-radius: 2px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
   box-sizing: border-box;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s;
 }
 
 .watchlist-input-wrapper:focus-within {
-  border-color: #ffb700;
-  box-shadow: 0 0 8px rgba(255, 183, 0, 0.25);
-}
-
-.watchlist-terminal-prompt {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.82rem;
-  font-weight: 900;
-  color: #ffb700;
-  letter-spacing: 0.08em;
-  padding: 0 0.45rem 0 0.65rem;
-  user-select: none;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 1px #58a6ff;
 }
 
 .watchlist-input {
@@ -339,18 +318,17 @@
   color: #f0f6fc;
   font-family: var(--font-mono, monospace);
   font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 0 0.5rem 0 0;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0 0.75rem;
   box-sizing: border-box;
-  text-transform: uppercase;
 }
 
 .watchlist-input::placeholder {
-  color: #52637a;
-  font-size: 0.76rem;
-  letter-spacing: 0.04em;
-  text-transform: none;
+  color: #6e7681;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  font-family: inherit;
 }
 
 .watchlist-btn-add {
@@ -360,15 +338,14 @@
   min-height: 44px;
   min-width: 44px;
   padding: 0 0.95rem;
-  background: #00e676;
-  border: 1px solid #00c853;
-  border-radius: 2px;
-  color: #04070b;
+  background: rgba(0, 230, 118, 0.12);
+  border: 1px solid rgba(0, 230, 118, 0.35);
+  border-radius: 6px;
+  color: #00e676;
   font-family: var(--font-mono, monospace);
   font-size: 0.78rem;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   cursor: pointer;
   outline: none;
   transition: all 0.15s ease;
@@ -377,8 +354,9 @@
 }
 
 .watchlist-btn-add:hover {
-  background: #69f0ae;
-  box-shadow: 0 0 10px rgba(0, 230, 118, 0.5);
+  background: rgba(0, 230, 118, 0.25);
+  color: #fff;
+  border-color: #00e676;
 }
 
 /* Autocomplete Menu */
@@ -389,10 +367,10 @@
   right: 0;
   max-height: 260px;
   overflow-y: auto;
-  background: #080d14;
-  border: 1px solid #ffb700;
-  border-radius: 2px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.9), 0 0 10px rgba(255, 183, 0, 0.2);
+  background: #161b22;
+  border: 1px solid #388bfd;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
   z-index: 100;
   box-sizing: border-box;
 }
@@ -404,7 +382,7 @@
   min-height: 44px;
   padding: 0 0.85rem;
   cursor: pointer;
-  border-bottom: 1px solid #141f2e;
+  border-bottom: 1px solid #21262d;
   font-family: var(--font-mono, monospace);
   transition: background 0.1s;
 }
@@ -414,20 +392,20 @@
 }
 
 .watchlist-autocomplete-item:hover {
-  background: rgba(255, 183, 0, 0.15);
+  background: rgba(56, 139, 253, 0.12);
 }
 
 .auto-ticker {
   font-size: 0.88rem;
-  font-weight: 900;
-  color: #ffb700;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: #58a6ff;
+  letter-spacing: 0.04em;
 }
 
 .auto-indices {
   font-size: 0.7rem;
-  color: #94a3b8;
-  font-weight: 700;
+  color: #8b949e;
+  font-weight: 600;
 }
 
 /* Validation Message */
@@ -435,7 +413,7 @@
   display: none;
   font-size: 0.76rem;
   padding: 0.35rem 0.65rem;
-  border-radius: 2px;
+  border-radius: 4px;
   font-family: var(--font-mono, monospace);
   box-sizing: border-box;
 }
@@ -445,36 +423,35 @@
 }
 
 .watchlist-validation-msg.error {
-  background: rgba(255, 61, 0, 0.14);
-  border: 1px solid #ff3d00;
-  color: #ff3d00;
+  background: rgba(248, 81, 73, 0.12);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  color: #f85149;
 }
 
 .watchlist-validation-msg.success {
-  background: rgba(0, 230, 118, 0.14);
-  border: 1px solid #00e676;
+  background: rgba(0, 230, 118, 0.12);
+  border: 1px solid rgba(0, 230, 118, 0.35);
   color: #00e676;
 }
 
 /* ==============================================================================
-   4. Bloomberg Real Table & Horizontal Scroll Wrapper
+   4. Clean Real Table & Horizontal Scroll Wrapper
    ============================================================================== */
 .watchlist-table-wrapper {
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  background: #04070b;
-  border: 1px solid #1c2635;
-  border-radius: 3px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
   box-sizing: border-box;
-  box-shadow: inset 0 1px 0 rgba(255, 183, 0, 0.12);
 }
 
 .watchlist-table {
   width: 100%;
   border-collapse: collapse;
   font-family: var(--font-mono, monospace);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: #c9d1d9;
   min-width: 560px; /* Guarantees zero column collision/overlap on any viewport */
 }
@@ -483,19 +460,19 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: #0c131d;
-  border-bottom: 2px solid #ffb700;
+  background: #161b22;
+  border-bottom: 2px solid #30363d;
 }
 
 .watchlist-table th.wth-col {
   padding: 0.5rem 0.65rem;
   font-family: var(--font-mono, monospace);
-  font-size: 0.68rem;
-  font-weight: 900;
-  color: #ffb700;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #8b949e;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  border-bottom: 2px solid #ffb700;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid #30363d;
   white-space: nowrap;
   box-sizing: border-box;
   vertical-align: middle;
@@ -508,12 +485,12 @@
 }
 
 .watchlist-table th.sortable:hover {
-  color: #ffffff;
-  background: rgba(255, 183, 0, 0.08);
+  color: #f0f6fc;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .watchlist-table th.sortable.active {
-  color: #00e5ff;
+  color: #58a6ff;
 }
 
 .watchlist-table th .th-content {
@@ -523,28 +500,27 @@
 }
 
 .watchlist-table th .sort-glyph {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: #6e7681;
 }
 
 .watchlist-table th.sortable.active .sort-glyph {
-  color: #00e5ff;
+  color: #58a6ff;
 }
 
-/* Zebra Striping & Interactive Hover Highlight */
+/* Zebra Striping & Clean Hover Highlight */
 .watchlist-table tr.watchlist-ticker-card {
-  background: #080d14;
-  border-bottom: 1px solid #141f2e;
+  background: #0d1117;
+  border-bottom: 1px solid #21262d;
   transition: background 0.12s;
 }
 
 .watchlist-table tr.watchlist-ticker-card:nth-child(even) {
-  background: #0a111a;
+  background: #131922;
 }
 
 .watchlist-table tr.watchlist-ticker-card:hover {
-  background: #131c29;
-  box-shadow: inset 2px 0 0 #ffb700;
+  background: #1c2333;
 }
 
 .watchlist-table tr.watchlist-ticker-card:last-child td {
@@ -552,8 +528,8 @@
 }
 
 .watchlist-table td {
-  padding: 0.4rem 0.65rem;
-  border-bottom: 1px solid #141f2e;
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid #21262d;
   vertical-align: middle;
   white-space: nowrap;
   box-sizing: border-box;
@@ -562,7 +538,7 @@
 /* Specific column widths and alignments */
 .watchlist-table .col-symbol {
   text-align: left;
-  width: 105px;
+  width: 90px;
 }
 
 .watchlist-table .col-indices {
@@ -582,47 +558,22 @@
 
 .watchlist-table .col-actions {
   text-align: right;
-  width: 120px;
-}
-
-/* Symbol Cell Formatting */
-.bb-symbol-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.bb-sec-dot {
-  color: #00e676;
-  font-size: 0.55rem;
-  line-height: 1;
+  width: 100px;
 }
 
 .watchlist-table .watchlist-ticker-symbol {
   font-family: var(--font-mono, monospace);
   font-size: 0.92rem;
-  font-weight: 900;
-  color: #ffb700;
-  letter-spacing: 0.06em;
+  font-weight: 800;
+  color: #58a6ff;
+  letter-spacing: 0.04em;
   cursor: pointer;
   transition: color 0.15s;
 }
 
 .watchlist-table .watchlist-ticker-symbol:hover {
-  color: #00e5ff;
+  color: #79c0ff;
   text-decoration: underline;
-}
-
-.bb-sec-tag {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.6rem;
-  font-weight: 800;
-  color: #ffb700;
-  border: 1px solid rgba(255, 183, 0, 0.4);
-  background: rgba(255, 183, 0, 0.08);
-  padding: 0 0.25rem;
-  border-radius: 2px;
-  line-height: 1.3;
 }
 
 .watchlist-table .watchlist-card-price {
@@ -651,16 +602,16 @@ div.watchlist-ticker-card {
   flex-direction: column;
   gap: 0.35rem;
   padding: 0.55rem 0.75rem;
-  background: #080d14;
-  border: 1px solid #1c2635;
-  border-radius: 2px;
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 4px;
   transition: background 0.12s, border-color 0.12s;
   box-sizing: border-box;
 }
 
 div.watchlist-ticker-card:hover {
-  background: #131c29;
-  border-color: #ffb700;
+  background: #161b22;
+  border-color: #388bfd;
 }
 
 /* Card Top: Symbol on Left, Price/Change & Actions on Right */
@@ -683,15 +634,15 @@ div.watchlist-ticker-card:hover {
 .watchlist-ticker-symbol {
   font-family: var(--font-mono, monospace);
   font-size: 1rem;
-  font-weight: 900;
-  color: #ffb700;
-  letter-spacing: 0.06em;
+  font-weight: 800;
+  color: #58a6ff;
+  letter-spacing: 0.04em;
   cursor: pointer;
   white-space: nowrap;
 }
 
 .watchlist-ticker-symbol:hover {
-  color: #00e5ff;
+  color: #79c0ff;
   text-decoration: underline;
 }
 
@@ -710,10 +661,10 @@ div.watchlist-ticker-card:hover {
 .watchlist-spot-price {
   font-family: var(--font-mono, monospace);
   font-size: 0.88rem;
-  font-weight: 900;
+  font-weight: 700;
   color: #f0f6fc;
   text-align: right;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   min-width: 65px;
   font-variant-numeric: tabular-nums;
 }
@@ -724,34 +675,34 @@ div.watchlist-ticker-card:hover {
   justify-content: flex-end;
   min-width: 58px;
   padding: 0.15rem 0.4rem;
-  border-radius: 2px;
+  border-radius: 4px;
   font-family: var(--font-mono, monospace);
   font-size: 0.72rem;
-  font-weight: 900;
-  letter-spacing: 0.04em;
+  font-weight: 800;
+  letter-spacing: 0.02em;
   box-sizing: border-box;
   font-variant-numeric: tabular-nums;
 }
 
 .watchlist-change-badge.positive {
-  background: rgba(0, 230, 118, 0.14);
-  border: 1px solid #00e676;
+  background: rgba(0, 230, 118, 0.12);
+  border: 1px solid rgba(0, 230, 118, 0.3);
   color: #00e676;
 }
 
 .watchlist-change-badge.negative {
-  background: rgba(255, 61, 0, 0.14);
-  border: 1px solid #ff3d00;
-  color: #ff3d00;
+  background: rgba(255, 82, 82, 0.12);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+  color: #ff5252;
 }
 
 .watchlist-change-badge.neutral {
-  background: rgba(148, 163, 184, 0.1);
-  border: 1px solid #475569;
-  color: #94a3b8;
+  background: rgba(139, 148, 158, 0.1);
+  border: 1px solid rgba(139, 148, 158, 0.25);
+  color: #8b949e;
 }
 
-/* Card Actions: Cockpit ↗ & Remove (WCAG >= 44px) */
+/* Card Actions: ↗ & × (WCAG >= 44px) */
 .watchlist-card-actions {
   display: flex;
   align-items: center;
@@ -765,26 +716,24 @@ div.watchlist-ticker-card:hover {
   justify-content: center;
   min-height: 44px;
   min-width: 44px;
-  padding: 0 0.55rem;
-  background: rgba(0, 229, 255, 0.1);
-  border: 1px solid rgba(0, 229, 255, 0.4);
-  border-radius: 2px;
-  color: #00e5ff;
+  padding: 0;
+  background: rgba(56, 139, 253, 0.12);
+  border: 1px solid rgba(56, 139, 253, 0.3);
+  border-radius: 4px;
+  color: #58a6ff;
   font-family: var(--font-mono, monospace);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-size: 0.88rem;
+  font-weight: 700;
   cursor: pointer;
   outline: none;
-  white-space: nowrap;
   transition: all 0.15s ease;
   box-sizing: border-box;
 }
 
 .watchlist-drilldown-btn:hover {
-  background: rgba(0, 229, 255, 0.25);
-  color: #ffffff;
-  border-color: #00e5ff;
+  background: rgba(56, 139, 253, 0.25);
+  color: #fff;
+  border-color: #58a6ff;
 }
 
 .watchlist-remove-btn {
@@ -795,9 +744,9 @@ div.watchlist-ticker-card:hover {
   min-width: 44px;
   padding: 0;
   background: transparent;
-  border: 1px solid #212e42;
-  border-radius: 2px;
-  color: #64748b;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #6e7681;
   font-size: 1.15rem;
   cursor: pointer;
   outline: none;
@@ -806,9 +755,9 @@ div.watchlist-ticker-card:hover {
 }
 
 .watchlist-remove-btn:hover {
-  background: rgba(255, 61, 0, 0.18);
-  border-color: #ff3d00;
-  color: #ff3d00;
+  background: rgba(248, 81, 73, 0.15);
+  border-color: rgba(248, 81, 73, 0.3);
+  color: #f85149;
 }
 
 /* Card Bottom: Index Badges Cleanly Displayed on Row 2 */
@@ -823,50 +772,50 @@ div.watchlist-ticker-card:hover {
 .watchlist-index-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.1rem 0.35rem;
-  border-radius: 2px;
-  font-size: 0.64rem;
+  padding: 0.12rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-family: var(--font-mono, monospace);
-  background: rgba(0, 229, 255, 0.1);
-  border: 1px solid rgba(0, 229, 255, 0.35);
-  color: #00e5ff;
+  background: rgba(56, 139, 253, 0.12);
+  border: 1px solid rgba(56, 139, 253, 0.3);
+  color: #58a6ff;
 }
 
 .watchlist-index-badge.sp500 {
-  background: rgba(255, 183, 0, 0.12);
-  border-color: rgba(255, 183, 0, 0.4);
-  color: #ffb700;
+  background: rgba(234, 179, 8, 0.12);
+  border-color: rgba(234, 179, 8, 0.3);
+  color: #fde047;
 }
 
 .watchlist-index-badge.ndx {
   background: rgba(0, 230, 118, 0.12);
-  border-color: rgba(0, 230, 118, 0.4);
+  border-color: rgba(0, 230, 118, 0.3);
   color: #00e676;
 }
 
 .watchlist-index-badge.dow {
-  background: rgba(129, 140, 248, 0.12);
-  border-color: rgba(129, 140, 248, 0.4);
-  color: #818cf8;
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
 }
 
 .watchlist-index-badge.russell {
-  background: rgba(244, 114, 182, 0.12);
-  border-color: rgba(244, 114, 182, 0.4);
+  background: rgba(236, 72, 153, 0.12);
+  border-color: rgba(236, 72, 153, 0.3);
   color: #f472b6;
 }
 
 .watchlist-index-badge.etf {
-  background: rgba(251, 146, 60, 0.12);
-  border-color: rgba(251, 146, 60, 0.4);
-  color: #fb923c;
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.3);
+  color: #fdba74;
 }
 
 /* ==============================================================================
-   Desktop Alignment (>= 768px): Full 5-Column Bloomberg Table Row
+   Desktop Alignment (>= 768px): Full 5-Column Table Row
    ============================================================================== */
 @media (min-width: 768px) {
   div.watchlist-ticker-card {
@@ -883,7 +832,7 @@ div.watchlist-ticker-card:hover {
 
   .watchlist-symbol-col {
     order: 1;
-    width: 105px;
+    width: 90px;
     flex-shrink: 0;
   }
 
@@ -915,7 +864,7 @@ div.watchlist-ticker-card:hover {
 
   .watchlist-card-actions {
     order: 4;
-    width: 120px;
+    width: 100px;
     justify-content: flex-end;
   }
 }
@@ -927,9 +876,9 @@ div.watchlist-ticker-card:hover {
   align-items: center;
   justify-content: center;
   padding: 2.5rem 1rem;
-  background: #080d14;
-  border: 1px dashed #1c2635;
-  border-radius: 3px;
+  background: #0d1117;
+  border: 1px dashed #21262d;
+  border-radius: 6px;
   text-align: center;
   color: #8b949e;
   gap: 0.5rem;
@@ -938,33 +887,30 @@ div.watchlist-ticker-card:hover {
 
 .watchlist-empty-icon {
   font-size: 1.8rem;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .watchlist-empty-title {
-  font-family: var(--font-mono, monospace);
   font-size: 0.95rem;
-  font-weight: 800;
-  color: #ffb700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 700;
+  color: #c9d1d9;
+  letter-spacing: 0.04em;
 }
 
 .watchlist-empty-desc {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.78rem;
-  color: #64748b;
-  max-width: 440px;
+  font-size: 0.8rem;
+  color: #6e7681;
+  max-width: 400px;
   line-height: 1.4;
 }
 
 .watchlist-session-expired {
-  border-color: rgba(255, 61, 0, 0.4);
-  background: rgba(255, 61, 0, 0.05);
+  border-color: rgba(248, 81, 73, 0.35);
+  background: rgba(248, 81, 73, 0.06);
 }
 
 .watchlist-session-expired .watchlist-empty-title {
-  color: #ff3d00;
+  color: #f85149;
 }
 
 .watchlist-unlock-btn {
@@ -972,54 +918,14 @@ div.watchlist-ticker-card:hover {
 }
 
 /* ==============================================================================
-   5. Bloomberg Terminal Bottom Status Footer
-   ============================================================================== */
-.watchlist-terminal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.35rem 0.65rem;
-  background: #080d14;
-  border: 1px solid #1c2635;
-  border-radius: 3px;
-  box-sizing: border-box;
-}
-
-.wtf-pane {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.7rem;
-}
-
-.wtf-k {
-  color: #ffb700;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-}
-
-.wtf-v {
-  color: #94a3b8;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.wtf-v.ok {
-  color: #00e676;
-}
-
-/* ==============================================================================
-   6. New Watchlist Modal (Bloomberg Terminal Dialog)
+   5. New Watchlist Modal
    ============================================================================== */
 .watchlist-modal-overlay {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(6px);
   z-index: 1000;
   align-items: center;
   justify-content: center;
@@ -1032,16 +938,16 @@ div.watchlist-ticker-card:hover {
 }
 
 .watchlist-modal-card {
-  background: #090e17;
-  border: 1px solid #ffb700;
-  border-radius: 3px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
   width: 100%;
-  max-width: 420px;
+  max-width: 400px;
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.9), 0 0 16px rgba(255, 183, 0, 0.15);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
   box-sizing: border-box;
 }
 
@@ -1049,18 +955,14 @@ div.watchlist-ticker-card:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #1c2635;
-  padding-bottom: 0.5rem;
 }
 
 .watchlist-modal-title {
   margin: 0;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.95rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  color: #ffb700;
-  text-transform: uppercase;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f0f6fc;
 }
 
 .watchlist-modal-close {
@@ -1074,12 +976,12 @@ div.watchlist-ticker-card:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 2px;
+  border-radius: 4px;
   box-sizing: border-box;
 }
 
 .watchlist-modal-close:hover {
-  color: #ff3d00;
+  color: #fff;
 }
 
 .watchlist-modal-body {
@@ -1089,32 +991,28 @@ div.watchlist-ticker-card:hover {
 }
 
 .watchlist-modal-label {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.74rem;
-  font-weight: 800;
-  color: #94a3b8;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #8b949e;
+  letter-spacing: 0.03em;
 }
 
 .watchlist-modal-input {
   min-height: 44px;
   padding: 0 0.85rem;
-  background: #04070b;
-  border: 1px solid #222f42;
-  border-radius: 2px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 4px;
   color: #f0f6fc;
   font-family: var(--font-mono, monospace);
-  font-size: 0.88rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 0.9rem;
   outline: none;
   box-sizing: border-box;
 }
 
 .watchlist-modal-input:focus {
-  border-color: #ffb700;
-  box-shadow: 0 0 8px rgba(255, 183, 0, 0.25);
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 1px #58a6ff;
 }
 
 .watchlist-modal-actions {
@@ -1126,51 +1024,45 @@ div.watchlist-ticker-card:hover {
 
 .watchlist-modal-btn-cancel {
   min-height: 44px;
-  min-width: 80px;
+  min-width: 70px;
   padding: 0 0.85rem;
   background: transparent;
-  border: 1px solid #334155;
-  border-radius: 2px;
-  color: #94a3b8;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #8b949e;
+  font-size: 0.78rem;
+  font-weight: 600;
   cursor: pointer;
   box-sizing: border-box;
-  transition: all 0.15s ease;
 }
 
 .watchlist-modal-btn-cancel:hover {
-  background: #1e293b;
+  background: #21262d;
   color: #f0f6fc;
 }
 
 .watchlist-modal-btn-create {
   min-height: 44px;
-  min-width: 90px;
+  min-width: 80px;
   padding: 0 1rem;
-  background: #00e676;
-  border: 1px solid #00c853;
-  border-radius: 2px;
-  color: #04070b;
+  background: rgba(0, 230, 118, 0.15);
+  border: 1px solid #00e676;
+  border-radius: 4px;
+  color: #00e676;
   font-family: var(--font-mono, monospace);
-  font-size: 0.74rem;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 0.78rem;
+  font-weight: 700;
   cursor: pointer;
   box-sizing: border-box;
-  transition: all 0.15s ease;
 }
 
 .watchlist-modal-btn-create:hover {
-  background: #69f0ae;
-  box-shadow: 0 0 10px rgba(0, 230, 118, 0.5);
+  background: rgba(0, 230, 118, 0.25);
+  color: #fff;
 }
 
 /* ==============================================================================
-   7. Tick Flashes
+   6. Tick Flashes
    ============================================================================== */
 .price-flash-green {
   animation: tickFlashGreen 0.7s ease-out;

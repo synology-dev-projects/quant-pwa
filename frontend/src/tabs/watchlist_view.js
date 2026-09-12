@@ -19,11 +19,10 @@ export class WatchlistView {
     this.container = container;
     this.container.innerHTML = `
       <div class="watchlist-view-container">
-        <!-- Top Bloomberg Header: Brand & Live Streaming Status -->
+        <!-- Top Header: Title & 5s Live Streaming Status -->
         <div class="watchlist-header-bar">
           <div class="watchlist-title-group">
-            <span class="bb-terminal-tag">BMON</span>
-            <h1 class="watchlist-title">WATCHLISTS // MONITOR</h1>
+            <h1 class="watchlist-title">WATCHLISTS</h1>
             <span class="watchlist-count-badge" id="watchlistCountBadge">0 TICKERS</span>
             <span class="watchlist-live-tag" id="watchlistLiveTag" title="Live quote feed (updates every 5s)">
               <span class="dot-live"></span> 5s LIVE
@@ -34,32 +33,30 @@ export class WatchlistView {
           <select id="watchlistSelect" class="watchlist-select" style="display:none;" aria-label="Select Watchlist"></select>
         </div>
 
-        <!-- 1-Tap Watchlist Function Sheets Bar -->
+        <!-- 1-Tap Watchlist Tabs Strip -->
         <div class="watchlist-pills-bar">
-          <span class="bb-sheet-tag">SHEETS:</span>
           <div class="watchlist-pills-strip" id="watchlistPillsStrip" role="tablist" aria-label="Watchlists tabs">
             <!-- Populated dynamically via renderWatchlistPills() -->
           </div>
           <div class="watchlist-pill-actions">
-            <button type="button" class="watchlist-btn watchlist-btn-primary" id="newWatchlistBtn" title="Create New Watchlist">
-              + New &lt;F2&gt;
+            <button type="button" class="watchlist-btn watchlist-btn-primary watchlist-btn-add-tab" id="newWatchlistBtn" title="Create New Watchlist" aria-label="Create New Watchlist">
+              +
             </button>
-            <button type="button" class="watchlist-btn watchlist-btn-danger" id="deleteWatchlistBtn" title="Delete Active Watchlist">
-              Del &lt;F3&gt;
+            <button type="button" class="watchlist-btn watchlist-btn-danger" id="deleteWatchlistBtn" style="display:none;" aria-hidden="true" title="Delete Active Watchlist">
+              &times;
             </button>
           </div>
         </div>
 
-        <!-- Compact Bloomberg Command Bar: Single-Row Ticker Entry -->
+        <!-- Compact Command Bar: Ticker Entry -->
         <div class="watchlist-add-box">
           <form id="watchlistAddForm" class="watchlist-add-form" autocomplete="off">
             <div class="watchlist-input-wrapper">
-              <span class="watchlist-terminal-prompt">CMD &gt;</span>
               <input
                 type="text"
                 id="watchlistTickerInput"
                 class="watchlist-input"
-                placeholder="ENTER TICKER (e.g. NVDA, SPY) &lt;GO&gt;..."
+                placeholder="Search or add ticker (e.g. NVDA, SPY)..."
                 maxlength="12"
                 autocomplete="off"
                 autocapitalize="characters"
@@ -70,13 +67,13 @@ export class WatchlistView {
               <div id="watchlistAutocompleteMenu" class="watchlist-autocomplete-menu" style="display:none;"></div>
             </div>
             <button type="submit" id="watchlistAddBtn" class="watchlist-btn-add">
-              <span>+ Add &lt;GO&gt;</span>
+              <span>+ Add</span>
             </button>
           </form>
           <div id="watchlistValidationMsg" class="watchlist-validation-msg" role="status" aria-live="polite"></div>
         </div>
 
-        <!-- Bloomberg Table Container -->
+        <!-- Watchlist Table Container -->
         <div id="watchlistGrid" class="watchlist-table-wrapper">
           <table class="quant-table watchlist-table">
             <thead class="watchlist-table-header" id="watchlistTableHeader">
@@ -89,7 +86,7 @@ export class WatchlistView {
                 </th>
                 <th class="wth-col col-indices sortable" data-sort="indices" scope="col" tabindex="0">
                   <div class="th-content">
-                    <span>INDICES / EXCHANGE</span>
+                    <span>INDICES</span>
                     <span class="sort-glyph">⇅</span>
                   </div>
                 </th>
@@ -123,13 +120,6 @@ export class WatchlistView {
               </tr>
             </tbody>
           </table>
-        </div>
-
-        <!-- Terminal Status Footer -->
-        <div class="watchlist-terminal-footer">
-          <div class="wtf-pane"><span class="wtf-k">MODE:</span> <span class="wtf-v">BMON LIVE</span></div>
-          <div class="wtf-pane"><span class="wtf-k">ACTIVE:</span> <span class="wtf-v" id="wfsActiveName">CORE WATCHLIST</span></div>
-          <div class="wtf-pane"><span class="wtf-k">FEED:</span> <span class="wtf-v ok">ONLINE // 5s</span></div>
         </div>
       </div>
 
@@ -431,41 +421,65 @@ export class WatchlistView {
 
   renderWatchlistPills() {
     const strip = this.container?.querySelector?.('#watchlistPillsStrip');
-    const footerActive = this.container?.querySelector?.('#wfsActiveName');
     if (!strip) return;
 
     if (this.watchlists.length === 0) {
-      strip.innerHTML = '<span class="watchlist-empty-pills">&lt;NO WATCHLISTS&gt;</span>';
-      if (footerActive) footerActive.textContent = 'NONE';
+      strip.innerHTML = '<span class="watchlist-empty-pills">No watchlists</span>';
       return;
     }
 
-    const current = this.watchlists.find(w => w.id === this.selectedWatchlistId);
-    if (footerActive && current) {
-      footerActive.textContent = current.name.toUpperCase();
-    }
-
-    strip.innerHTML = this.watchlists.map((w, idx) => {
+    strip.innerHTML = this.watchlists.map(w => {
       const isActive = w.id === this.selectedWatchlistId;
       const count = w.tickers ? w.tickers.length : 0;
       return `
-        <button type="button" class="watchlist-pill ${isActive ? 'active' : ''}" data-id="${w.id}" role="tab" aria-selected="${isActive}">
-          <span class="bb-tab-idx">[${idx + 1}]</span>
+        <div class="watchlist-pill ${isActive ? 'active' : ''}" data-id="${w.id}" role="tab" tabindex="0" aria-selected="${isActive}">
           <span class="watchlist-pill-name">${w.name}</span>
           <span class="watchlist-pill-count">${count}</span>
-        </button>
+          <button type="button" class="watchlist-tab-del-btn" data-id="${w.id}" title="Delete ${w.name}" aria-label="Delete ${w.name}">&times;</button>
+        </div>
       `;
     }).join('');
 
-    strip.querySelectorAll('.watchlist-pill').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const id = e.currentTarget.getAttribute('data-id');
+    strip.querySelectorAll('.watchlist-pill').forEach(pill => {
+      pill.addEventListener('click', (e) => {
+        if (e.target.closest('.watchlist-tab-del-btn')) return;
+        const id = pill.getAttribute('data-id');
         if (id && id !== this.selectedWatchlistId) {
           this.selectedWatchlistId = id;
           this.clearValidationMessage();
           this.renderWatchlistSelect();
           this.renderTickers();
           this.fetchQuotes();
+        }
+      });
+      pill.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          if (e.target.closest('.watchlist-tab-del-btn')) return;
+          e.preventDefault();
+          const id = pill.getAttribute('data-id');
+          if (id && id !== this.selectedWatchlistId) {
+            this.selectedWatchlistId = id;
+            this.clearValidationMessage();
+            this.renderWatchlistSelect();
+            this.renderTickers();
+            this.fetchQuotes();
+          }
+        }
+      });
+    });
+
+    strip.querySelectorAll('.watchlist-tab-del-btn').forEach(delBtn => {
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = delBtn.getAttribute('data-id');
+        if (!id) return;
+        const current = this.watchlists.find(w => w.id === id);
+        const name = current ? current.name : 'this watchlist';
+        const ok = (typeof window !== 'undefined' && window.confirm)
+          ? window.confirm(`Are you sure you want to delete "${name}"?`)
+          : true;
+        if (ok) {
+          await this.deleteWatchlist(id);
         }
       });
     });
@@ -608,11 +622,7 @@ export class WatchlistView {
       return `
         <tr class="watchlist-ticker-card watchlist-table-row" data-ticker="${t.ticker}">
           <td class="col-symbol">
-            <div class="bb-symbol-cell">
-              <span class="bb-sec-dot">●</span>
-              <span class="watchlist-ticker-symbol" data-ticker="${t.ticker}" title="Open in Cockpit">${t.ticker}</span>
-              <span class="bb-sec-tag">US</span>
-            </div>
+            <span class="watchlist-ticker-symbol" data-ticker="${t.ticker}" title="Open in Cockpit">${t.ticker}</span>
           </td>
           <td class="col-indices">
             <div class="watchlist-index-badges">
@@ -629,7 +639,7 @@ export class WatchlistView {
           </td>
           <td class="col-actions">
             <div class="watchlist-card-actions">
-              <button type="button" class="watchlist-drilldown-btn" data-ticker="${t.ticker}" title="Inspect ${t.ticker} in Cockpit">
+              <button type="button" class="watchlist-drilldown-btn" data-ticker="${t.ticker}" title="Inspect ${t.ticker} in Cockpit" aria-label="Inspect ${t.ticker} in Cockpit">
                 Cockpit ↗
               </button>
               <button type="button" class="watchlist-remove-btn" data-ticker="${t.ticker}" title="Remove ${t.ticker}" aria-label="Remove ${t.ticker}">
@@ -653,7 +663,7 @@ export class WatchlistView {
             </th>
             <th class="wth-col col-indices sortable ${this.sortColumn === 'indices' ? 'active sort-' + this.sortDirection : ''}" data-sort="indices" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('indices')}">
               <div class="th-content">
-                <span>INDICES / EXCHANGE</span>
+                <span>INDICES</span>
                 <span class="sort-glyph">${this.getSortGlyph('indices')}</span>
               </div>
             </th>
