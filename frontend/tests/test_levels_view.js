@@ -214,7 +214,10 @@ import('../src/tabs/levels_view.js').then(async ({ LevelsView }) => {
   assert(ladderHtml.includes('type-pivot'), 'Contains PIVOT row class');
   assert(ladderHtml.includes('immediate-res'), 'Immediate resistance row tagged');
   assert(ladderHtml.includes('immediate-sup'), 'Immediate support row tagged');
-  console.log('  ✓ PASS: Price ladder inserts dynamic spot marker at exact price height with proper tags');
+  assert(ladderHtml.includes('Major overhead supply'), 'Ladder renders level commentary');
+  assert(ladderHtml.includes('Immediate call wall'), 'Ladder renders resistance commentary');
+  assert(ladderHtml.includes('ladder-comment-row'), 'Ladder contains dedicated comment row structure');
+  console.log('  ✓ PASS: Price ladder inserts dynamic spot marker at exact price height with proper tags & commentary');
 
   console.log('\n--- TEST 5: Structured Levels Table Rendering ---');
   assert(mount.innerHTML.includes('levels-table'), 'Table wrapper present');

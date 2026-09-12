@@ -273,19 +273,27 @@ export class LevelsView {
 
     const sign = lvl.distance_pts >= 0 ? '+' : '';
     const formattedDelta = `${sign}${lvl.distance_pts.toFixed(2)} pts (${sign}${lvl.distance_pct.toFixed(2)}%)`;
+    const commentText = (lvl.comments || lvl.comment || lvl.COMMENTS || '').trim();
 
     return `
-      <div class="ladder-row ${typeClass} ${immClass}">
-        <div class="ladder-left">
-          <span class="ladder-tag ${tagClass}">${lvl.type}</span>
-          <span class="ladder-price">${lvl.price_display}</span>
-          ${lvl.comments ? `<span class="ladder-comment">${lvl.comments}</span>` : ''}
+      <div class="ladder-row ${typeClass} ${immClass}" ${commentText ? `title="Commentary: ${commentText}"` : ''}>
+        <div class="ladder-row-main">
+          <div class="ladder-left">
+            <span class="ladder-tag ${tagClass}">${lvl.type}</span>
+            <span class="ladder-price">${lvl.price_display}</span>
+          </div>
+          <div class="ladder-right">
+            ${lvl.is_immediate_resistance ? '<span class="ladder-tag tag-sell">IMM RESISTANCE</span>' : ''}
+            ${lvl.is_immediate_support ? '<span class="ladder-tag tag-buy">IMM SUPPORT</span>' : ''}
+            <span class="ladder-delta ${deltaClass}">${formattedDelta}</span>
+          </div>
         </div>
-        <div class="ladder-right">
-          ${lvl.is_immediate_resistance ? '<span class="ladder-tag tag-sell">IMM RESISTANCE</span>' : ''}
-          ${lvl.is_immediate_support ? '<span class="ladder-tag tag-buy">IMM SUPPORT</span>' : ''}
-          <span class="ladder-delta ${deltaClass}">${formattedDelta}</span>
-        </div>
+        ${commentText ? `
+          <div class="ladder-comment-row ladder-comment">
+            <span class="ladder-comment-icon">💬</span>
+            <span class="ladder-comment-text">${commentText}</span>
+          </div>
+        ` : ''}
       </div>
     `;
   }
