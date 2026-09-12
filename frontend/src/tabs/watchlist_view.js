@@ -22,8 +22,8 @@ export class WatchlistView {
         <!-- Top Bloomberg Header: Brand & Live Streaming Status -->
         <div class="watchlist-header-bar">
           <div class="watchlist-title-group">
-            <span class="watchlist-badge-icon">📋</span>
-            <h1 class="watchlist-title">WATCHLISTS</h1>
+            <span class="bb-terminal-tag">BMON</span>
+            <h1 class="watchlist-title">WATCHLISTS // MONITOR</h1>
             <span class="watchlist-count-badge" id="watchlistCountBadge">0 TICKERS</span>
             <span class="watchlist-live-tag" id="watchlistLiveTag" title="Live quote feed (updates every 5s)">
               <span class="dot-live"></span> 5s LIVE
@@ -34,17 +34,18 @@ export class WatchlistView {
           <select id="watchlistSelect" class="watchlist-select" style="display:none;" aria-label="Select Watchlist"></select>
         </div>
 
-        <!-- 1-Tap Watchlist Pill Strip Switcher -->
+        <!-- 1-Tap Watchlist Function Sheets Bar -->
         <div class="watchlist-pills-bar">
+          <span class="bb-sheet-tag">SHEETS:</span>
           <div class="watchlist-pills-strip" id="watchlistPillsStrip" role="tablist" aria-label="Watchlists tabs">
             <!-- Populated dynamically via renderWatchlistPills() -->
           </div>
           <div class="watchlist-pill-actions">
             <button type="button" class="watchlist-btn watchlist-btn-primary" id="newWatchlistBtn" title="Create New Watchlist">
-              + New
+              + New &lt;F2&gt;
             </button>
             <button type="button" class="watchlist-btn watchlist-btn-danger" id="deleteWatchlistBtn" title="Delete Active Watchlist">
-              Delete
+              Del &lt;F3&gt;
             </button>
           </div>
         </div>
@@ -53,12 +54,12 @@ export class WatchlistView {
         <div class="watchlist-add-box">
           <form id="watchlistAddForm" class="watchlist-add-form" autocomplete="off">
             <div class="watchlist-input-wrapper">
-              <span class="watchlist-terminal-prompt">&gt;</span>
+              <span class="watchlist-terminal-prompt">CMD &gt;</span>
               <input
                 type="text"
                 id="watchlistTickerInput"
                 class="watchlist-input"
-                placeholder="ENTER TICKER (e.g. NVDA, SPY)..."
+                placeholder="ENTER TICKER (e.g. NVDA, SPY) &lt;GO&gt;..."
                 maxlength="12"
                 autocomplete="off"
                 autocapitalize="characters"
@@ -69,7 +70,7 @@ export class WatchlistView {
               <div id="watchlistAutocompleteMenu" class="watchlist-autocomplete-menu" style="display:none;"></div>
             </div>
             <button type="submit" id="watchlistAddBtn" class="watchlist-btn-add">
-              <span>+ Add</span>
+              <span>+ Add &lt;GO&gt;</span>
             </button>
           </form>
           <div id="watchlistValidationMsg" class="watchlist-validation-msg" role="status" aria-live="polite"></div>
@@ -122,6 +123,13 @@ export class WatchlistView {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Terminal Status Footer -->
+        <div class="watchlist-terminal-footer">
+          <div class="wtf-pane"><span class="wtf-k">MODE:</span> <span class="wtf-v">BMON LIVE</span></div>
+          <div class="wtf-pane"><span class="wtf-k">ACTIVE:</span> <span class="wtf-v" id="wfsActiveName">CORE WATCHLIST</span></div>
+          <div class="wtf-pane"><span class="wtf-k">FEED:</span> <span class="wtf-v ok">ONLINE // 5s</span></div>
         </div>
       </div>
 
@@ -423,18 +431,26 @@ export class WatchlistView {
 
   renderWatchlistPills() {
     const strip = this.container?.querySelector?.('#watchlistPillsStrip');
+    const footerActive = this.container?.querySelector?.('#wfsActiveName');
     if (!strip) return;
 
     if (this.watchlists.length === 0) {
-      strip.innerHTML = '<span class="watchlist-empty-pills">NO WATCHLISTS</span>';
+      strip.innerHTML = '<span class="watchlist-empty-pills">&lt;NO WATCHLISTS&gt;</span>';
+      if (footerActive) footerActive.textContent = 'NONE';
       return;
     }
 
-    strip.innerHTML = this.watchlists.map(w => {
+    const current = this.watchlists.find(w => w.id === this.selectedWatchlistId);
+    if (footerActive && current) {
+      footerActive.textContent = current.name.toUpperCase();
+    }
+
+    strip.innerHTML = this.watchlists.map((w, idx) => {
       const isActive = w.id === this.selectedWatchlistId;
       const count = w.tickers ? w.tickers.length : 0;
       return `
         <button type="button" class="watchlist-pill ${isActive ? 'active' : ''}" data-id="${w.id}" role="tab" aria-selected="${isActive}">
+          <span class="bb-tab-idx">[${idx + 1}]</span>
           <span class="watchlist-pill-name">${w.name}</span>
           <span class="watchlist-pill-count">${count}</span>
         </button>
@@ -592,7 +608,11 @@ export class WatchlistView {
       return `
         <tr class="watchlist-ticker-card watchlist-table-row" data-ticker="${t.ticker}">
           <td class="col-symbol">
-            <span class="watchlist-ticker-symbol" data-ticker="${t.ticker}" title="Open in Cockpit">${t.ticker}</span>
+            <div class="bb-symbol-cell">
+              <span class="bb-sec-dot">●</span>
+              <span class="watchlist-ticker-symbol" data-ticker="${t.ticker}" title="Open in Cockpit">${t.ticker}</span>
+              <span class="bb-sec-tag">US</span>
+            </div>
           </td>
           <td class="col-indices">
             <div class="watchlist-index-badges">
