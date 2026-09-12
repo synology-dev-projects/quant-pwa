@@ -276,6 +276,95 @@ import('../src/tabs/watchlist_view.js').then(async ({ WatchlistView }) => {
   assert(pillHtml.includes('active'), 'Active pill marked with active class');
   console.log('  ✓ PASS: 1-Tap Watchlist Pills rendered with active status & ticker counts');
 
+  console.log('\n--- TEST 10: Table Column Sorting (Alphabetical & Numerical) ---');
+  watchlistView.quotes = {
+    NVDA: { ticker: 'NVDA', price: 218.50, change: 3.50, change_pct: 1.63 },
+    SPY: { ticker: 'SPY', price: 540.20, change: -1.80, change_pct: -0.33 },
+    ADEA: { ticker: 'ADEA', price: 11.20, change: 0.15, change_pct: 1.36 }
+  };
+  const unsorted = [
+    { ticker: 'SPY', indices: ['Major ETF'] },
+    { ticker: 'NVDA', indices: ['S&P 500', 'Nasdaq 100'] },
+    { ticker: 'ADEA', indices: ['Nasdaq', 'Russell 2000'] }
+  ];
+
+  // Symbol sort asc
+  watchlistView.sortColumn = 'symbol';
+  watchlistView.sortDirection = 'asc';
+  let sorted = watchlistView.getSortedTickers(unsorted);
+  assert.equal(sorted[0].ticker, 'ADEA', 'Symbol ASC first is ADEA');
+  assert.equal(sorted[1].ticker, 'NVDA', 'Symbol ASC second is NVDA');
+  assert.equal(sorted[2].ticker, 'SPY', 'Symbol ASC third is SPY');
+
+  // Symbol sort desc
+  watchlistView.sortDirection = 'desc';
+  sorted = watchlistView.getSortedTickers(unsorted);
+  assert.equal(sorted[0].ticker, 'SPY', 'Symbol DESC first is SPY');
+  assert.equal(sorted[2].ticker, 'ADEA', 'Symbol DESC last is ADEA');
+
+  // Price sort desc
+  watchlistView.sortColumn = 'price';
+  watchlistView.sortDirection = 'desc';
+  sorted = watchlistView.getSortedTickers(unsorted);
+  assert.equal(sorted[0].ticker, 'SPY', 'Price DESC first is SPY ($540.20)');
+  assert.equal(sorted[2].ticker, 'ADEA', 'Price DESC last is ADEA ($11.20)');
+
+  // Change sort desc
+  watchlistView.sortColumn = 'change';
+  watchlistView.sortDirection = 'desc';
+  sorted = watchlistView.getSortedTickers(unsorted);
+  assert.equal(sorted[0].ticker, 'NVDA', 'Change DESC first is NVDA (+1.63%)');
+  assert.equal(sorted[2].ticker, 'SPY', 'Change DESC last is SPY (-0.33%)');
+
+  // Sort glyphs
+  assert.equal(watchlistView.getSortGlyph('change'), '▼', 'Active desc glyph is ▼');
+  watchlistView.sortDirection = 'asc';
+  assert.equal(watchlistView.getSortGlyph('change'), '▲', 'Active asc glyph is ▲');
+  assert.equal(watchlistView.getSortGlyph('symbol'), '⇅', 'Inactive glyph is ⇅');
+  console.log('  ✓ PASS: Table sorting verified for Symbol, Price, Change % with bidirectional toggles');
+
+  console.log('\n--- TEST 11: 401 Session Expired Handling & Inline Unlock ---');
+  let lockScreenShown = false;
+  global.window.quantApp = {
+    lockScreen: {
+      show: () => { lockScreenShown = true; }
+    }
+  };
+
+  let sessionExpiredHtml = '';
+  let unlockClickListener = null;
+  const mockGridFor401 = {
+    set innerHTML(html) { sessionExpiredHtml = html; },
+    get innerHTML() { return sessionExpiredHtml; },
+    querySelector: (sel) => {
+      if (sel === '#watchlistUnlockBtn') {
+        return {
+          addEventListener: (evt, fn) => {
+            if (evt === 'click') unlockClickListener = fn;
+          }
+        };
+      }
+      return null;
+    }
+  };
+
+  watchlistView.container = {
+    querySelector: (sel) => {
+      if (sel === '#watchlistGrid') return mockGridFor401;
+      return null;
+    }
+  };
+
+  watchlistView.renderSessionExpiredState();
+  assert(sessionExpiredHtml.includes('watchlist-session-expired'), 'Renders session expired state');
+  assert(sessionExpiredHtml.includes('Session Expired'), 'Includes title Session Expired');
+  assert(sessionExpiredHtml.includes('watchlistUnlockBtn'), 'Renders unlock button');
+  assert(typeof unlockClickListener === 'function', 'Attaches click listener to unlock button');
+
+  unlockClickListener();
+  assert.equal(lockScreenShown, true, 'Clicking unlock triggers lockScreen.show()');
+  console.log('  ✓ PASS: 401 Session Expired renders inline recovery card and triggers lock screen');
+
   console.log('\n==================================================================');
   console.log('  ALL WATCHLIST VIEW TESTS PASSED (100% GREEN)');
   console.log('==================================================================');

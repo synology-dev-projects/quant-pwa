@@ -421,58 +421,155 @@
 }
 
 /* ==============================================================================
-   4. Bloomberg Table Header
+   4. Bloomberg Real Table & Horizontal Scroll Wrapper
    ============================================================================== */
-.watchlist-table-header {
-  display: none; /* Hidden on mobile to eliminate misaligned column headers */
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.35rem 0.75rem;
-  background: #161b22;
+.watchlist-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #0d1117;
   border: 1px solid #21262d;
-  border-radius: 4px;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: #8b949e;
-  text-transform: uppercase;
+  border-radius: 6px;
   box-sizing: border-box;
 }
 
-.wth-col {
-  display: flex;
+.watchlist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+  color: #c9d1d9;
+  min-width: 560px; /* Guarantees zero column collision/overlap on any viewport */
+}
+
+.watchlist-table thead.watchlist-table-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #161b22;
+}
+
+.watchlist-table th.wth-col {
+  padding: 0.55rem 0.65rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid #30363d;
+  white-space: nowrap;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.watchlist-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+}
+
+.watchlist-table th.sortable:hover {
+  color: #f0f6fc;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.watchlist-table th.sortable.active {
+  color: #ffb700;
+}
+
+.watchlist-table th .th-content {
+  display: inline-flex;
   align-items: center;
+  gap: 0.35rem;
 }
 
-.wth-col.col-symbol {
+.watchlist-table th .sort-glyph {
+  font-size: 0.75rem;
+  color: #6e7681;
+}
+
+.watchlist-table th.sortable.active .sort-glyph {
+  color: #ffb700;
+}
+
+.watchlist-table tr.watchlist-ticker-card {
+  background: #0d1117;
+  border-bottom: 1px solid #21262d;
+  transition: background 0.12s;
+}
+
+.watchlist-table tr.watchlist-ticker-card:hover {
+  background: #161b22;
+}
+
+.watchlist-table tr.watchlist-ticker-card:last-child td {
+  border-bottom: none;
+}
+
+.watchlist-table td {
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid #21262d;
+  vertical-align: middle;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+/* Specific column widths and alignments */
+.watchlist-table .col-symbol {
+  text-align: left;
   width: 90px;
-  flex-shrink: 0;
 }
 
-.wth-col.col-indices {
-  flex: 1;
-  padding: 0 0.5rem;
+.watchlist-table .col-indices {
+  text-align: left;
+  min-width: 170px;
 }
 
-.wth-col.col-price {
-  width: 90px;
-  justify-content: flex-end;
+.watchlist-table .col-price {
+  text-align: right;
+  width: 105px;
 }
 
-.wth-col.col-change {
-  width: 80px;
-  justify-content: flex-end;
+.watchlist-table .col-change {
+  text-align: right;
+  width: 95px;
 }
 
-.wth-col.col-actions {
+.watchlist-table .col-actions {
+  text-align: right;
   width: 120px;
+}
+
+.watchlist-table .watchlist-ticker-symbol {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #58a6ff;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.watchlist-table .watchlist-ticker-symbol:hover {
+  color: #79c0ff;
+  text-decoration: underline;
+}
+
+.watchlist-table .watchlist-card-price {
+  display: inline-flex;
+  align-items: center;
   justify-content: flex-end;
 }
 
-/* ==============================================================================
-   5. Dense Bloomberg Ticker Rows / Grid
-   ============================================================================== */
+.watchlist-table .watchlist-card-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+
+/* Fallback div styles if rendered in non-table context */
 .watchlist-grid {
   display: flex;
   flex-direction: column;
@@ -480,7 +577,7 @@
   box-sizing: border-box;
 }
 
-.watchlist-ticker-card {
+div.watchlist-ticker-card {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -492,7 +589,7 @@
   box-sizing: border-box;
 }
 
-.watchlist-ticker-card:hover {
+div.watchlist-ticker-card:hover {
   background: #161b22;
   border-color: #388bfd;
 }
@@ -699,11 +796,7 @@
    Desktop Alignment (>= 768px): Full 5-Column Bloomberg Table Row
    ============================================================================== */
 @media (min-width: 768px) {
-  .watchlist-table-header {
-    display: flex;
-  }
-
-  .watchlist-ticker-card {
+  div.watchlist-ticker-card {
     display: flex;
     flex-direction: row;
     align-items: center;

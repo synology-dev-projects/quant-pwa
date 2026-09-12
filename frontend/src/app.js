@@ -83,8 +83,11 @@ class App {
     if (this.flowView && AppState.getActiveTab() === 'flow') {
       this.flowView.loadFlowData();
     }
-    if (this.watchlistView && AppState.getActiveTab() === 'watchlists') {
-      this.watchlistView.loadWatchlists();
+    if (this.watchlistView) {
+      this.watchlistView.loadAvailableTickers();
+      if (AppState.getActiveTab() === 'watchlists') {
+        this.watchlistView.loadWatchlists();
+      }
     }
     if (this.levelsView && AppState.getActiveTab() === 'levels') {
       this.levelsView.loadLevelsData();
@@ -115,6 +118,7 @@ class App {
       }
       if (tabId === 'watchlists' && this.watchlistView) {
         if (!this.watchlistView.watchlists || this.watchlistView.watchlists.length === 0) {
+          this.watchlistView.loadAvailableTickers();
           this.watchlistView.loadWatchlists();
         } else {
           this.watchlistView.startQuotePolling();

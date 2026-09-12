@@ -10,6 +10,9 @@ export class WatchlistView {
     this.pollInterval = null;
     this.visibilityHandler = null;
     this.availableTickers = [];
+    this.sortColumn = 'symbol';
+    this.sortDirection = 'asc';
+    this._sessionExpiredBound = false;
   }
 
   render(container) {
@@ -72,21 +75,53 @@ export class WatchlistView {
           <div id="watchlistValidationMsg" class="watchlist-validation-msg" role="status" aria-live="polite"></div>
         </div>
 
-        <!-- Bloomberg Table Header -->
-        <div class="watchlist-table-header" id="watchlistTableHeader">
-          <span class="wth-col col-symbol">SYMBOL</span>
-          <span class="wth-col col-indices">INDICES / EXCHANGE</span>
-          <span class="wth-col col-price">LAST SPOT</span>
-          <span class="wth-col col-change">24H CHG</span>
-          <span class="wth-col col-actions">ACTIONS</span>
-        </div>
-
-        <!-- Tickers Grid / Dense Rows -->
-        <div id="watchlistGrid" class="watchlist-grid">
-          <div class="watchlist-empty-state">
-            <div class="watchlist-empty-icon">⏳</div>
-            <div class="watchlist-empty-title">Loading Watchlist...</div>
-          </div>
+        <!-- Bloomberg Table Container -->
+        <div id="watchlistGrid" class="watchlist-table-wrapper">
+          <table class="quant-table watchlist-table">
+            <thead class="watchlist-table-header" id="watchlistTableHeader">
+              <tr>
+                <th class="wth-col col-symbol sortable active" data-sort="symbol" scope="col" tabindex="0">
+                  <div class="th-content">
+                    <span>SYMBOL</span>
+                    <span class="sort-glyph">▲</span>
+                  </div>
+                </th>
+                <th class="wth-col col-indices sortable" data-sort="indices" scope="col" tabindex="0">
+                  <div class="th-content">
+                    <span>INDICES / EXCHANGE</span>
+                    <span class="sort-glyph">⇅</span>
+                  </div>
+                </th>
+                <th class="wth-col col-price sortable" data-sort="price" scope="col" tabindex="0">
+                  <div class="th-content">
+                    <span>LAST SPOT</span>
+                    <span class="sort-glyph">⇅</span>
+                  </div>
+                </th>
+                <th class="wth-col col-change sortable" data-sort="change" scope="col" tabindex="0">
+                  <div class="th-content">
+                    <span>24H CHG</span>
+                    <span class="sort-glyph">⇅</span>
+                  </div>
+                </th>
+                <th class="wth-col col-actions" scope="col">
+                  <div class="th-content">
+                    <span>ACTIONS</span>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="watchlist-table-body">
+              <tr>
+                <td colspan="5">
+                  <div class="watchlist-empty-state">
+                    <div class="watchlist-empty-icon">⏳</div>
+                    <div class="watchlist-empty-title">Loading Watchlist...</div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -116,8 +151,12 @@ export class WatchlistView {
     `;
 
     this.bindEvents();
-    this.loadWatchlists();
-    this.loadAvailableTickers();
+    if (AppState && AppState.getSessionToken()) {
+      this.loadWatchlists();
+      this.loadAvailableTickers();
+    } else {
+      this.renderSessionExpiredState();
+    }
   }
 
   bindEvents() {
@@ -282,6 +321,21 @@ export class WatchlistView {
       };
       document.addEventListener('visibilitychange', this.visibilityHandler);
     }
+
+    // Session Expired Event Listeners
+    if (!this._sessionExpiredBound && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('quant-session-expired', () => {
+        this.stopQuotePolling();
+        this.renderSessionExpiredState();
+      });
+      this._sessionExpiredBound = true;
+    }
+    if (AppState && typeof AppState.onSessionExpired === 'function') {
+      AppState.onSessionExpired(() => {
+        this.stopQuotePolling();
+        this.renderSessionExpiredState();
+      });
+    }
   }
 
   showValidationMessage(msg, isError = false) {
@@ -318,7 +372,12 @@ export class WatchlistView {
       this.startQuotePolling();
     } catch (err) {
       console.error('[Watchlist] Error loading watchlists:', err);
-      this.showValidationMessage(`Unable to load watchlists: ${err.message}`, true);
+      if (err.message && (err.message.includes('401') || err.message.includes('SessionExpired'))) {
+        this.stopQuotePolling();
+        this.renderSessionExpiredState();
+      } else {
+        this.showValidationMessage(`Unable to load watchlists: ${err.message}`, true);
+      }
     } finally {
       this.isLoading = false;
     }
@@ -396,13 +455,93 @@ export class WatchlistView {
     });
   }
 
+  renderSessionExpiredState() {
+    const grid = this.container?.querySelector?.('#watchlistGrid');
+    if (!grid) return;
+    grid.innerHTML = `
+      <div class="watchlist-empty-state watchlist-session-expired">
+        <div class="watchlist-empty-icon">🔒</div>
+        <div class="watchlist-empty-title">Session Expired</div>
+        <div class="watchlist-empty-desc">
+          Institutional access requires an active terminal session. Tap below to unlock live watchlists.
+        </div>
+        <button type="button" class="watchlist-btn watchlist-btn-primary watchlist-unlock-btn" id="watchlistUnlockBtn">
+          Unlock Terminal
+        </button>
+      </div>
+    `;
+    const unlockBtn = grid.querySelector?.('#watchlistUnlockBtn');
+    if (unlockBtn) {
+      unlockBtn.addEventListener('click', () => {
+        if (typeof window !== 'undefined' && window.quantApp?.lockScreen) {
+          window.quantApp.lockScreen.show();
+        }
+      });
+    }
+  }
+
+  getSortGlyph(column) {
+    if (this.sortColumn !== column) return '⇅';
+    return this.sortDirection === 'asc' ? '▲' : '▼';
+  }
+
+  getAriaSort(column) {
+    if (this.sortColumn !== column) return 'none';
+    return this.sortDirection === 'asc' ? 'ascending' : 'descending';
+  }
+
+  handleSort(col) {
+    if (this.sortColumn === col) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortColumn = col;
+      this.sortDirection = (col === 'price' || col === 'change') ? 'desc' : 'asc';
+    }
+    this.renderTickers();
+  }
+
+  getSortedTickers(tickers) {
+    if (!Array.isArray(tickers)) return [];
+    const list = [...tickers];
+    const dir = this.sortDirection === 'desc' ? -1 : 1;
+
+    list.sort((a, b) => {
+      if (this.sortColumn === 'symbol') {
+        return dir * (a.ticker || '').localeCompare(b.ticker || '');
+      }
+      if (this.sortColumn === 'indices') {
+        const strA = (a.indices || []).join(' ');
+        const strB = (b.indices || []).join(' ');
+        return dir * strA.localeCompare(strB);
+      }
+      if (this.sortColumn === 'price') {
+        const qA = this.quotes[a.ticker]?.price;
+        const qB = this.quotes[b.ticker]?.price;
+        const valA = (typeof qA === 'number') ? qA : -Infinity;
+        const valB = (typeof qB === 'number') ? qB : -Infinity;
+        return dir * (valA - valB);
+      }
+      if (this.sortColumn === 'change') {
+        const qA = this.quotes[a.ticker]?.change_pct;
+        const qB = this.quotes[b.ticker]?.change_pct;
+        const valA = (typeof qA === 'number') ? qA : -Infinity;
+        const valB = (typeof qB === 'number') ? qB : -Infinity;
+        return dir * (valA - valB);
+      }
+      return 0;
+    });
+
+    return list;
+  }
+
   renderTickers() {
     const grid = this.container?.querySelector?.('#watchlistGrid');
     const badge = this.container?.querySelector?.('#watchlistCountBadge');
     if (!grid) return;
 
     const current = this.watchlists.find(w => w.id === this.selectedWatchlistId);
-    const tickers = current?.tickers || [];
+    const rawTickers = current?.tickers || [];
+    const tickers = this.getSortedTickers(rawTickers);
 
     if (badge) {
       badge.textContent = `${tickers.length} TICKER${tickers.length === 1 ? '' : 'S'}`;
@@ -421,7 +560,7 @@ export class WatchlistView {
       return;
     }
 
-    grid.innerHTML = tickers.map(t => {
+    const rowsHtml = tickers.map(t => {
       const indexPills = (t.indices || []).map(idxName => {
         let cls = 'sp500';
         const lower = idxName.toLowerCase();
@@ -451,15 +590,24 @@ export class WatchlistView {
       }
 
       return `
-        <div class="watchlist-ticker-card" data-ticker="${t.ticker}">
-          <div class="watchlist-card-top">
-            <div class="watchlist-symbol-col">
-              <span class="watchlist-ticker-symbol" data-ticker="${t.ticker}" title="Open in Cockpit">${t.ticker}</span>
+        <tr class="watchlist-ticker-card watchlist-table-row" data-ticker="${t.ticker}">
+          <td class="col-symbol">
+            <span class="watchlist-ticker-symbol" data-ticker="${t.ticker}" title="Open in Cockpit">${t.ticker}</span>
+          </td>
+          <td class="col-indices">
+            <div class="watchlist-index-badges">
+              ${indexPills}
             </div>
+          </td>
+          <td class="col-price">
             <div class="watchlist-card-price" id="watchlistPrice_${t.ticker}">
               <span class="watchlist-spot-price" id="spotPrice_${t.ticker}">${displayPrice}</span>
-              <span class="watchlist-change-badge ${changeClass}" id="changeBadge_${t.ticker}">${displayChange}</span>
             </div>
+          </td>
+          <td class="col-change">
+            <span class="watchlist-change-badge ${changeClass}" id="changeBadge_${t.ticker}">${displayChange}</span>
+          </td>
+          <td class="col-actions">
             <div class="watchlist-card-actions">
               <button type="button" class="watchlist-drilldown-btn" data-ticker="${t.ticker}" title="Inspect ${t.ticker} in Cockpit">
                 Cockpit ↗
@@ -468,23 +616,76 @@ export class WatchlistView {
                 &times;
               </button>
             </div>
-          </div>
-          <div class="watchlist-index-badges">
-            ${indexPills}
-          </div>
-        </div>
+          </td>
+        </tr>
       `;
     }).join('');
 
-    // Attach card event listeners
-    grid.querySelectorAll('.watchlist-ticker-symbol, .watchlist-drilldown-btn').forEach(btn => {
+    grid.innerHTML = `
+      <table class="quant-table watchlist-table">
+        <thead class="watchlist-table-header" id="watchlistTableHeader">
+          <tr>
+            <th class="wth-col col-symbol sortable ${this.sortColumn === 'symbol' ? 'active sort-' + this.sortDirection : ''}" data-sort="symbol" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('symbol')}">
+              <div class="th-content">
+                <span>SYMBOL</span>
+                <span class="sort-glyph">${this.getSortGlyph('symbol')}</span>
+              </div>
+            </th>
+            <th class="wth-col col-indices sortable ${this.sortColumn === 'indices' ? 'active sort-' + this.sortDirection : ''}" data-sort="indices" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('indices')}">
+              <div class="th-content">
+                <span>INDICES / EXCHANGE</span>
+                <span class="sort-glyph">${this.getSortGlyph('indices')}</span>
+              </div>
+            </th>
+            <th class="wth-col col-price sortable ${this.sortColumn === 'price' ? 'active sort-' + this.sortDirection : ''}" data-sort="price" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('price')}">
+              <div class="th-content">
+                <span>LAST SPOT</span>
+                <span class="sort-glyph">${this.getSortGlyph('price')}</span>
+              </div>
+            </th>
+            <th class="wth-col col-change sortable ${this.sortColumn === 'change' ? 'active sort-' + this.sortDirection : ''}" data-sort="change" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('change')}">
+              <div class="th-content">
+                <span>24H CHG</span>
+                <span class="sort-glyph">${this.getSortGlyph('change')}</span>
+              </div>
+            </th>
+            <th class="wth-col col-actions" scope="col" role="columnheader">
+              <div class="th-content">
+                <span>ACTIONS</span>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody class="watchlist-table-body">
+          ${rowsHtml}
+        </tbody>
+      </table>
+    `;
+
+    // Attach sort header listeners
+    grid.querySelectorAll?.('th.sortable')?.forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.getAttribute('data-sort');
+        if (col) this.handleSort(col);
+      });
+      th.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const col = th.getAttribute('data-sort');
+          if (col) this.handleSort(col);
+        }
+      });
+    });
+
+    // Attach card/row event listeners
+    grid.querySelectorAll?.('.watchlist-ticker-symbol, .watchlist-drilldown-btn')?.forEach(btn => {
       btn.addEventListener('click', (e) => {
         const ticker = e.currentTarget.getAttribute('data-ticker');
         this.drillDownToCockpit(ticker);
       });
     });
 
-    grid.querySelectorAll('.watchlist-remove-btn').forEach(btn => {
+    grid.querySelectorAll?.('.watchlist-remove-btn')?.forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const ticker = e.currentTarget.getAttribute('data-ticker');
         if (ticker) {
@@ -552,7 +753,10 @@ export class WatchlistView {
         this.updatePriceDisplays(prevPrices);
       }
     } catch (err) {
-      // In-flight error during network jitter or backgrounding - silently retain existing quotes
+      if (err.message && (err.message.includes('401') || err.message.includes('SessionExpired'))) {
+        this.stopQuotePolling();
+        this.renderSessionExpiredState();
+      }
     }
   }
 
