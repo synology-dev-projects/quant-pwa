@@ -135,6 +135,23 @@ quant-pwa/
 
 ---
 
+### 1.9 SPX Quant Levels View & Candlestick Component (`levels_view.js` & `candlestick_chart.js`)
+* **Dedicated Mobile Navigation Tab:** High-density institutional levels screen rendering SPX support/resistance framework and intraday price action.
+* **Commentary Sanitization & Invariants:**
+  - Complete suppression of `"nan"`, `"NaN"`, `"None"`, `"null"`, `"—"`, `""` commentary across Interactive Price Ladder rows and Structured Levels Table.
+  - Dedicates a full-width callout row (`.ladder-comment-row`) with cyan left-border and speech bubble icon (`💬`) only when meaningful commentary exists.
+* **Interactive HTML5 Canvas Candlestick Chart (`candlestick_chart.js`):**
+  - **Regular Trading Hours (09:30–16:15 ET):** Renders 79 5-minute candles with high-DPI retina scaling (`window.devicePixelRatio`).
+  - **Dynamic Y-Axis Price Envelope:** Fits all active quant levels, spot price, and candle wicks dynamically with zero vertical clipping.
+  - **Microstructure Corridors & Glow:** Shaded translucent range corridors between adjacent levels and 2px glowing badges for `IMM RESISTANCE` and `IMM SUPPORT`.
+  - **Interactive Crosshair HUD:** Hover/touch tracking displaying bar OHLCV, volume, session net change, and distance to closest support/resistance levels.
+  - **Fullscreen Modal Lightbox:** Tap to expand the candlestick chart to a full-screen high-resolution dialog.
+* **Automated In-Situ UI Test Suite (`test_levels_view.js`):**
+  - 8 DOM assertions verifying shell mounting, canvas mounting, spot marker insertion, comment sanitization, and fallback states.
+
+
+---
+
 ## 2. Discord Quant Bot (`discord-quant-bot`)
 
 ### 2.1 Architecture

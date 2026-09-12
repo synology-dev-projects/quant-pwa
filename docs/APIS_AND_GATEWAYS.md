@@ -277,6 +277,36 @@ sequenceDiagram
   }
   ```
 
+#### 3. SPX Regular Trading Session 5m Candlestick Bars (`GET /api/quant-levels/candles`)
+* **Auth:** None (Public)
+* **Parameters:** `symbol` (default: `SPX`), `date` (format: `YYYY-MM-DD`, optional: resolves to latest session).
+* **Purpose:** Fetches 5-minute regular trading hours (09:30–16:15 ET) OHLCV candlestick bars from Yahoo Finance (`^GSPC`) with memory caching (30s TTL for current active day, permanent for historical dates).
+* **Response (`200 OK`):**
+  ```json
+  {
+    "symbol": "SPX",
+    "date": "2026-09-11",
+    "market_state": "CLOSED",
+    "session_open": 7750.19,
+    "session_close": 7717.81,
+    "session_change": -32.38,
+    "session_change_pct": -0.42,
+    "candles": [
+      {
+        "time": 1789133400,
+        "time_str": "09:30",
+        "open": 7750.19,
+        "high": 7755.40,
+        "low": 7748.10,
+        "close": 7752.30,
+        "volume": 0
+      }
+    ],
+    "count": 79
+  }
+  ```
+
+
 ---
 
 ## 4. Model Context Protocol (MCP) Server Specifications
