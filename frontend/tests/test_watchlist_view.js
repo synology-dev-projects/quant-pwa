@@ -122,14 +122,14 @@ import('../src/tabs/watchlist_view.js').then(async ({ WatchlistView }) => {
   watchlistView.renderTickers();
   assert(mockBadge.textContent === '3 TICKERS', 'Count badge updated to 3 TICKERS');
   assert(mockGrid.innerHTML.includes('NVDA'), 'Grid contains NVDA');
-  assert(mockGrid.innerHTML.includes('watchlist-index-badge sp500'), 'NVDA has S&P 500 badge');
-  assert(mockGrid.innerHTML.includes('watchlist-index-badge ndx'), 'NVDA has Nasdaq 100 badge');
+  assert(mockGrid.innerHTML.includes('radar-ticker-btn'), 'Row contains radar-style ticker button');
   assert(mockGrid.innerHTML.includes('watchlist-card-price'), 'Card includes watchlist-card-price slot');
   assert(mockGrid.innerHTML.includes('spotPrice_NVDA'), 'Card includes spotPrice_NVDA slot');
   assert(mockGrid.innerHTML.includes('changeBadge_NVDA'), 'Card includes changeBadge_NVDA slot');
-  assert(mockGrid.innerHTML.includes('Cockpit ↗'), 'Contains Cockpit drilldown button');
+  assert(!mockGrid.innerHTML.includes('Cockpit ↗'), 'Cockpit button removed from row');
+  assert(!mockGrid.innerHTML.includes('watchlist-index-badge'), 'Indices column removed');
   assert(mockGrid.innerHTML.includes('watchlist-remove-btn'), 'Contains remove button');
-  console.log('  ✓ PASS: Tickers rendered with authoritative index badges & price slots');
+  console.log('  ✓ PASS: Tickers rendered with radar-style table format without indices column or cockpit button');
 
   console.log('\n--- TEST 3: In-Place Spot Price & % Change Mutation ---');
   const mockSpotNVDA = { textContent: '', classList: { add: () => {}, remove: () => {} } };

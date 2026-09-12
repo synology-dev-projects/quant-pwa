@@ -798,10 +798,6 @@ function buildAuditDomTree() {
   watchlistCardActions.className = 'watchlist-card-actions';
   watchlistCard.appendChild(watchlistCardActions);
 
-  const watchlistDrilldownBtn = new MockElement('button');
-  watchlistDrilldownBtn.className = 'watchlist-drilldown-btn';
-  watchlistCardActions.appendChild(watchlistDrilldownBtn);
-
   const watchlistRemoveBtn = new MockElement('button');
   watchlistRemoveBtn.className = 'watchlist-remove-btn';
   watchlistCardActions.appendChild(watchlistRemoveBtn);
@@ -1049,7 +1045,6 @@ const interactiveAuditTargets = [
   { name: 'Watchlist Delete Button', selector: '#deleteWatchlistBtn', minTap: 44, requiresContainer: false },
   { name: 'Watchlist Ticker Input', selector: '#watchlistTickerInput', minTap: 44, requiresContainer: false },
   { name: 'Watchlist Add Button', selector: '#watchlistAddBtn', minTap: 44, requiresContainer: false },
-  { name: 'Watchlist Cockpit Drilldown Button', selector: '.watchlist-drilldown-btn', minTap: 44, requiresContainer: false },
   { name: 'Watchlist Remove Ticker Button', selector: '.watchlist-remove-btn', minTap: 44, requiresContainer: false }
 ];
 

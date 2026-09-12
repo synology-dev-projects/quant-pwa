@@ -75,43 +75,33 @@ export class WatchlistView {
 
         <!-- Watchlist Table Container -->
         <div id="watchlistGrid" class="watchlist-table-wrapper">
-          <table class="quant-table watchlist-table">
+          <table class="radar-table watchlist-table">
             <thead class="watchlist-table-header" id="watchlistTableHeader">
               <tr>
-                <th class="wth-col col-symbol sortable active" data-sort="symbol" scope="col" tabindex="0">
+                <th class="wth-col col-ticker sortable active" data-sort="symbol" scope="col" tabindex="0">
                   <div class="th-content">
                     <span>SYMBOL</span>
                     <span class="sort-glyph">▲</span>
                   </div>
                 </th>
-                <th class="wth-col col-indices sortable" data-sort="indices" scope="col" tabindex="0">
+                <th class="wth-col col-num sortable" data-sort="price" scope="col" tabindex="0">
                   <div class="th-content">
-                    <span>INDICES</span>
+                    <span>SPOT</span>
                     <span class="sort-glyph">⇅</span>
                   </div>
                 </th>
-                <th class="wth-col col-price sortable" data-sort="price" scope="col" tabindex="0">
-                  <div class="th-content">
-                    <span>LAST SPOT</span>
-                    <span class="sort-glyph">⇅</span>
-                  </div>
-                </th>
-                <th class="wth-col col-change sortable" data-sort="change" scope="col" tabindex="0">
+                <th class="wth-col col-num sortable" data-sort="change" scope="col" tabindex="0">
                   <div class="th-content">
                     <span>24H CHG</span>
                     <span class="sort-glyph">⇅</span>
                   </div>
                 </th>
-                <th class="wth-col col-actions" scope="col">
-                  <div class="th-content">
-                    <span>ACTIONS</span>
-                  </div>
-                </th>
+                <th class="wth-col col-actions" scope="col"></th>
               </tr>
             </thead>
             <tbody class="watchlist-table-body">
               <tr>
-                <td colspan="5">
+                <td colspan="4">
                   <div class="watchlist-empty-state">
                     <div class="watchlist-empty-icon">⏳</div>
                     <div class="watchlist-empty-title">Loading Watchlist...</div>
@@ -539,11 +529,6 @@ export class WatchlistView {
       if (this.sortColumn === 'symbol') {
         return dir * (a.ticker || '').localeCompare(b.ticker || '');
       }
-      if (this.sortColumn === 'indices') {
-        const strA = (a.indices || []).join(' ');
-        const strB = (b.indices || []).join(' ');
-        return dir * strA.localeCompare(strB);
-      }
       if (this.sortColumn === 'price') {
         const qA = this.quotes[a.ticker]?.price;
         const qB = this.quotes[b.ticker]?.price;
@@ -583,7 +568,7 @@ export class WatchlistView {
           <div class="watchlist-empty-icon">📊</div>
           <div class="watchlist-empty-title">Watchlist is Empty</div>
           <div class="watchlist-empty-desc">
-            Add a constituent of major US equity indices (S&amp;P 500, Nasdaq 100, Dow 30, Russell 2000, or Major ETFs) to track institutional exposure.
+            Add constituent tickers to track institutional exposure and real-time quotes.
           </div>
         </div>
       `;
@@ -591,16 +576,6 @@ export class WatchlistView {
     }
 
     const rowsHtml = tickers.map(t => {
-      const indexPills = (t.indices || []).map(idxName => {
-        let cls = 'sp500';
-        const lower = idxName.toLowerCase();
-        if (lower.includes('nasdaq')) cls = 'ndx';
-        else if (lower.includes('dow')) cls = 'dow';
-        else if (lower.includes('russell')) cls = 'russell';
-        else if (lower.includes('etf')) cls = 'etf';
-        return `<span class="watchlist-index-badge ${cls}">${idxName}</span>`;
-      }).join('');
-
       const q = this.quotes[t.ticker];
       const hasQuote = Boolean(q && typeof q.price === 'number');
       const displayPrice = hasQuote ? `$${q.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--';
@@ -620,70 +595,50 @@ export class WatchlistView {
       }
 
       return `
-        <tr class="watchlist-ticker-card watchlist-table-row" data-ticker="${t.ticker}">
-          <td class="col-symbol">
-            <span class="watchlist-ticker-symbol" data-ticker="${t.ticker}" title="Open in Cockpit">${t.ticker}</span>
+        <tr class="watchlist-table-row" data-ticker="${t.ticker}" title="Open ${t.ticker} in Cockpit">
+          <td class="col-ticker">
+            <span class="flow-ticker-btn radar-ticker-btn watchlist-ticker-symbol" data-ticker="${t.ticker}" title="Open in Cockpit">${t.ticker}</span>
           </td>
-          <td class="col-indices">
-            <div class="watchlist-index-badges">
-              ${indexPills}
-            </div>
-          </td>
-          <td class="col-price">
+          <td class="col-num">
             <div class="watchlist-card-price" id="watchlistPrice_${t.ticker}">
               <span class="watchlist-spot-price" id="spotPrice_${t.ticker}">${displayPrice}</span>
             </div>
           </td>
-          <td class="col-change">
+          <td class="col-num">
             <span class="watchlist-change-badge ${changeClass}" id="changeBadge_${t.ticker}">${displayChange}</span>
           </td>
           <td class="col-actions">
-            <div class="watchlist-card-actions">
-              <button type="button" class="watchlist-drilldown-btn" data-ticker="${t.ticker}" title="Inspect ${t.ticker} in Cockpit" aria-label="Inspect ${t.ticker} in Cockpit">
-                Cockpit ↗
-              </button>
-              <button type="button" class="watchlist-remove-btn" data-ticker="${t.ticker}" title="Remove ${t.ticker}" aria-label="Remove ${t.ticker}">
-                &times;
-              </button>
-            </div>
+            <button type="button" class="watchlist-remove-btn" data-ticker="${t.ticker}" title="Remove ${t.ticker}" aria-label="Remove ${t.ticker}">
+              &times;
+            </button>
           </td>
         </tr>
       `;
     }).join('');
 
     grid.innerHTML = `
-      <table class="quant-table watchlist-table">
+      <table class="radar-table watchlist-table">
         <thead class="watchlist-table-header" id="watchlistTableHeader">
           <tr>
-            <th class="wth-col col-symbol sortable ${this.sortColumn === 'symbol' ? 'active sort-' + this.sortDirection : ''}" data-sort="symbol" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('symbol')}">
+            <th class="wth-col col-ticker sortable ${this.sortColumn === 'symbol' ? 'active sort-' + this.sortDirection : ''}" data-sort="symbol" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('symbol')}">
               <div class="th-content">
                 <span>SYMBOL</span>
                 <span class="sort-glyph">${this.getSortGlyph('symbol')}</span>
               </div>
             </th>
-            <th class="wth-col col-indices sortable ${this.sortColumn === 'indices' ? 'active sort-' + this.sortDirection : ''}" data-sort="indices" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('indices')}">
+            <th class="wth-col col-num sortable ${this.sortColumn === 'price' ? 'active sort-' + this.sortDirection : ''}" data-sort="price" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('price')}">
               <div class="th-content">
-                <span>INDICES</span>
-                <span class="sort-glyph">${this.getSortGlyph('indices')}</span>
-              </div>
-            </th>
-            <th class="wth-col col-price sortable ${this.sortColumn === 'price' ? 'active sort-' + this.sortDirection : ''}" data-sort="price" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('price')}">
-              <div class="th-content">
-                <span>LAST SPOT</span>
+                <span>SPOT</span>
                 <span class="sort-glyph">${this.getSortGlyph('price')}</span>
               </div>
             </th>
-            <th class="wth-col col-change sortable ${this.sortColumn === 'change' ? 'active sort-' + this.sortDirection : ''}" data-sort="change" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('change')}">
+            <th class="wth-col col-num sortable ${this.sortColumn === 'change' ? 'active sort-' + this.sortDirection : ''}" data-sort="change" scope="col" tabindex="0" role="columnheader" aria-sort="${this.getAriaSort('change')}">
               <div class="th-content">
                 <span>24H CHG</span>
                 <span class="sort-glyph">${this.getSortGlyph('change')}</span>
               </div>
             </th>
-            <th class="wth-col col-actions" scope="col" role="columnheader">
-              <div class="th-content">
-                <span>ACTIONS</span>
-              </div>
-            </th>
+            <th class="wth-col col-actions" scope="col" role="columnheader"></th>
           </tr>
         </thead>
         <tbody class="watchlist-table-body">
@@ -707,17 +662,21 @@ export class WatchlistView {
       });
     });
 
-    // Attach card/row event listeners
-    grid.querySelectorAll?.('.watchlist-ticker-symbol, .watchlist-drilldown-btn')?.forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const ticker = e.currentTarget.getAttribute('data-ticker');
-        this.drillDownToCockpit(ticker);
+    // Attach row / badge click listeners to drill down to Cockpit
+    grid.querySelectorAll?.('.watchlist-table-row')?.forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.watchlist-remove-btn')) return;
+        const ticker = row.getAttribute('data-ticker');
+        if (ticker) {
+          this.drillDownToCockpit(ticker);
+        }
       });
     });
 
     grid.querySelectorAll?.('.watchlist-remove-btn')?.forEach(btn => {
       btn.addEventListener('click', async (e) => {
-        const ticker = e.currentTarget.getAttribute('data-ticker');
+        e.stopPropagation();
+        const ticker = btn.getAttribute('data-ticker');
         if (ticker) {
           await this.removeTicker(ticker);
         }
