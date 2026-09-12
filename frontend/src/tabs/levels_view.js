@@ -43,7 +43,10 @@ export class LevelsView {
               <p class="levels-subtitle">S&P 500 Daily Pivot &amp; Structure Sheet</p>
             </div>
           </div>
-          <div class="levels-controls">
+          <div class="levels-controls levels-controls-group">
+            <button type="button" class="levels-step-btn" id="levelsPrevBtn" title="Previous Session">◄ Prev</button>
+            <input type="date" class="levels-date-picker" id="levelsDatePicker" max="${new Date().toISOString().split('T')[0]}" aria-label="Select Date">
+            <button type="button" class="levels-step-btn" id="levelsNextBtn" title="Next Session">Next ►</button>
             <select class="levels-date-select" id="levelsDateSelect" aria-label="Select As-Of Date">
               <option value="">Latest Session</option>
             </select>
@@ -73,11 +76,46 @@ export class LevelsView {
   }
 
   bindEvents() {
+    const datePicker = this.container.querySelector('#levelsDatePicker');
+    if (datePicker) {
+      datePicker.addEventListener('change', (e) => {
+        this.selectedDate = e.target.value;
+        const dateSelect = this.container.querySelector('#levelsDateSelect');
+        if (dateSelect) {
+          if (this.availableDates.includes(this.selectedDate)) {
+            dateSelect.value = this.selectedDate;
+          } else {
+            dateSelect.value = '';
+          }
+        }
+        this.updateStepButtons();
+        this.loadLevelsData();
+      });
+    }
+
     const dateSelect = this.container.querySelector('#levelsDateSelect');
     if (dateSelect) {
       dateSelect.addEventListener('change', (e) => {
         this.selectedDate = e.target.value;
+        if (datePicker) {
+          datePicker.value = this.selectedDate;
+        }
+        this.updateStepButtons();
         this.loadLevelsData();
+      });
+    }
+
+    const prevBtn = this.container.querySelector('#levelsPrevBtn');
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        this.stepSession(-1);
+      });
+    }
+
+    const nextBtn = this.container.querySelector('#levelsNextBtn');
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        this.stepSession(1);
       });
     }
 
@@ -86,6 +124,96 @@ export class LevelsView {
       refreshBtn.addEventListener('click', () => {
         this.loadInitialData();
       });
+    }
+  }
+
+  getPreviousWeekday(dateStr) {
+    if (!dateStr) dateStr = new Date().toISOString().split('T')[0];
+    const d = new Date(dateStr + 'T12:00:00Z');
+    do {
+      d.setUTCDate(d.getUTCDate() - 1);
+    } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+    return d.toISOString().split('T')[0];
+  }
+
+  getNextWeekday(dateStr) {
+    if (!dateStr) dateStr = new Date().toISOString().split('T')[0];
+    const d = new Date(dateStr + 'T12:00:00Z');
+    do {
+      d.setUTCDate(d.getUTCDate() + 1);
+    } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+    return d.toISOString().split('T')[0];
+  }
+
+  stepSession(direction) {
+    const datePicker = this.container ? this.container.querySelector('#levelsDatePicker') : null;
+    const dateSelect = this.container ? this.container.querySelector('#levelsDateSelect') : null;
+
+    if (direction < 0) {
+      // ◄ Prev session (older date)
+      let targetDate = '';
+      const currDate = this.selectedDate || (this.availableDates.length > 0 ? this.availableDates[0] : '');
+      if (this.availableDates.length > 0) {
+        const currIdx = this.availableDates.indexOf(currDate);
+        if (currIdx !== -1 && currIdx < this.availableDates.length - 1) {
+          targetDate = this.availableDates[currIdx + 1];
+        } else if (currIdx === -1) {
+          const older = this.availableDates.find(d => d < currDate);
+          targetDate = older || this.getPreviousWeekday(currDate);
+        } else {
+          targetDate = this.getPreviousWeekday(currDate);
+        }
+      } else {
+        targetDate = this.getPreviousWeekday(currDate);
+      }
+      this.selectedDate = targetDate;
+    } else if (direction > 0) {
+      // Next ► session (newer date)
+      if (this.availableDates.length > 0) {
+        const currDate = this.selectedDate || this.availableDates[0];
+        const currIdx = this.availableDates.indexOf(currDate);
+        if (currIdx > 0) {
+          this.selectedDate = this.availableDates[currIdx - 1];
+        } else if (currIdx === 0) {
+          return; // Already at latest available date
+        } else {
+          const newerDates = this.availableDates.filter(d => d > currDate);
+          if (newerDates.length > 0) {
+            this.selectedDate = newerDates[newerDates.length - 1];
+          } else {
+            this.selectedDate = this.availableDates[0];
+          }
+        }
+      } else {
+        this.selectedDate = this.getNextWeekday(this.selectedDate);
+      }
+    }
+
+    if (datePicker) {
+      datePicker.value = this.selectedDate;
+    }
+    if (dateSelect) {
+      if (this.availableDates.includes(this.selectedDate)) {
+        dateSelect.value = this.selectedDate;
+      } else {
+        dateSelect.value = '';
+      }
+    }
+    this.updateStepButtons();
+    this.loadLevelsData();
+  }
+
+  updateStepButtons() {
+    const nextBtn = this.container ? this.container.querySelector('#levelsNextBtn') : null;
+    if (!nextBtn) return;
+
+    if (this.availableDates.length > 0) {
+      const latestDate = this.availableDates[0];
+      const isLatest = !this.selectedDate || this.selectedDate === latestDate || this.selectedDate >= latestDate;
+      nextBtn.disabled = isLatest;
+    } else {
+      const today = new Date().toISOString().split('T')[0];
+      nextBtn.disabled = !this.selectedDate || this.selectedDate >= today;
     }
   }
 
@@ -109,18 +237,31 @@ export class LevelsView {
 
   updateDateSelector() {
     const dateSelect = this.container ? this.container.querySelector('#levelsDateSelect') : null;
-    if (!dateSelect) return;
+    const datePicker = this.container ? this.container.querySelector('#levelsDatePicker') : null;
 
-    dateSelect.innerHTML = '<option value="">Latest Session</option>';
-    this.availableDates.forEach((d) => {
-      const opt = document.createElement('option');
-      opt.value = d;
-      opt.textContent = d;
-      if (d === this.selectedDate) {
-        opt.selected = true;
+    if (dateSelect) {
+      dateSelect.innerHTML = '<option value="">Latest Session</option>';
+      this.availableDates.forEach((d) => {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = d;
+        if (d === this.selectedDate) {
+          opt.selected = true;
+        }
+        dateSelect.appendChild(opt);
+      });
+      if (this.selectedDate && this.availableDates.includes(this.selectedDate)) {
+        dateSelect.value = this.selectedDate;
+      } else if (!this.selectedDate) {
+        dateSelect.value = '';
       }
-      dateSelect.appendChild(opt);
-    });
+    }
+
+    if (datePicker && this.selectedDate) {
+      datePicker.value = this.selectedDate;
+    }
+
+    this.updateStepButtons();
   }
 
   async loadLevelsData() {
@@ -167,11 +308,20 @@ export class LevelsView {
     const formattedSup = immSup != null ? `$${immSup.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'None';
     const formattedChannel = channel != null ? `${channel.toFixed(2)} pts` : 'N/A';
 
+    const isHistorical = data.spot_type === 'HISTORICAL_CLOSE' || (summary && summary.spot_label === 'SPX Session Close');
+    const spotLabel = (summary && summary.spot_label) || (isHistorical ? 'SPX Session Close' : 'SPX Spot Price');
+
+    // Sync date picker if datePicker has no value
+    const datePicker = this.container ? this.container.querySelector('#levelsDatePicker') : null;
+    if (datePicker && !datePicker.value && (data.as_of_date || this.selectedDate)) {
+      datePicker.value = data.as_of_date || this.selectedDate;
+    }
+
     mount.innerHTML = `
       <!-- Hero Metric Cards -->
       <div class="levels-hero-grid">
         <div class="levels-hero-card">
-          <span class="levels-card-label">SPX Spot Price</span>
+          <span class="levels-card-label">${spotLabel}</span>
           <span class="levels-card-value">${formattedSpot}</span>
           <span class="levels-card-sub">Session: ${data.as_of_date || 'Today'}</span>
         </div>
@@ -199,7 +349,7 @@ export class LevelsView {
           <span class="levels-subtitle">Top-to-Bottom Structure</span>
         </div>
         <div class="levels-ladder-container" id="priceLadderMount">
-          ${this.buildLadderHtml(data.levels, spot)}
+          ${this.buildLadderHtml(data.levels, spot, isHistorical)}
         </div>
       </div>
 
@@ -297,7 +447,7 @@ export class LevelsView {
     return `${sign}${delta.toFixed(2)} pts (${sign}${deltaPct}%)`;
   }
 
-  buildLadderHtml(levels, spot) {
+  buildLadderHtml(levels, spot, isHistorical = false) {
     if (!levels || levels.length === 0) return '';
 
     let html = '';
@@ -310,7 +460,7 @@ export class LevelsView {
 
       // Insert spot marker if spot is higher than current level and not yet inserted
       if (!spotInserted && spot != null && spot >= midPrice) {
-        html += this.buildSpotMarkerHtml(spot);
+        html += this.buildSpotMarkerHtml(spot, isHistorical);
         spotInserted = true;
       }
 
@@ -319,18 +469,20 @@ export class LevelsView {
 
     // If spot was lower than all levels, insert at bottom
     if (!spotInserted && spot != null) {
-      html += this.buildSpotMarkerHtml(spot);
+      html += this.buildSpotMarkerHtml(spot, isHistorical);
     }
 
     return html;
   }
 
-  buildSpotMarkerHtml(spot) {
+  buildSpotMarkerHtml(spot, isHistorical = false) {
+    const markerClass = isHistorical ? 'ladder-spot-marker historical' : 'ladder-spot-marker';
+    const labelText = isHistorical ? 'SPX SESSION CLOSE' : 'SPX LIVE SPOT';
     return `
-      <div class="ladder-spot-marker" id="ladderSpotMarker">
+      <div class="${markerClass}" id="ladderSpotMarker">
         <div class="spot-marker-label">
           <span class="spot-marker-pulse"></span>
-          <span>SPX LIVE SPOT</span>
+          <span>${labelText}</span>
         </div>
         <div class="spot-marker-price">$${spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
       </div>
@@ -396,32 +548,99 @@ export class LevelsView {
   }
 
   renderEmptyState(mount, msg) {
-    mount.innerHTML = `
-      <div class="levels-empty-state">
-        <p class="levels-empty-title">No SPX Levels Available</p>
-        <p class="levels-empty-desc">${msg}</p>
-        <button class="levels-refresh-btn" id="levelsEmptySyncBtn" style="margin: 0 auto;">
-          <span>Trigger SPX Levels Ingestion</span>
-        </button>
-      </div>
-    `;
+    if (this.selectedDate) {
+      mount.innerHTML = `
+        <div class="levels-empty-state">
+          <p class="levels-empty-title">No SPX Levels Recorded for ${this.selectedDate}</p>
+          <p class="levels-empty-desc">${msg}</p>
+          <div class="levels-extract-action-box">
+            <button class="levels-refresh-btn levels-extract-btn" id="levelsExtractTargetBtn" style="margin: 0 auto;">
+              <span>Extract Quant Levels for ${this.selectedDate}</span>
+            </button>
+            <div class="levels-extract-status" id="levelsExtractStatus" style="display: none; margin-top: 0.75rem;"></div>
+          </div>
+        </div>
+      `;
 
-    const syncBtn = mount.querySelector('#levelsEmptySyncBtn');
-    if (syncBtn) {
-      syncBtn.addEventListener('click', async () => {
-        syncBtn.disabled = true;
-        syncBtn.innerHTML = '<span>Triggering Ingestion...</span>';
-        try {
-          const resp = await fetchWithAuth('/api/quant-levels/sync', { method: 'POST' });
-          if (resp && resp.ok) {
-            await this.loadInitialData();
-          } else {
-            alert('Sync failed. Please check backend logs or authorization.');
+      const extractBtn = mount.querySelector('#levelsExtractTargetBtn');
+      const statusDiv = mount.querySelector('#levelsExtractStatus');
+      if (extractBtn) {
+        extractBtn.addEventListener('click', async () => {
+          extractBtn.disabled = true;
+          extractBtn.innerHTML = `
+            <span class="candlestick-pulse-spinner" style="display:inline-block; vertical-align:middle; width:12px; height:12px; margin-right:6px;"></span>
+            <span>Extracting Quant Levels for ${this.selectedDate}...</span>
+          `;
+          if (statusDiv) {
+            statusDiv.style.display = 'block';
+            statusDiv.style.color = '#38bdf8';
+            statusDiv.textContent = `Running targeted ingestion pipeline for ${this.selectedDate}...`;
           }
-        } catch (e) {
-          alert(`Sync error: ${e.message}`);
-        }
-      });
+
+          try {
+            const resp = await fetchWithAuth(`/api/quant-levels/extract-date?target_date=${encodeURIComponent(this.selectedDate)}`, {
+              method: 'POST'
+            });
+            if (resp && resp.ok) {
+              const result = await resp.json().catch(() => ({}));
+              if (statusDiv) {
+                statusDiv.style.color = '#4ade80';
+                statusDiv.textContent = result.message || `Successfully ingested levels for ${this.selectedDate}. Reloading...`;
+              }
+              await this.loadInitialData();
+            } else {
+              let errDetail = 'Extraction failed. Ensure Trading Edge session post exists.';
+              try {
+                const errJson = await resp.json();
+                if (errJson && (errJson.detail || errJson.message)) {
+                  errDetail = errJson.detail || errJson.message;
+                }
+              } catch (_) {}
+              if (statusDiv) {
+                statusDiv.style.color = '#f87171';
+                statusDiv.textContent = `Error: ${errDetail}`;
+              }
+              extractBtn.disabled = false;
+              extractBtn.innerHTML = `<span>Retry Extraction for ${this.selectedDate}</span>`;
+            }
+          } catch (e) {
+            if (statusDiv) {
+              statusDiv.style.color = '#f87171';
+              statusDiv.textContent = `Network error: ${e.message}`;
+            }
+            extractBtn.disabled = false;
+            extractBtn.innerHTML = `<span>Retry Extraction for ${this.selectedDate}</span>`;
+          }
+        });
+      }
+    } else {
+      mount.innerHTML = `
+        <div class="levels-empty-state">
+          <p class="levels-empty-title">No SPX Levels Available</p>
+          <p class="levels-empty-desc">${msg}</p>
+          <button class="levels-refresh-btn" id="levelsEmptySyncBtn" style="margin: 0 auto;">
+            <span>Trigger SPX Levels Ingestion</span>
+          </button>
+        </div>
+      `;
+
+      const syncBtn = mount.querySelector('#levelsEmptySyncBtn');
+      if (syncBtn) {
+        syncBtn.addEventListener('click', async () => {
+          syncBtn.disabled = true;
+          syncBtn.innerHTML = '<span>Triggering Ingestion...</span>';
+          try {
+            const resp = await fetchWithAuth('/api/quant-levels/sync', { method: 'POST' });
+            if (resp && resp.ok) {
+              await this.loadInitialData();
+            } else {
+              alert('Sync failed. Please check backend logs or authorization.');
+            }
+          } catch (e) {
+            alert(`Sync error: ${e.message}`);
+          }
+        });
+      }
     }
   }
 

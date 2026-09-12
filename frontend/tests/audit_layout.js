@@ -28,7 +28,10 @@ const radarCss = fs.existsSync(radarCssPath) ? fs.readFileSync(radarCssPath, 'ut
 const watchlistCssPath = path.resolve(__dirname, '../src/styles/watchlist.css');
 const watchlistCss = fs.existsSync(watchlistCssPath) ? fs.readFileSync(watchlistCssPath, 'utf8') : '';
 
-const allCss = `${stylesCss}\n${flowCss}\n${radarCss}\n${watchlistCss}`;
+const levelsCssPath = path.resolve(__dirname, '../src/styles/levels.css');
+const levelsCss = fs.existsSync(levelsCssPath) ? fs.readFileSync(levelsCssPath, 'utf8') : '';
+
+const allCss = `${stylesCss}\n${flowCss}\n${radarCss}\n${watchlistCss}\n${levelsCss}`;
 
 // ============================================================================
 // 1. Lightweight CSS Parser & Cascade Computation Engine
@@ -802,6 +805,50 @@ function buildAuditDomTree() {
   watchlistRemoveBtn.className = 'watchlist-remove-btn';
   watchlistCardActions.appendChild(watchlistRemoveBtn);
 
+  // 4b. SPX Quant Levels Tab Container
+  const levelsTab = new MockElement('div', 'tab-levels');
+  levelsTab.className = 'tab-pane';
+  tabContent.appendChild(levelsTab);
+
+  const levelsContainer = new MockElement('div', 'levelsContainer');
+  levelsContainer.className = 'levels-container';
+  levelsTab.appendChild(levelsContainer);
+
+  const levelsHeaderBar = new MockElement('div');
+  levelsHeaderBar.className = 'levels-header-bar';
+  levelsContainer.appendChild(levelsHeaderBar);
+
+  const levelsControls = new MockElement('div');
+  levelsControls.className = 'levels-controls levels-controls-group';
+  levelsHeaderBar.appendChild(levelsControls);
+
+  const levelsPrevBtn = new MockElement('button', 'levelsPrevBtn');
+  levelsPrevBtn.className = 'levels-step-btn';
+  levelsControls.appendChild(levelsPrevBtn);
+
+  const levelsDatePicker = new MockElement('input', 'levelsDatePicker');
+  levelsDatePicker.className = 'levels-date-picker';
+  levelsControls.appendChild(levelsDatePicker);
+
+  const levelsNextBtn = new MockElement('button', 'levelsNextBtn');
+  levelsNextBtn.className = 'levels-step-btn';
+  levelsControls.appendChild(levelsNextBtn);
+
+  const levelsDateSelect = new MockElement('select', 'levelsDateSelect');
+  levelsDateSelect.className = 'levels-date-select';
+  levelsControls.appendChild(levelsDateSelect);
+
+  const levelsRefreshBtn = new MockElement('button', 'levelsRefreshBtn');
+  levelsRefreshBtn.className = 'levels-refresh-btn';
+  levelsControls.appendChild(levelsRefreshBtn);
+
+  const levelsMount = new MockElement('div', 'levelsContentMount');
+  levelsContainer.appendChild(levelsMount);
+
+  const levelsExtractBtn = new MockElement('button', 'levelsExtractTargetBtn');
+  levelsExtractBtn.className = 'levels-refresh-btn levels-extract-btn';
+  levelsMount.appendChild(levelsExtractBtn);
+
   // 5. Settings Modal
   const settingsModal = new MockElement('div', 'settingsModal');
   settingsModal.className = 'modal-overlay open';
@@ -948,7 +995,7 @@ function buildAuditDomTree() {
   lightboxContent.className = 'lightbox-content';
   lightboxOverlay.appendChild(lightboxContent);
 
-  return { root, app, settingsModal, diagModal, lockScreen, lightboxOverlay, cockpitTab, flowTab };
+  return { root, app, settingsModal, diagModal, lockScreen, lightboxOverlay, cockpitTab, flowTab, levelsTab };
 }
 
 // ============================================================================
@@ -978,7 +1025,7 @@ const viewports = [
   { name: 'Desktop Landscape', width: 1280 }
 ];
 
-const { root, app, settingsModal, diagModal, lockScreen, lightboxOverlay, cockpitTab, flowTab } = buildAuditDomTree();
+const { root, app, settingsModal, diagModal, lockScreen, lightboxOverlay, cockpitTab, flowTab, levelsTab } = buildAuditDomTree();
 
 // ----------------------------------------------------------------------------
 // AUDIT 1: Responsive Viewport Geometry (375px, 768px, 1280px)
@@ -1045,7 +1092,13 @@ const interactiveAuditTargets = [
   { name: 'Watchlist Delete Button', selector: '#deleteWatchlistBtn', minTap: 44, requiresContainer: false },
   { name: 'Watchlist Ticker Input', selector: '#watchlistTickerInput', minTap: 44, requiresContainer: false },
   { name: 'Watchlist Add Button', selector: '#watchlistAddBtn', minTap: 44, requiresContainer: false },
-  { name: 'Watchlist Remove Ticker Button', selector: '.watchlist-remove-btn', minTap: 44, requiresContainer: false }
+  { name: 'Watchlist Remove Ticker Button', selector: '.watchlist-remove-btn', minTap: 44, requiresContainer: false },
+  { name: 'Levels Prev Session Button', selector: '#levelsPrevBtn', minTap: 44, requiresContainer: false },
+  { name: 'Levels Next Session Button', selector: '#levelsNextBtn', minTap: 44, requiresContainer: false },
+  { name: 'Levels Date Picker', selector: '#levelsDatePicker', minTap: 44, requiresContainer: false },
+  { name: 'Levels Date Select', selector: '#levelsDateSelect', minTap: 44, requiresContainer: false },
+  { name: 'Levels Refresh Button', selector: '#levelsRefreshBtn', minTap: 44, requiresContainer: false },
+  { name: 'Levels Extract Button', selector: '#levelsExtractTargetBtn', minTap: 44, requiresContainer: false }
 ];
 
 for (const target of interactiveAuditTargets) {
@@ -1178,6 +1231,12 @@ for (const vp of viewports) {
   const flowHeroStyle = flowHeroEl.computeStyle(vp.width);
   assertTest(flowHeroStyle.boxSizing === 'border-box', `[${vp.width}px] Flow Hero Panel has box-sizing: border-box`);
   assertTest(flowHeroStyle.display === 'flex', `[${vp.width}px] Flow Hero Panel has flex column layout`);
+
+  // 8. SPX Quant Levels Terminal
+  const levelsContEl = levelsTab.querySelector('.levels-container');
+  const levelsContStyle = levelsContEl.computeStyle(vp.width);
+  assertTest(levelsContStyle.overflowX === 'hidden', `[${vp.width}px] .levels-container enforces overflow-x: hidden`);
+  assertTest(levelsContStyle.boxSizing === 'border-box', `[${vp.width}px] .levels-container has box-sizing: border-box`);
 }
 
 // ============================================================================

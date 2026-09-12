@@ -59,14 +59,15 @@ def test_get_quant_levels_data_empty(mock_config, mock_sql, mock_get_levels):
 @patch("app.routers.quant_levels_status.postgres.sql")
 @patch("app.routers.quant_levels_status.load_config")
 def test_get_quant_levels_data_structured_levels(mock_config, mock_sql, mock_get_levels, mock_quotes):
-    mock_sql.return_value = pd.DataFrame([{"d": "2026-09-10"}])
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    mock_sql.return_value = pd.DataFrame([{"d": today_str}])
     mock_quotes.return_value = {
         "^SPX": {"ticker": "^SPX", "price": 5820.0}
     }
 
     mock_df = pd.DataFrame([
         {
-            "DATETIME": "2026-09-10 14:00:00",
+            "DATETIME": f"{today_str} 14:00:00",
             "TICKER": "SPX",
             "START_LVL_PRICE": 5850.0,
             "END_LVL_PRICE": 5860.0,
@@ -75,7 +76,7 @@ def test_get_quant_levels_data_structured_levels(mock_config, mock_sql, mock_get
             "WEB_LINK": "https://example.com/post/1"
         },
         {
-            "DATETIME": "2026-09-10 14:00:00",
+            "DATETIME": f"{today_str} 14:00:00",
             "TICKER": "SPX",
             "START_LVL_PRICE": 5800.0,
             "END_LVL_PRICE": None,
@@ -84,7 +85,7 @@ def test_get_quant_levels_data_structured_levels(mock_config, mock_sql, mock_get
             "WEB_LINK": "https://example.com/post/1"
         },
         {
-            "DATETIME": "2026-09-10 14:00:00",
+            "DATETIME": f"{today_str} 14:00:00",
             "TICKER": "SPX",
             "START_LVL_PRICE": 5750.0,
             "END_LVL_PRICE": 5760.0,
@@ -95,7 +96,7 @@ def test_get_quant_levels_data_structured_levels(mock_config, mock_sql, mock_get
     ])
     mock_get_levels.return_value = mock_df
 
-    resp = client.get("/api/quant-levels/data?ticker=SPX&as_of_date=2026-09-10")
+    resp = client.get(f"/api/quant-levels/data?ticker=SPX&as_of_date={today_str}")
     assert resp.status_code == 200
     data = resp.json()
 

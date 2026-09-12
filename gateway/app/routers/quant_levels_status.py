@@ -1,6 +1,6 @@
 import logging
 import time as time_module
-from datetime import datetime, date, timedelta, time
+from datetime import datetime, date, timedelta, time, timezone
 from zoneinfo import ZoneInfo
 from typing import Optional, Any, List, Dict, Tuple
 import httpx
@@ -37,6 +37,13 @@ class QuantLevelSyncResponse(BaseModel):
     rows_upserted: Optional[int] = None
 
 
+class QuantLevelExtractDateResponse(BaseModel):
+    status: str
+    target_date: str
+    rows_upserted: int
+    message: str
+
+
 class QuantLevelItem(BaseModel):
     start_price: float
     end_price: Optional[float] = None
@@ -55,6 +62,8 @@ class QuantLevelSummary(BaseModel):
     ticker: str
     as_of_date: Optional[str] = None
     spot_price: Optional[float] = None
+    spot_type: str = "LIVE"
+    spot_label: str = "SPX Live Spot"
     immediate_resistance: Optional[float] = None
     immediate_support: Optional[float] = None
     channel_width: Optional[float] = None
@@ -69,6 +78,8 @@ class QuantLevelDataResponse(BaseModel):
     as_of_date: Optional[str] = None
     available_dates: List[str] = []
     spot_price: Optional[float] = None
+    spot_type: str = "LIVE"
+    spot_label: str = "SPX Live Spot"
     summary: QuantLevelSummary
     levels: List[QuantLevelItem] = []
     message: Optional[str] = None
@@ -88,6 +99,12 @@ class QuantLevelCandlesResponse(BaseModel):
     status: str
     ticker: str
     as_of_date: str
+    session_open: Optional[float] = None
+    session_close: Optional[float] = None
+    session_high: Optional[float] = None
+    session_low: Optional[float] = None
+    session_change_pts: Optional[float] = None
+    session_change_pct: Optional[float] = None
     candles: List[CandlestickBar] = []
     message: Optional[str] = None
 
@@ -322,35 +339,67 @@ async def get_quant_levels_data(
         except ValueError:
             target_date = None
 
-    # 2. Concurrently fetch spot price
-    spot_price: Optional[float] = None
-    quote_syms = [clean_ticker]
-    if clean_ticker == "SPX":
-        quote_syms.append("^SPX")
-    elif clean_ticker == "NDX":
-        quote_syms.append("^NDX")
-
-    try:
-        quotes = await get_batch_quotes(quote_syms)
-        for sym in quote_syms:
-            if sym in quotes and quotes[sym].get("price"):
-                spot_price = float(quotes[sym]["price"])
-                break
-    except Exception as ex:
-        logger.warning(f"Failed fetching spot price for {clean_ticker}: {ex}")
-
-    # 3. Query quant levels from postgres
+    # 2. Query quant levels from postgres
     try:
         df_levels = postgres.get_quant_levels(config, ticker=clean_ticker, as_of_date=target_date)
     except Exception as ex:
         logger.error(f"Error querying quant levels for {clean_ticker}: {ex}")
         df_levels = pd.DataFrame()
 
+    # Filter to exact target_date if resolved and DATETIME present
+    if target_date is not None and "DATETIME" in df_levels.columns and not df_levels.empty:
+        df_levels["DATE_ONLY"] = pd.to_datetime(df_levels["DATETIME"]).dt.date
+        date_filtered = df_levels[df_levels["DATE_ONLY"] == target_date].copy()
+        if not date_filtered.empty:
+            df_levels = date_filtered
+        else:
+            # Fallback to latest available date in DataFrame
+            max_d = pd.to_datetime(df_levels["DATETIME"]).dt.date.max()
+            df_levels = df_levels[pd.to_datetime(df_levels["DATETIME"]).dt.date == max_d].copy()
+            target_date = max_d
+    elif "DATETIME" in df_levels.columns and not df_levels.empty:
+        max_d = pd.to_datetime(df_levels["DATETIME"]).dt.date.max()
+        df_levels = df_levels[pd.to_datetime(df_levels["DATETIME"]).dt.date == max_d].copy()
+        target_date = max_d
+
+    # 3. Spot price resolution (Live vs Historical Close)
+    eastern = ZoneInfo("America/New_York")
+    now_eastern = datetime.now(eastern)
+    is_historical = (target_date is not None and target_date < now_eastern.date())
+
+    spot_price: Optional[float] = None
+    if is_historical:
+        spot_type = "HISTORICAL_CLOSE"
+        spot_label = "SPX Session Close"
+        try:
+            spot_price = await _get_session_close(target_date)
+        except Exception as ex:
+            logger.warning(f"Failed resolving historical session close for {target_date}: {ex}")
+    else:
+        spot_type = "LIVE"
+        spot_label = "SPX Live Spot"
+        quote_syms = [clean_ticker]
+        if clean_ticker == "SPX":
+            quote_syms.append("^SPX")
+        elif clean_ticker == "NDX":
+            quote_syms.append("^NDX")
+
+        try:
+            quotes = await get_batch_quotes(quote_syms)
+            for sym in quote_syms:
+                if sym in quotes and quotes[sym].get("price"):
+                    spot_price = float(quotes[sym]["price"])
+                    break
+        except Exception as ex:
+            logger.warning(f"Failed fetching spot price for {clean_ticker}: {ex}")
+
     if df_levels.empty:
         summary = QuantLevelSummary(
             ticker=clean_ticker,
             as_of_date=str(target_date) if target_date else None,
             spot_price=spot_price,
+            spot_type=spot_type,
+            spot_label=spot_label,
             immediate_resistance=None,
             immediate_support=None,
             channel_width=None,
@@ -364,26 +413,12 @@ async def get_quant_levels_data(
             as_of_date=str(target_date) if target_date else None,
             available_dates=available_dates,
             spot_price=spot_price,
+            spot_type=spot_type,
+            spot_label=spot_label,
             summary=summary,
             levels=[],
             message=f"No quant levels found for {clean_ticker} as of {target_date or 'latest'}."
         )
-
-    # Filter to exact target_date if resolved and DATETIME present
-    if target_date is not None and "DATETIME" in df_levels.columns:
-        df_levels["DATE_ONLY"] = pd.to_datetime(df_levels["DATETIME"]).dt.date
-        date_filtered = df_levels[df_levels["DATE_ONLY"] == target_date].copy()
-        if not date_filtered.empty:
-            df_levels = date_filtered
-        else:
-            # Fallback to latest available date in DataFrame
-            max_d = pd.to_datetime(df_levels["DATETIME"]).dt.date.max()
-            df_levels = df_levels[pd.to_datetime(df_levels["DATETIME"]).dt.date == max_d].copy()
-            target_date = max_d
-    elif "DATETIME" in df_levels.columns:
-        max_d = pd.to_datetime(df_levels["DATETIME"]).dt.date.max()
-        df_levels = df_levels[pd.to_datetime(df_levels["DATETIME"]).dt.date == max_d].copy()
-        target_date = max_d
 
     # Convert to structured items
     items: List[QuantLevelItem] = []
@@ -397,6 +432,8 @@ async def get_quant_levels_data(
     ref_spot = spot_price or (
         float(df_levels["START_LVL_PRICE"].median()) if not df_levels.empty else 0.0
     )
+    if spot_price is None and is_historical and not df_levels.empty:
+        spot_price = ref_spot
 
     for _, row in df_levels.iterrows():
         start_p = float(row["START_LVL_PRICE"])
@@ -447,7 +484,6 @@ async def get_quant_levels_data(
         ))
 
     # Identify immediate support & resistance
-    # items are sorted start_price DESC
     imm_res: Optional[QuantLevelItem] = None
     imm_sup: Optional[QuantLevelItem] = None
 
@@ -476,6 +512,8 @@ async def get_quant_levels_data(
         ticker=clean_ticker,
         as_of_date=str(target_date) if target_date else None,
         spot_price=spot_price,
+        spot_type=spot_type,
+        spot_label=spot_label,
         immediate_resistance=imm_res_val,
         immediate_support=imm_sup_val,
         channel_width=channel_w,
@@ -490,9 +528,141 @@ async def get_quant_levels_data(
         as_of_date=str(target_date) if target_date else None,
         available_dates=available_dates,
         spot_price=spot_price,
+        spot_type=spot_type,
+        spot_label=spot_label,
         summary=summary,
         levels=items
     )
+
+
+def _compute_candle_session_metrics(bars: List[CandlestickBar]) -> Dict[str, Optional[float]]:
+    if not bars:
+        return {
+            "session_open": None,
+            "session_close": None,
+            "session_high": None,
+            "session_low": None,
+            "session_change_pts": None,
+            "session_change_pct": None,
+        }
+    s_open = bars[0].open
+    s_close = bars[-1].close
+    s_high = max(b.high for b in bars)
+    s_low = min(b.low for b in bars)
+    s_pts = round(s_close - s_open, 2)
+    s_pct = round((s_pts / s_open) * 100, 2) if s_open else 0.0
+    return {
+        "session_open": s_open,
+        "session_close": s_close,
+        "session_high": s_high,
+        "session_low": s_low,
+        "session_change_pts": s_pts,
+        "session_change_pct": s_pct,
+    }
+
+
+async def _get_candles_bars(target_date: date) -> List[CandlestickBar]:
+    clean_ticker = "SPX"
+    target_str = target_date.strftime("%Y-%m-%d")
+    cache_key = f"{clean_ticker}_{target_str}"
+    eastern = ZoneInfo("America/New_York")
+    now_eastern = datetime.now(eastern)
+
+    is_today = (target_date >= now_eastern.date())
+    ttl = 30.0 if is_today else 86400.0  # 30s for active session, 24h for historical sessions
+
+    # Check in-memory cache
+    if cache_key in _CANDLES_CACHE:
+        cached_time, cached_bars = _CANDLES_CACHE[cache_key]
+        if time_module.time() - cached_time < ttl:
+            return cached_bars
+
+    dt_start = datetime(target_date.year, target_date.month, target_date.day, 9, 30, tzinfo=eastern)
+    dt_end = datetime(target_date.year, target_date.month, target_date.day, 16, 15, tzinfo=eastern)
+    p1 = int(dt_start.timestamp()) - 300
+    p2 = int(dt_end.timestamp()) + 300
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1={p1}&period2={p2}&interval=5m"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+    bars: List[CandlestickBar] = []
+    async with httpx.AsyncClient(timeout=6.0) as client:
+        resp = await client.get(url, headers=headers)
+        if resp.status_code == 200:
+            data = resp.json()
+            results = data.get("chart", {}).get("result", [])
+            if results:
+                res0 = results[0]
+                timestamps = res0.get("timestamp", [])
+                indicators = res0.get("indicators", {}).get("quote", [{}])[0]
+                opens = indicators.get("open", [])
+                highs = indicators.get("high", [])
+                lows = indicators.get("low", [])
+                closes = indicators.get("close", [])
+                volumes = indicators.get("volume", [])
+
+                for i, ts in enumerate(timestamps):
+                    if i >= len(opens) or i >= len(highs) or i >= len(lows) or i >= len(closes):
+                        break
+                    o, h, l, c = opens[i], highs[i], lows[i], closes[i]
+                    if o is None or h is None or l is None or c is None:
+                        continue
+                    bar_dt = datetime.fromtimestamp(ts, eastern)
+                    if bar_dt.date() != target_date:
+                        continue
+                    bar_time = bar_dt.time()
+                    if bar_time < time(9, 30) or bar_time > time(16, 15):
+                        continue
+                    vol = int(volumes[i]) if (i < len(volumes) and volumes[i] is not None) else 0
+                    bars.append(CandlestickBar(
+                        timestamp=ts,
+                        datetime=bar_dt.strftime("%H:%M"),
+                        open=round(float(o), 2),
+                        high=round(float(h), 2),
+                        low=round(float(l), 2),
+                        close=round(float(c), 2),
+                        volume=vol
+                    ))
+
+    _CANDLES_CACHE[cache_key] = (time_module.time(), bars)
+    return bars
+
+
+async def _get_session_close(target_date: date) -> Optional[float]:
+    try:
+        bars = await _get_candles_bars(target_date)
+        if bars:
+            return bars[-1].close
+    except Exception as ex:
+        logger.warning(f"Error getting 5m candles for session close on {target_date}: {ex}")
+
+    # Fallback to 1d Yahoo Finance chart
+    try:
+        eastern = ZoneInfo("America/New_York")
+        dt_start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, tzinfo=eastern)
+        dt_end = dt_start + timedelta(days=1)
+        p1 = int(dt_start.timestamp()) - 3600
+        p2 = int(dt_end.timestamp()) + 3600
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1={p1}&period2={p2}&interval=1d"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json"
+        }
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data.get("chart", {}).get("result", [])
+                if results:
+                    closes = results[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+                    valid_closes = [c for c in closes if c is not None]
+                    if valid_closes:
+                        return round(float(valid_closes[-1]), 2)
+    except Exception as ex:
+        logger.warning(f"Fallback 1d close fetch failed for {target_date}: {ex}")
+
+    return None
 
 
 @router.get("/candles", response_model=QuantLevelCandlesResponse)
@@ -503,7 +673,7 @@ async def get_quant_levels_candles(
     """
     Fetches 5-minute intraday candlestick bars for SPX for the specified as_of_date
     (or latest available session) from Yahoo Finance (^GSPC) during regular trading hours (09:30 - 16:15 ET).
-    Results are cached in memory.
+    Results are cached in memory (24h for historical dates, 30s for active date).
     """
     clean_ticker = "SPX"
     eastern = ZoneInfo("America/New_York")
@@ -519,75 +689,20 @@ async def get_quant_levels_candles(
         target_date = get_expected_quant_levels_date(now_eastern)
 
     target_str = target_date.strftime("%Y-%m-%d")
-    cache_key = f"{clean_ticker}_{target_str}"
-
-    # Check in-memory cache
-    if cache_key in _CANDLES_CACHE:
-        cached_time, cached_bars = _CANDLES_CACHE[cache_key]
-        is_today = (target_date == now_eastern.date())
-        if not is_today or (time_module.time() - cached_time < 30.0):
-            return QuantLevelCandlesResponse(
-                status="ok" if cached_bars else "empty",
-                ticker=clean_ticker,
-                as_of_date=target_str,
-                candles=cached_bars,
-                message=None if cached_bars else f"No candles found for {target_str}."
-            )
 
     try:
-        dt_start = datetime(target_date.year, target_date.month, target_date.day, 9, 30, tzinfo=eastern)
-        dt_end = datetime(target_date.year, target_date.month, target_date.day, 16, 15, tzinfo=eastern)
-        p1 = int(dt_start.timestamp()) - 300
-        p2 = int(dt_end.timestamp()) + 300
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1={p1}&period2={p2}&interval=5m"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/json"
-        }
-        bars: List[CandlestickBar] = []
-        async with httpx.AsyncClient(timeout=6.0) as client:
-            resp = await client.get(url, headers=headers)
-            if resp.status_code == 200:
-                data = resp.json()
-                results = data.get("chart", {}).get("result", [])
-                if results:
-                    res0 = results[0]
-                    timestamps = res0.get("timestamp", [])
-                    indicators = res0.get("indicators", {}).get("quote", [{}])[0]
-                    opens = indicators.get("open", [])
-                    highs = indicators.get("high", [])
-                    lows = indicators.get("low", [])
-                    closes = indicators.get("close", [])
-                    volumes = indicators.get("volume", [])
-
-                    for i, ts in enumerate(timestamps):
-                        if i >= len(opens) or i >= len(highs) or i >= len(lows) or i >= len(closes):
-                            break
-                        o, h, l, c = opens[i], highs[i], lows[i], closes[i]
-                        if o is None or h is None or l is None or c is None:
-                            continue
-                        bar_dt = datetime.fromtimestamp(ts, eastern)
-                        if bar_dt.date() != target_date:
-                            continue
-                        bar_time = bar_dt.time()
-                        if bar_time < time(9, 30) or bar_time > time(16, 15):
-                            continue
-                        vol = int(volumes[i]) if (i < len(volumes) and volumes[i] is not None) else 0
-                        bars.append(CandlestickBar(
-                            timestamp=ts,
-                            datetime=bar_dt.strftime("%H:%M"),
-                            open=round(float(o), 2),
-                            high=round(float(h), 2),
-                            low=round(float(l), 2),
-                            close=round(float(c), 2),
-                            volume=vol
-                        ))
-
-        _CANDLES_CACHE[cache_key] = (time_module.time(), bars)
+        bars = await _get_candles_bars(target_date)
+        metrics = _compute_candle_session_metrics(bars)
         return QuantLevelCandlesResponse(
             status="ok" if bars else "empty",
             ticker=clean_ticker,
             as_of_date=target_str,
+            session_open=metrics["session_open"],
+            session_close=metrics["session_close"],
+            session_high=metrics["session_high"],
+            session_low=metrics["session_low"],
+            session_change_pts=metrics["session_change_pts"],
+            session_change_pct=metrics["session_change_pct"],
             candles=bars,
             message=None if bars else f"No intraday session candles available for {target_str}."
         )
@@ -597,6 +712,52 @@ async def get_quant_levels_candles(
             status="error",
             ticker=clean_ticker,
             as_of_date=target_str,
+            session_open=None,
+            session_close=None,
+            session_high=None,
+            session_low=None,
+            session_change_pts=None,
+            session_change_pct=None,
             candles=[],
             message=f"Failed to retrieve SPX intraday candles: {str(ex)}"
+        )
+
+
+@router.post("/extract-date", response_model=QuantLevelExtractDateResponse)
+async def extract_quant_levels_for_date(
+    target_date: str,
+    current_user: str = Depends(get_current_user)
+):
+    """
+    On-demand targeted quant levels extraction for a specific historical date.
+    Auth protected (requires valid session token).
+    """
+    logger.info(f"User '{current_user}' requested quant levels extraction for target_date='{target_date}'.")
+
+    # Validate target_date format YYYY-MM-DD
+    try:
+        dt = datetime.strptime(target_date.strip(), "%Y-%m-%d").date()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid date format. Expected YYYY-MM-DD."
+        )
+
+    try:
+        from common_lib.quant_levels.runner import run_target_date_extraction
+        config = load_config()
+        rows = run_target_date_extraction(dt, config=config)
+        return QuantLevelExtractDateResponse(
+            status="ok",
+            target_date=target_date,
+            rows_upserted=rows,
+            message=f"Successfully extracted {rows} quant levels for {target_date}."
+        )
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.error(f"Targeted quant levels extraction failed for {target_date}: {ex}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Targeted date extraction failed: {str(ex)}"
         )

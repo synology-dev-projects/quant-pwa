@@ -65,10 +65,71 @@
   font-family: 'JetBrains Mono', monospace;
 }
 
-.levels-controls {
+.levels-controls,
+.levels-controls-group {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.levels-step-btn {
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.levels-step-btn:hover:not(:disabled) {
+  background: #334155;
+  color: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.levels-step-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.levels-date-picker {
+  background: #1e293b;
+  color: #f1f5f9;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+  min-height: 44px;
+  box-sizing: border-box;
+  color-scheme: dark;
+  transition: border-color 0.15s ease;
+}
+
+.levels-date-picker:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3);
+}
+
+.levels-date-picker::-webkit-calendar-picker-indicator {
+  filter: invert(0.8) brightness(1.2);
+  cursor: pointer;
 }
 
 .levels-date-select {
@@ -81,6 +142,8 @@
   font-size: 0.8rem;
   cursor: pointer;
   outline: none;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .levels-date-select:focus {
@@ -98,11 +161,14 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
+  min-height: 44px;
+  box-sizing: border-box;
   transition: all 0.15s ease;
 }
 
-.levels-refresh-btn:hover {
+.levels-refresh-btn:hover:not(:disabled) {
   background: #334155;
   color: #f8fafc;
 }
@@ -335,28 +401,44 @@
   justify-content: space-between;
   padding: 0.5rem 0.85rem;
   margin: 0.25rem 0;
-  background: linear-gradient(90deg, rgba(251, 191, 36, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%);
-  border: 1px dashed #fbbf24;
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border: 1px dashed #22c55e;
   border-radius: 6px;
-  box-shadow: 0 0 12px rgba(251, 191, 36, 0.2);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.2);
+}
+
+.ladder-spot-marker.historical {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.18) 0%, rgba(30, 41, 59, 0.85) 100%);
+  border: 1px solid #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
 }
 
 .spot-marker-label {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  color: #fbbf24;
+  color: #22c55e;
   font-weight: 700;
   font-size: 0.8rem;
   font-family: 'JetBrains Mono', monospace;
 }
 
+.ladder-spot-marker.historical .spot-marker-label {
+  color: #fbbf24;
+}
+
 .spot-marker-pulse {
   width: 7px;
   height: 7px;
-  background: #fbbf24;
+  background: #22c55e;
   border-radius: 50%;
   animation: spotPulse 1.8s infinite;
+}
+
+.ladder-spot-marker.historical .spot-marker-pulse {
+  background: #f59e0b;
+  animation: none;
+  box-shadow: 0 0 6px #f59e0b;
 }
 
 @keyframes spotPulse {
@@ -370,6 +452,10 @@
   font-weight: 800;
   font-size: 1.05rem;
   color: #fffbeb;
+}
+
+.ladder-spot-marker.historical .spot-marker-price {
+  color: #fef3c7;
 }
 
 /* --- Structured Table View --- */
@@ -439,6 +525,47 @@
   color: #94a3b8;
   font-size: 0.85rem;
   margin-bottom: 1.25rem;
+}
+
+.levels-extract-action-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.levels-extract-btn {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  padding: 0.5rem 1.25rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 44px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.levels-extract-btn:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.25);
+  color: #f0f9ff;
+  border-color: #38bdf8;
+}
+
+.levels-extract-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.levels-extract-status {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 /* ==========================================================================

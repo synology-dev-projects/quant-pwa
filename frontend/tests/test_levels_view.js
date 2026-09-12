@@ -231,6 +231,18 @@ global.fetch = async (url) => {
       json: async () => mockCandlesResponse
     };
   }
+  if (url.includes('/api/quant-levels/extract-date')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: 'ok',
+        target_date: '2026-09-05',
+        rows_upserted: 14,
+        message: 'Successfully extracted 14 quant levels for 2026-09-05.'
+      })
+    };
+  }
   return {
     ok: true,
     status: 200,
@@ -247,20 +259,43 @@ Promise.all([
   console.log('--- TEST 1: SPX Ticker Lock & Shell Mounting ---');
   assert.equal(levelsView.ticker, 'SPX', 'LevelsView is strictly locked to SPX');
 
+  const dateSelectMock = {
+    innerHTML: '',
+    children: [],
+    appendChild: () => {},
+    addEventListener: (ev, cb) => { dateSelectMock.listeners[ev] = cb; },
+    listeners: {},
+    value: ''
+  };
+  const datePickerMock = {
+    value: '',
+    max: '',
+    addEventListener: (ev, cb) => { datePickerMock.listeners[ev] = cb; },
+    listeners: {}
+  };
+  const prevBtnMock = {
+    disabled: false,
+    addEventListener: (ev, cb) => { prevBtnMock.listeners[ev] = cb; },
+    listeners: {}
+  };
+  const nextBtnMock = {
+    disabled: false,
+    addEventListener: (ev, cb) => { nextBtnMock.listeners[ev] = cb; },
+    listeners: {}
+  };
+  const refreshBtnMock = {
+    addEventListener: (ev, cb) => { refreshBtnMock.listeners[ev] = cb; },
+    listeners: {}
+  };
+
   const container = createMockElement('div');
   container.innerHTML = '';
   container.querySelector = (sel) => {
-    if (sel === '#levelsDateSelect') {
-      return {
-        innerHTML: '',
-        children: [],
-        appendChild: () => {},
-        addEventListener: () => {}
-      };
-    }
-    if (sel === '#levelsRefreshBtn') {
-      return { addEventListener: () => {} };
-    }
+    if (sel === '#levelsDateSelect') return dateSelectMock;
+    if (sel === '#levelsDatePicker') return datePickerMock;
+    if (sel === '#levelsPrevBtn') return prevBtnMock;
+    if (sel === '#levelsNextBtn') return nextBtnMock;
+    if (sel === '#levelsRefreshBtn') return refreshBtnMock;
     if (sel === '#levelsContentMount') {
       return { innerHTML: '', querySelector: () => null };
     }
@@ -273,6 +308,9 @@ Promise.all([
   assert(container.innerHTML.includes('Quant Levels Terminal'), 'Header title contains Quant Levels Terminal');
   assert(container.innerHTML.includes('S&P 500 Daily Pivot'), 'Subtitle mentions S&P 500');
   assert(container.innerHTML.includes('levelsDateSelect'), 'Date selector dropdown mounted');
+  assert(container.innerHTML.includes('levelsDatePicker'), 'Native HTML5 Date picker mounted');
+  assert(container.innerHTML.includes('levelsPrevBtn'), 'Quick-step ◄ Prev button mounted');
+  assert(container.innerHTML.includes('levelsNextBtn'), 'Quick-step Next ► button mounted');
   assert(container.innerHTML.includes('levelsRefreshBtn'), 'Refresh button mounted');
   assert(container.innerHTML.includes('levelsContentMount'), 'Content mount target mounted');
 
@@ -411,6 +449,133 @@ Promise.all([
   chartInstance.destroy();
   assert.equal(chartInstance.canvas, null, 'Chart cleanly destroyed');
   console.log('  ✓ PASS: Candlestick chart component renders canvas, metrics, legend, and cleans up');
+
+  console.log('\n--- TEST 9: Date Picker & Quick-Step Buttons Mounting ---');
+  assert(container.innerHTML.includes('levels-controls-group'), 'Header controls group wrapper present');
+  assert(container.innerHTML.includes('id="levelsDatePicker"'), 'Date picker input element mounted');
+  assert(container.innerHTML.includes('id="levelsPrevBtn"'), 'Previous session button mounted');
+  assert(container.innerHTML.includes('id="levelsNextBtn"'), 'Next session button mounted');
+  assert(container.innerHTML.includes('max="'), 'Date picker specifies max date limit');
+  console.log('  ✓ PASS: Native HTML5 date picker and quick-step buttons mounted with WCAG controls group');
+
+  console.log('\n--- TEST 10: Two-Way Synchronization Between Picker & Dropdown ---');
+  levelsView.availableDates = ['2026-09-11', '2026-09-10', '2026-09-09'];
+  levelsView.updateDateSelector();
+
+  // 1. Date picker changes to a date in availableDates -> updates dropdown
+  datePickerMock.listeners['change']({ target: { value: '2026-09-10' } });
+  assert.equal(levelsView.selectedDate, '2026-09-10', 'Selected date updated from date picker');
+  assert.equal(dateSelectMock.value, '2026-09-10', 'Dropdown value synced with date picker');
+
+  // 2. Date picker changes to a custom date not in availableDates -> clears dropdown selection
+  datePickerMock.listeners['change']({ target: { value: '2026-09-01' } });
+  assert.equal(levelsView.selectedDate, '2026-09-01', 'Selected date set to custom date');
+  assert.equal(dateSelectMock.value, '', 'Dropdown cleared for custom unlisted date');
+
+  // 3. Dropdown changes -> updates date picker
+  dateSelectMock.listeners['change']({ target: { value: '2026-09-09' } });
+  assert.equal(levelsView.selectedDate, '2026-09-09', 'Selected date updated from dropdown');
+  assert.equal(datePickerMock.value, '2026-09-09', 'Date picker value synced with dropdown');
+  console.log('  ✓ PASS: Two-way synchronization between date picker and session select is flawless');
+
+  console.log('\n--- TEST 11: Quick-Step Navigation Logic & Boundary Rules ---');
+  levelsView.availableDates = ['2026-09-11', '2026-09-10', '2026-09-09'];
+  levelsView.selectedDate = '2026-09-11';
+  levelsView.updateStepButtons();
+  assert.equal(nextBtnMock.disabled, true, 'Next button disabled on latest available date');
+
+  // Step backwards (◄ Prev)
+  prevBtnMock.listeners['click']();
+  assert.equal(levelsView.selectedDate, '2026-09-10', 'Step backwards moved to previous available session');
+  assert.equal(datePickerMock.value, '2026-09-10', 'Date picker synced to stepped date');
+  assert.equal(nextBtnMock.disabled, false, 'Next button enabled when not on latest date');
+
+  // Step backwards again (◄ Prev)
+  prevBtnMock.listeners['click']();
+  assert.equal(levelsView.selectedDate, '2026-09-09', 'Step backwards moved to oldest available session');
+
+  // Step forward (Next ►)
+  nextBtnMock.listeners['click']();
+  assert.equal(levelsView.selectedDate, '2026-09-10', 'Step forward moved to next available session');
+  assert.equal(nextBtnMock.disabled, false, 'Next button still enabled');
+
+  // Step forward again to latest session
+  nextBtnMock.listeners['click']();
+  assert.equal(levelsView.selectedDate, '2026-09-11', 'Step forward reached latest session');
+  assert.equal(nextBtnMock.disabled, true, 'Next button disabled on reaching latest session');
+  console.log('  ✓ PASS: Quick-step navigation steps sessions and enforces latest session disable rule');
+
+  console.log('\n--- TEST 12: Historical Spot Price Context & Labeling ---');
+  // Historical spot marker helper
+  const histSpotHtml = levelsView.buildSpotMarkerHtml(5482.50, true);
+  assert(histSpotHtml.includes('ladder-spot-marker historical'), 'Spot marker has .historical class');
+  assert(histSpotHtml.includes('SPX SESSION CLOSE'), 'Spot marker displays SPX SESSION CLOSE');
+  assert(histSpotHtml.includes('$5,482.50'), 'Spot marker displays historical close price');
+
+  // Live spot marker helper
+  const liveSpotHtml = levelsView.buildSpotMarkerHtml(5600.00, false);
+  assert(!liveSpotHtml.includes('ladder-spot-marker historical'), 'Live spot marker does not have .historical class');
+  assert(liveSpotHtml.includes('SPX LIVE SPOT'), 'Live spot marker displays SPX LIVE SPOT');
+
+  // Hero HUD card historical rendering
+  const histMount = { innerHTML: '', querySelector: () => null };
+  levelsView.renderLevelsUI(histMount, {
+    ...mockDataResponse,
+    spot_price: 5482.50,
+    spot_type: 'HISTORICAL_CLOSE',
+    summary: {
+      ...mockDataResponse.summary,
+      spot_label: 'SPX Session Close'
+    }
+  });
+  assert(histMount.innerHTML.includes('SPX Session Close'), 'Hero HUD card label displays SPX Session Close');
+  assert(histMount.innerHTML.includes('$5,482.50'), 'Hero HUD spot card displays historical close price');
+  assert(histMount.innerHTML.includes('ladder-spot-marker historical'), 'Ladder includes historical spot marker class');
+  assert(histMount.innerHTML.includes('SPX SESSION CLOSE'), 'Ladder spot marker text displays SPX SESSION CLOSE');
+  console.log('  ✓ PASS: Historical spot price anchoring correctly labels SPX Session Close in Hero and Ladder');
+
+  console.log('\n--- TEST 13: Empty State On-Demand Extraction Button ---');
+  levelsView.selectedDate = '2026-09-05';
+  let extractBtnRef = null;
+  const extractMount = {
+    innerHTML: '',
+    querySelector: function(sel) {
+      if (sel === '#levelsExtractTargetBtn') {
+        if (!extractBtnRef) {
+          extractBtnRef = {
+            disabled: false,
+            innerHTML: '',
+            listeners: {},
+            addEventListener: (ev, cb) => { extractBtnRef.listeners[ev] = cb; },
+            click: async () => {
+              if (extractBtnRef.listeners['click']) {
+                await extractBtnRef.listeners['click']();
+              }
+            }
+          };
+        }
+        return extractBtnRef;
+      }
+      if (sel === '#levelsExtractStatus') {
+        return { style: {}, textContent: '' };
+      }
+      return null;
+    }
+  };
+
+  levelsView.renderEmptyState(extractMount, 'No levels found in database for 2026-09-05.');
+  assert(extractMount.innerHTML.includes('levelsExtractTargetBtn'), 'On-demand extraction button mounted in empty state');
+  assert(extractMount.innerHTML.includes('Extract Quant Levels for 2026-09-05'), 'Button text includes target date');
+
+  // Trigger click on extraction button
+  const extractBtn = extractMount.querySelector('#levelsExtractTargetBtn');
+  assert(extractBtn, 'Found extract button');
+  await extractBtn.click();
+
+  const extractReq = requestedUrls.find((u) => u.includes('/api/quant-levels/extract-date'));
+  assert(extractReq, 'Extract date endpoint was called');
+  assert(extractReq.includes('target_date=2026-09-05'), 'Extract endpoint called with target_date=2026-09-05');
+  console.log('  ✓ PASS: Empty state renders on-demand extraction trigger and issues targeted extraction POST');
 
   console.log('\n==================================================================');
   console.log('  ALL SPX QUANT LEVELS & CANDLESTICK TESTS PASSED (100% GREEN)');
