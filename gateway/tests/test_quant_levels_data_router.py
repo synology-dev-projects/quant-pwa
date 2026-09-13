@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from unittest.mock import patch, MagicMock
 import pandas as pd
 from fastapi.testclient import TestClient
@@ -59,7 +60,8 @@ def test_get_quant_levels_data_empty(mock_config, mock_sql, mock_get_levels):
 @patch("app.routers.quant_levels_status.postgres.sql")
 @patch("app.routers.quant_levels_status.load_config")
 def test_get_quant_levels_data_structured_levels(mock_config, mock_sql, mock_get_levels, mock_quotes):
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    eastern = ZoneInfo("America/New_York")
+    today_str = datetime.now(eastern).strftime("%Y-%m-%d")
     mock_sql.return_value = pd.DataFrame([{"d": today_str}])
     mock_quotes.return_value = {
         "^SPX": {"ticker": "^SPX", "price": 5820.0}

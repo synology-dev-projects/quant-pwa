@@ -427,11 +427,21 @@ async def get_quant_levels_data(
 
     df_levels["START_LVL_PRICE"] = pd.to_numeric(df_levels["START_LVL_PRICE"], errors="coerce")
     df_levels = df_levels.dropna(subset=["START_LVL_PRICE"])
-    df_levels = df_levels.sort_values(by="START_LVL_PRICE", ascending=False)
+
+    # Defensively filter out non-SPX outlier records (e.g. SPY/QQQ levels ~700 from multi-ticker scraper posts)
+    if clean_ticker == "SPX":
+        df_levels = df_levels[df_levels["START_LVL_PRICE"] >= 2500.0]
 
     ref_spot = spot_price or (
         float(df_levels["START_LVL_PRICE"].median()) if not df_levels.empty else 0.0
     )
+    if ref_spot > 0:
+        df_levels = df_levels[
+            (df_levels["START_LVL_PRICE"] >= ref_spot * 0.50) &
+            (df_levels["START_LVL_PRICE"] <= ref_spot * 1.50)
+        ]
+
+    df_levels = df_levels.sort_values(by="START_LVL_PRICE", ascending=False)
     if spot_price is None and is_historical and not df_levels.empty:
         spot_price = ref_spot
 

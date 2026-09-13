@@ -371,7 +371,7 @@ export class CandlestickChart {
       return;
     }
 
-    // 1. Calculate Strict Fit All Y-Axis Bounds
+    // 1. Calculate Strict Fit Y-Axis Bounds (Session Candle Action + Relevant Corridors)
     let minY = Infinity;
     let maxY = -Infinity;
 
@@ -379,19 +379,6 @@ export class CandlestickChart {
       for (const c of this.candles) {
         if (c.low < minY) minY = c.low;
         if (c.high > maxY) maxY = c.high;
-      }
-    }
-
-    if (this.levels && this.levels.length > 0) {
-      for (const lvl of this.levels) {
-        if (lvl.start_price != null) {
-          if (lvl.start_price < minY) minY = lvl.start_price;
-          if (lvl.start_price > maxY) maxY = lvl.start_price;
-        }
-        if (lvl.end_price != null) {
-          if (lvl.end_price < minY) minY = lvl.end_price;
-          if (lvl.end_price > maxY) maxY = lvl.end_price;
-        }
       }
     }
 
@@ -403,6 +390,26 @@ export class CandlestickChart {
     if (minY === Infinity || maxY === -Infinity || maxY <= minY) {
       minY = (this.spotPrice || 5600) - 50;
       maxY = (this.spotPrice || 5600) + 50;
+    }
+
+    // Anchor session center to prevent far-away outlier artifacts (e.g. SPY ~700 pt levels)
+    // from expanding the Y-axis and squashing the candlestick series into a 1px flat line.
+    const sessionCenter = (minY + maxY) / 2;
+    const maxDeltaPct = 0.035; // Relevant levels within ±3.5% of session price action (~266 pts for SPX 7600)
+
+    if (this.levels && this.levels.length > 0) {
+      for (const lvl of this.levels) {
+        const p1 = lvl.start_price;
+        const p2 = lvl.end_price;
+        if (p1 != null && Math.abs(p1 - sessionCenter) / sessionCenter <= maxDeltaPct) {
+          if (p1 < minY) minY = p1;
+          if (p1 > maxY) maxY = p1;
+        }
+        if (p2 != null && Math.abs(p2 - sessionCenter) / sessionCenter <= maxDeltaPct) {
+          if (p2 < minY) minY = p2;
+          if (p2 > maxY) maxY = p2;
+        }
+      }
     }
 
     // Margin padding
@@ -469,10 +476,17 @@ export class CandlestickChart {
       if (this.levels && this.levels.length > 0) {
         for (const lvl of this.levels) {
           if (lvl.start_price != null && lvl.end_price != null && Math.abs(lvl.end_price - lvl.start_price) > 0.01) {
+            // Skip corridor if completely outside visible bounds
+            const topPrice = Math.max(lvl.start_price, lvl.end_price);
+            const bottomPrice = Math.min(lvl.start_price, lvl.end_price);
+            if (bottomPrice > yMaxBound || topPrice < yMinBound) continue;
+
             const y1 = getY(lvl.start_price);
             const y2 = getY(lvl.end_price);
-            const topY = Math.min(y1, y2);
-            const h = Math.abs(y1 - y2);
+            const topY = Math.max(paddingTop, Math.min(y1, y2));
+            const bottomY = Math.min(height - paddingBottom, Math.max(y1, y2));
+            const h = bottomY - topY;
+            if (h <= 0) continue;
 
             let corridorColor = 'rgba(56, 189, 248, 0.08)'; // Cyan PIVOT
             if (lvl.type === 'BUY') corridorColor = 'rgba(34, 197, 94, 0.09)'; // Green BUY
@@ -487,7 +501,11 @@ export class CandlestickChart {
       // 5. Draw Quant Level Horizontal Lines & Right Badges
       if (this.levels && this.levels.length > 0) {
         for (const lvl of this.levels) {
+          // Skip if level price is outside visible chart bounds
+          if (lvl.start_price < yMinBound || lvl.start_price > yMaxBound) continue;
+
           const startY = getY(lvl.start_price);
+          if (startY < paddingTop - 4 || startY > height - paddingBottom + 4) continue;
           const isImmRes = !!lvl.is_immediate_resistance;
           const isImmSup = !!lvl.is_immediate_support;
 
