@@ -219,7 +219,7 @@
   color: #64748b;
 }
 
-/* --- Interactive Visual Price Ladder --- */
+/* --- Interactive Price Ladder Table Section --- */
 .levels-ladder-section {
   background: #0b1120;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -231,7 +231,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-bottom: 0.75rem;
+}
+
+.levels-ladder-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
 }
 
 .levels-ladder-title {
@@ -243,67 +251,179 @@
   margin: 0;
 }
 
-.levels-ladder-container {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  position: relative;
+/* Live Polling Status Pill */
+.levels-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
-/* Level Row on Ladder */
-.ladder-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.65rem 0.85rem;
-  border-radius: 6px;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: background 0.15s ease, border-color 0.15s ease;
+.levels-live-pill.active {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #4ade80;
 }
 
-.ladder-row:hover {
-  background: rgba(30, 41, 59, 0.8);
+.levels-live-pill.active .live-indicator-dot {
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+  animation: livePulse 1.8s infinite;
 }
 
-.ladder-row-main {
+.levels-live-pill .live-indicator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+  flex-shrink: 0;
+}
+
+@keyframes livePulse {
+  0% { transform: scale(0.85); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.5; }
+  100% { transform: scale(0.85); opacity: 1; }
+}
+
+/* Ladder Table Layout */
+.levels-ladder-table {
   width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.levels-ladder-table th {
+  background: #0f172a;
+  color: #94a3b8;
+  font-weight: 600;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.levels-ladder-table td {
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  vertical-align: middle;
+}
+
+.ladder-table-row {
+  transition: background 0.15s ease;
+}
+
+.ladder-table-row:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ladder-table-row.immediate-res {
+  border-left: 3px solid #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.ladder-table-row.immediate-sup {
+  border-left: 3px solid #22c55e;
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.imm-badge {
+  font-size: 0.62rem;
+  padding: 0.1rem 0.35rem;
+  margin-left: 0.45rem;
+  vertical-align: middle;
+}
+
+.ladder-table-comment {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  word-break: break-word;
+}
+
+/* Spot Indicator Marker Table Row */
+.ladder-table-spot-row td {
+  padding: 0 !important;
+  border: none !important;
+}
+
+.ladder-spot-marker-cell {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  padding: 0.55rem 1rem;
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.18) 0%, rgba(15, 23, 42, 0.85) 100%);
+  border-top: 1px dashed #22c55e;
+  border-bottom: 1px dashed #22c55e;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.2);
 }
 
-.ladder-row.type-sell {
-  border-left: 3px solid #ef4444;
+.ladder-table-spot-row.historical .ladder-spot-marker-cell {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.2) 0%, rgba(30, 41, 59, 0.9) 100%);
+  border-top: 1px solid #f59e0b;
+  border-bottom: 1px solid #f59e0b;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.25);
 }
 
-.ladder-row.type-buy {
-  border-left: 3px solid #22c55e;
-}
-
-.ladder-row.type-pivot {
-  border-left: 3px solid #38bdf8;
-}
-
-.ladder-row.immediate-res {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.3);
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.1);
-}
-
-.ladder-row.immediate-sup {
-  background: rgba(34, 197, 94, 0.08);
-  border-color: rgba(34, 197, 94, 0.3);
-  box-shadow: 0 0 10px rgba(34, 197, 94, 0.1);
-}
-
-.ladder-left {
+.spot-marker-label {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.4rem;
+  color: #22c55e;
+  font-weight: 700;
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
 }
 
+.ladder-table-spot-row.historical .spot-marker-label {
+  color: #fbbf24;
+}
+
+.spot-marker-pulse {
+  width: 7px;
+  height: 7px;
+  background: #22c55e;
+  border-radius: 50%;
+  animation: spotPulse 1.8s infinite;
+}
+
+.ladder-table-spot-row.historical .spot-marker-pulse {
+  background: #f59e0b;
+  animation: none;
+  box-shadow: 0 0 6px #f59e0b;
+}
+
+@keyframes spotPulse {
+  0% { transform: scale(0.9); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.4; }
+  100% { transform: scale(0.9); opacity: 1; }
+}
+
+.spot-marker-price {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #fffbeb;
+}
+
+.ladder-table-spot-row.historical .spot-marker-price {
+  color: #fef3c7;
+}
+
+/* Legacy Ladder tags & badges */
 .ladder-tag {
   font-size: 0.65rem;
   font-weight: 700;
@@ -323,155 +443,11 @@
   color: #4ade80;
 }
 
-.ladder-tag.tag-pivot {
-  background: rgba(56, 189, 248, 0.2);
-  color: #38bdf8;
-}
-
 .ladder-price {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: #f1f5f9;
-}
-
-.ladder-comment-row {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.78rem;
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.03);
-  border-left: 2px solid rgba(56, 189, 248, 0.5);
-  border-radius: 4px;
-  padding: 0.3rem 0.55rem;
-  margin-top: 0.15rem;
-  line-height: 1.35;
-}
-
-.ladder-comment-icon {
-  font-size: 0.75rem;
-  opacity: 0.85;
-  flex-shrink: 0;
-}
-
-.ladder-comment-text {
-  color: #cbd5e1;
-  font-family: var(--font-mono, monospace);
-  word-break: break-word;
-}
-
-.ladder-comment {
-  font-size: 0.78rem;
-}
-
-.ladder-right {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.ladder-delta {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-}
-
-.ladder-delta.delta-above {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.ladder-delta.delta-below {
-  color: #4ade80;
-  background: rgba(34, 197, 94, 0.1);
-}
-
-.ladder-delta.delta-spot {
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.1);
-}
-
-/* Spot Indicator Marker on Ladder */
-.ladder-spot-marker {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 0.85rem;
-  margin: 0.25rem 0;
-  background: linear-gradient(90deg, rgba(34, 197, 94, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%);
-  border: 1px dashed #22c55e;
-  border-radius: 6px;
-  box-shadow: 0 0 12px rgba(34, 197, 94, 0.2);
-}
-
-.ladder-spot-marker.historical {
-  background: linear-gradient(90deg, rgba(245, 158, 11, 0.18) 0%, rgba(30, 41, 59, 0.85) 100%);
-  border: 1px solid #f59e0b;
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
-}
-
-.spot-marker-label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: #22c55e;
-  font-weight: 700;
-  font-size: 0.8rem;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.ladder-spot-marker.historical .spot-marker-label {
-  color: #fbbf24;
-}
-
-.spot-marker-pulse {
-  width: 7px;
-  height: 7px;
-  background: #22c55e;
-  border-radius: 50%;
-  animation: spotPulse 1.8s infinite;
-}
-
-.ladder-spot-marker.historical .spot-marker-pulse {
-  background: #f59e0b;
-  animation: none;
-  box-shadow: 0 0 6px #f59e0b;
-}
-
-@keyframes spotPulse {
-  0% { transform: scale(0.9); opacity: 1; }
-  50% { transform: scale(1.4); opacity: 0.4; }
-  100% { transform: scale(0.9); opacity: 1; }
-}
-
-.spot-marker-price {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 800;
-  font-size: 1.05rem;
-  color: #fffbeb;
-}
-
-.ladder-spot-marker.historical .spot-marker-price {
-  color: #fef3c7;
-}
-
-/* --- Structured Table View --- */
-.levels-table-wrapper {
-  overflow-x: auto;
-  background: #0b1120;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-}
-
-.levels-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.8rem;
-  text-align: left;
 }
 
 .levels-table th {

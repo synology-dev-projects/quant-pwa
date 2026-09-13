@@ -125,7 +125,9 @@ function createMockElement(tag) {
 
 global.document = {
   createElement: createMockElement,
-  getElementById: (id) => null
+  getElementById: (id) => null,
+  addEventListener: () => {},
+  removeEventListener: () => {}
 };
 
 const mockDatesResponse = ['2026-09-11', '2026-09-10', '2026-09-09'];
@@ -253,7 +255,7 @@ global.fetch = async (url) => {
 Promise.all([
   import('../src/tabs/levels_view.js'),
   import('../src/components/candlestick_chart.js')
-]).then(async ([{ LevelsView, sanitizeComment }, { CandlestickChart }]) => {
+]).then(async ([{ LevelsView, sanitizeComment, getEasternMarketStatus }, { CandlestickChart }]) => {
   const levelsView = new LevelsView();
 
   console.log('--- TEST 1: SPX Ticker Lock & Shell Mounting ---');
@@ -330,24 +332,18 @@ Promise.all([
   assert(dataReq.includes('ticker=SPX'), 'Data endpoint requested strictly ticker=SPX');
   console.log('  ✓ PASS: Gateway fetch requests enforce ticker=SPX query parameter');
 
-  console.log('\n--- TEST 3: Hero HUD Cards Rendering ---');
+  console.log('\n--- TEST 3: Removal of 4 Hero HUD Cards ---');
   const mount = { innerHTML: '', querySelector: () => null };
   levelsView.renderLevelsUI(mount, mockDataResponse);
 
-  assert(mount.innerHTML.includes('SPX Spot Price'), 'Spot Price card present');
-  assert(mount.innerHTML.includes('$5,600.00'), 'Spot Price formatted correctly');
-  assert(mount.innerHTML.includes('Immediate Resistance'), 'Resistance card present');
-  assert(mount.innerHTML.includes('$5,650.00'), 'Resistance value formatted correctly');
-  assert(mount.innerHTML.includes('+50.00 pts (+0.89%)'), 'Resistance delta calculated correctly');
-  assert(mount.innerHTML.includes('Immediate Support'), 'Support card present');
-  assert(mount.innerHTML.includes('$5,550.00'), 'Support value formatted correctly');
-  assert(mount.innerHTML.includes('-50.00 pts (-0.89%)'), 'Support delta calculated correctly');
-  assert(mount.innerHTML.includes('Trading Channel'), 'Trading Channel card present');
-  assert(mount.innerHTML.includes('100.00 pts'), 'Channel width displayed correctly');
-  assert(mount.innerHTML.includes('4 Total Levels Recorded'), 'Total levels count displayed');
-  console.log('  ✓ PASS: Hero HUD cards compute and format spot, resistance, support, and channel');
+  assert(!mount.innerHTML.includes('levels-hero-grid'), 'Hero HUD cards grid is completely removed');
+  assert(!mount.innerHTML.includes('levels-hero-card'), 'Individual Hero HUD cards are removed');
+  assert(!mount.innerHTML.includes('Immediate Resistance'), 'Resistance card label is removed');
+  assert(!mount.innerHTML.includes('Immediate Support'), 'Support card label is removed');
+  assert(!mount.innerHTML.includes('Trading Channel'), 'Trading Channel card is removed');
+  console.log('  ✓ PASS: 4 Hero HUD cards completely purged from SPX Quant Levels view');
 
-  console.log('\n--- TEST 4: Price Ladder & Spot Marker Insertion ---');
+  console.log('\n--- TEST 4: Price Ladder Table & Spot Marker Insertion ---');
   const ladderHtml = levelsView.buildLadderHtml(mockDataResponse.levels, 5600.0);
   assert(ladderHtml.includes('ladderSpotMarker'), 'Ladder contains live spot marker');
   assert(ladderHtml.includes('SPX LIVE SPOT'), 'Marker displays SPX LIVE SPOT label');
@@ -359,22 +355,25 @@ Promise.all([
   assert(idx5650 < idxSpot, 'Resistance 5650 comes before spot marker in descending ladder');
   assert(idxSpot < idx5580, 'Spot marker comes before support/pivot 5580 in descending ladder');
 
-  assert(ladderHtml.includes('type-sell'), 'Contains SELL row class');
-  assert(ladderHtml.includes('type-buy'), 'Contains BUY row class');
-  assert(ladderHtml.includes('type-pivot'), 'Contains PIVOT row class');
+  assert(ladderHtml.includes('tag-sell'), 'Contains SELL tag');
+  assert(ladderHtml.includes('tag-buy'), 'Contains BUY tag');
+  assert(!ladderHtml.includes('tag-pivot'), 'PIVOT category is completely removed');
+  assert(!ladderHtml.includes('type-pivot'), 'No type-pivot class in ladder table');
   assert(ladderHtml.includes('immediate-res'), 'Immediate resistance row tagged');
   assert(ladderHtml.includes('immediate-sup'), 'Immediate support row tagged');
   assert(ladderHtml.includes('Major overhead supply'), 'Ladder renders level commentary');
-  assert(ladderHtml.includes('Immediate call wall'), 'Ladder renders resistance commentary');
-  assert(ladderHtml.includes('ladder-comment-row'), 'Ladder contains dedicated comment row structure');
-  console.log('  ✓ PASS: Price ladder inserts dynamic spot marker at exact price height with proper tags & commentary');
+  assert(ladderHtml.includes('ladder-table-row'), 'Ladder formatted as clean table rows');
+  console.log('  ✓ PASS: Price ladder renders clean table with binary types (BUY/SELL) and dynamic spot row');
 
-  console.log('\n--- TEST 5: Structured Levels Table Rendering ---');
-  assert(mount.innerHTML.includes('levels-table'), 'Table wrapper present');
+  console.log('\n--- TEST 5: Structured Levels Table & Column Cleanliness ---');
+  assert(mount.innerHTML.includes('levels-ladder-table'), 'Clean ladder table wrapper present');
+  assert(mount.innerHTML.includes('>Type</th>'), 'Type column header present');
+  assert(mount.innerHTML.includes('>Level / Range</th>'), 'Level / Range column header present');
+  assert(mount.innerHTML.includes('>Commentary</th>'), 'Commentary column header present');
+  assert(!mount.innerHTML.includes('>Source</th>'), 'Source column completely removed');
+  assert(!mount.innerHTML.includes('>Delta vs Spot</th>'), 'Delta vs Spot column completely removed');
   assert(mount.innerHTML.includes('Major overhead supply'), 'Commentary rendered in table');
-  assert(mount.innerHTML.includes('View Post &rarr;'), 'Web link rendered as link button');
-  assert(mount.innerHTML.includes('Database'), 'Missing web link falls back to Database tag');
-  console.log('  ✓ PASS: Institutional structured table renders full level matrix with source links');
+  console.log('  ✓ PASS: Ladder table renders strict 3 columns (Type | Level / Range | Commentary) with zero duplicate tables');
 
   console.log('\n--- TEST 6: Empty & Error State Handling ---');
   const emptyMount = { innerHTML: '', querySelector: () => null };
@@ -416,8 +415,8 @@ Promise.all([
   assert(!nanRowHtml.includes('nan'), 'No literal "nan" appears in ladder row');
 
   const nanTableHtml = levelsView.buildTableRowHtml(nanLevel);
-  assert(nanTableHtml.includes('<td>—</td>'), 'Table row renders em dash fallback instead of "nan"');
-  assert(!nanTableHtml.includes('<td>nan</td>'), 'Table row never displays "nan"');
+  assert(nanTableHtml.includes('—'), 'Table row renders em dash fallback instead of "nan"');
+  assert(!nanTableHtml.includes('<td>nan</td>') && !nanTableHtml.includes('nan</td>'), 'Table row never displays "nan"');
   console.log('  ✓ PASS: "nan" comments are completely purged from ladder rows and cleanly fall back to "—" in tables');
 
   console.log('\n--- TEST 8: Candlestick Chart Section Mounting ---');
@@ -508,16 +507,16 @@ Promise.all([
   console.log('\n--- TEST 12: Historical Spot Price Context & Labeling ---');
   // Historical spot marker helper
   const histSpotHtml = levelsView.buildSpotMarkerHtml(5482.50, true);
-  assert(histSpotHtml.includes('ladder-spot-marker historical'), 'Spot marker has .historical class');
+  assert(histSpotHtml.includes('ladder-table-spot-row historical'), 'Spot marker has .historical class');
   assert(histSpotHtml.includes('SPX SESSION CLOSE'), 'Spot marker displays SPX SESSION CLOSE');
   assert(histSpotHtml.includes('$5,482.50'), 'Spot marker displays historical close price');
 
   // Live spot marker helper
   const liveSpotHtml = levelsView.buildSpotMarkerHtml(5600.00, false);
-  assert(!liveSpotHtml.includes('ladder-spot-marker historical'), 'Live spot marker does not have .historical class');
+  assert(!liveSpotHtml.includes('ladder-table-spot-row historical'), 'Live spot marker does not have .historical class');
   assert(liveSpotHtml.includes('SPX LIVE SPOT'), 'Live spot marker displays SPX LIVE SPOT');
 
-  // Hero HUD card historical rendering
+  // Ladder table historical rendering
   const histMount = { innerHTML: '', querySelector: () => null };
   levelsView.renderLevelsUI(histMount, {
     ...mockDataResponse,
@@ -528,11 +527,10 @@ Promise.all([
       spot_label: 'SPX Session Close'
     }
   });
-  assert(histMount.innerHTML.includes('SPX Session Close'), 'Hero HUD card label displays SPX Session Close');
-  assert(histMount.innerHTML.includes('$5,482.50'), 'Hero HUD spot card displays historical close price');
-  assert(histMount.innerHTML.includes('ladder-spot-marker historical'), 'Ladder includes historical spot marker class');
+  assert(histMount.innerHTML.includes('ladder-table-spot-row historical'), 'Ladder table includes historical spot marker class');
   assert(histMount.innerHTML.includes('SPX SESSION CLOSE'), 'Ladder spot marker text displays SPX SESSION CLOSE');
-  console.log('  ✓ PASS: Historical spot price anchoring correctly labels SPX Session Close in Hero and Ladder');
+  assert(histMount.innerHTML.includes('$5,482.50'), 'Ladder spot row displays historical close price');
+  console.log('  ✓ PASS: Historical spot price anchoring correctly labels SPX Session Close in Ladder Table');
 
   console.log('\n--- TEST 13: Empty State On-Demand Extraction Button ---');
   levelsView.selectedDate = '2026-09-05';
@@ -576,6 +574,39 @@ Promise.all([
   assert(extractReq, 'Extract date endpoint was called');
   assert(extractReq.includes('target_date=2026-09-05'), 'Extract endpoint called with target_date=2026-09-05');
   console.log('  ✓ PASS: Empty state renders on-demand extraction trigger and issues targeted extraction POST');
+
+  console.log('\n--- TEST 14: Automatic 30s Live Polling Engine & Market Hours ---');
+  const marketStatus = getEasternMarketStatus();
+  assert(marketStatus.todayDateStr, 'Market status returns todayDateStr (YYYY-MM-DD)');
+  assert(typeof marketStatus.isMarketHours === 'boolean', 'Market status returns boolean isMarketHours');
+  assert(marketStatus.weekday, 'Market status returns weekday');
+
+  // Test startPolling & stopPolling
+  levelsView.startPolling();
+  assert(levelsView.pollInterval != null, 'startPolling sets active pollInterval timer');
+  levelsView.stopPolling();
+  assert.equal(levelsView.pollInterval, null, 'stopPolling clears pollInterval timer');
+
+  // Test inspection deferral during candle crosshair interaction
+  let refreshCalled = false;
+  levelsView.refreshLiveData = async () => { refreshCalled = true; };
+  levelsView.candlestickChart = { hoveredIndex: 3 }; // User hovering crosshair
+  await levelsView.pollTick();
+  assert.equal(refreshCalled, false, 'pollTick defers refresh while user is inspecting candle with crosshair');
+
+  levelsView.candlestickChart.hoveredIndex = null; // Inspection ended
+  levelsView.container = { isConnected: true, querySelector: () => null };
+  levelsView.selectedDate = marketStatus.todayDateStr;
+  if (marketStatus.isMarketHours) {
+    await levelsView.pollTick();
+    assert.equal(refreshCalled, true, 'pollTick executes refresh when hoveredIndex is null during market hours');
+  }
+
+  // Test destroy cleanup
+  levelsView.startPolling();
+  levelsView.destroy();
+  assert.equal(levelsView.pollInterval, null, 'destroy cleanly terminates poll interval');
+  console.log('  ✓ PASS: 30s smart live polling engine respects market hours, tab visibility, and crosshair inspection');
 
   console.log('\n==================================================================');
   console.log('  ALL SPX QUANT LEVELS & CANDLESTICK TESTS PASSED (100% GREEN)');

@@ -19,6 +19,54 @@ export function sanitizeComment(raw) {
   return s;
 }
 
+export function getEasternMarketStatus(now = new Date()) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      weekday: 'short',
+      hour12: false
+    });
+    const parts = formatter.formatToParts(now);
+    const map = {};
+    for (const p of parts) {
+      map[p.type] = p.value;
+    }
+    const year = map.year;
+    const month = map.month;
+    const day = map.day;
+    const hour = parseInt(map.hour, 10);
+    const minute = parseInt(map.minute, 10);
+    const weekday = map.weekday;
+
+    const todayDateStr = `${year}-${month}-${day}`;
+    const isWeekend = weekday === 'Sat' || weekday === 'Sun';
+    const totalMinutes = hour * 60 + minute;
+    // Regular Trading Hours: 09:30 - 16:15 ET (570 to 975 minutes)
+    const isMarketHours = !isWeekend && (totalMinutes >= 570 && totalMinutes <= 975);
+
+    return {
+      todayDateStr,
+      isMarketHours,
+      weekday,
+      timeStr: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+    };
+  } catch (err) {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      todayDateStr: today,
+      isMarketHours: false,
+      weekday: 'Unknown',
+      timeStr: '00:00'
+    };
+  }
+}
+
 export class LevelsView {
   constructor() {
     this.ticker = 'SPX'; // Strictly locked to SPX
@@ -28,6 +76,8 @@ export class LevelsView {
     this.currentData = null;
     this.isLoading = false;
     this.candlestickChart = null;
+    this.pollInterval = null;
+    this._onVisibilityChange = null;
   }
 
   render(container) {
@@ -76,6 +126,17 @@ export class LevelsView {
   }
 
   bindEvents() {
+    this._onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        this.updateLiveIndicator(false, 'PAUSED (TAB HIDDEN)');
+      } else {
+        this.checkAndStartPolling();
+      }
+    };
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      document.addEventListener('visibilitychange', this._onVisibilityChange);
+    }
+
     const datePicker = this.container.querySelector('#levelsDatePicker');
     if (datePicker) {
       datePicker.addEventListener('change', (e) => {
@@ -90,6 +151,7 @@ export class LevelsView {
         }
         this.updateStepButtons();
         this.loadLevelsData();
+        this.checkAndStartPolling();
       });
     }
 
@@ -102,6 +164,7 @@ export class LevelsView {
         }
         this.updateStepButtons();
         this.loadLevelsData();
+        this.checkAndStartPolling();
       });
     }
 
@@ -109,6 +172,7 @@ export class LevelsView {
     if (prevBtn) {
       prevBtn.addEventListener('click', () => {
         this.stepSession(-1);
+        this.checkAndStartPolling();
       });
     }
 
@@ -116,6 +180,7 @@ export class LevelsView {
     if (nextBtn) {
       nextBtn.addEventListener('click', () => {
         this.stepSession(1);
+        this.checkAndStartPolling();
       });
     }
 
@@ -124,6 +189,20 @@ export class LevelsView {
       refreshBtn.addEventListener('click', () => {
         this.loadInitialData();
       });
+    }
+  }
+
+  destroy() {
+    this.stopPolling();
+    if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function' && this._onVisibilityChange) {
+      document.removeEventListener('visibilitychange', this._onVisibilityChange);
+      this._onVisibilityChange = null;
+    }
+    if (this.candlestickChart) {
+      if (typeof this.candlestickChart.destroy === 'function') {
+        this.candlestickChart.destroy();
+      }
+      this.candlestickChart = null;
     }
   }
 
@@ -299,17 +378,7 @@ export class LevelsView {
   renderLevelsUI(mount, data) {
     const summary = data.summary || {};
     const spot = data.spot_price;
-    const immRes = summary.immediate_resistance;
-    const immSup = summary.immediate_support;
-    const channel = summary.channel_width;
-
-    const formattedSpot = spot != null ? `$${spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A';
-    const formattedRes = immRes != null ? `$${immRes.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'None';
-    const formattedSup = immSup != null ? `$${immSup.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'None';
-    const formattedChannel = channel != null ? `${channel.toFixed(2)} pts` : 'N/A';
-
     const isHistorical = data.spot_type === 'HISTORICAL_CLOSE' || (summary && summary.spot_label === 'SPX Session Close');
-    const spotLabel = (summary && summary.spot_label) || (isHistorical ? 'SPX Session Close' : 'SPX Spot Price');
 
     // Sync date picker if datePicker has no value
     const datePicker = this.container ? this.container.querySelector('#levelsDatePicker') : null;
@@ -318,57 +387,34 @@ export class LevelsView {
     }
 
     mount.innerHTML = `
-      <!-- Hero Metric Cards -->
-      <div class="levels-hero-grid">
-        <div class="levels-hero-card">
-          <span class="levels-card-label">${spotLabel}</span>
-          <span class="levels-card-value">${formattedSpot}</span>
-          <span class="levels-card-sub">Session: ${data.as_of_date || 'Today'}</span>
-        </div>
-        <div class="levels-hero-card">
-          <span class="levels-card-label">Immediate Resistance</span>
-          <span class="levels-card-value res-val">${formattedRes}</span>
-          <span class="levels-card-sub">${this.calcDistanceSub(immRes, spot, 'above')}</span>
-        </div>
-        <div class="levels-hero-card">
-          <span class="levels-card-label">Immediate Support</span>
-          <span class="levels-card-value sup-val">${formattedSup}</span>
-          <span class="levels-card-sub">${this.calcDistanceSub(immSup, spot, 'below')}</span>
-        </div>
-        <div class="levels-hero-card">
-          <span class="levels-card-label">Trading Channel</span>
-          <span class="levels-card-value">${formattedChannel}</span>
-          <span class="levels-card-sub">${summary.total_levels || 0} Total Levels Recorded</span>
-        </div>
-      </div>
-
-      <!-- Price Ladder Section -->
+      <!-- Price Ladder Table Section -->
       <div class="levels-ladder-section">
         <div class="levels-ladder-header">
-          <h3 class="levels-ladder-title">Interactive Price Ladder</h3>
-          <span class="levels-subtitle">Top-to-Bottom Structure</span>
+          <div class="levels-ladder-title-group">
+            <h3 class="levels-ladder-title">Interactive Price Ladder</h3>
+            <span class="levels-subtitle">Top-to-Bottom Structure</span>
+          </div>
+          <div class="levels-ladder-header-right" id="levelsHeaderRightMount">
+            <div class="levels-live-pill" id="levelsLivePill">
+              <span class="live-indicator-dot"></span>
+              <span class="live-text">LIVE 30S</span>
+            </div>
+          </div>
         </div>
-        <div class="levels-ladder-container" id="priceLadderMount">
-          ${this.buildLadderHtml(data.levels, spot, isHistorical)}
+        <div class="levels-table-wrapper">
+          <table class="levels-table levels-ladder-table">
+            <thead>
+              <tr>
+                <th style="width: 90px;">Type</th>
+                <th style="width: 200px;">Level / Range</th>
+                <th>Commentary</th>
+              </tr>
+            </thead>
+            <tbody id="priceLadderMount">
+              ${this.buildLadderHtml(data.levels, spot, isHistorical)}
+            </tbody>
+          </table>
         </div>
-      </div>
-
-      <!-- Structured Table Section -->
-      <div class="levels-table-wrapper">
-        <table class="levels-table">
-          <thead>
-            <tr>
-              <th>Type</th>
-              <th>Level / Range</th>
-              <th>Delta vs Spot</th>
-              <th>Commentary</th>
-              <th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${data.levels.map((lvl) => this.buildTableRowHtml(lvl)).join('')}
-          </tbody>
-        </table>
       </div>
 
       <!-- Candlestick Chart Section -->
@@ -382,6 +428,127 @@ export class LevelsView {
 
     // Asynchronously load and mount 5-minute session candlesticks
     this.loadCandlesData(data);
+
+    // Evaluate live market hours & start polling if viewing today's session
+    this.checkAndStartPolling();
+  }
+
+  checkAndStartPolling() {
+    const status = getEasternMarketStatus();
+    const isToday = !this.selectedDate || this.selectedDate === status.todayDateStr;
+
+    if (!isToday) {
+      this.stopPolling();
+      this.updateLiveIndicator(false, 'HISTORICAL');
+      return;
+    }
+
+    if (!status.isMarketHours) {
+      this.stopPolling();
+      this.updateLiveIndicator(false, 'MARKET CLOSED');
+      return;
+    }
+
+    this.startPolling();
+  }
+
+  startPolling() {
+    this.updateLiveIndicator(true, 'LIVE 30S');
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+    }
+    this.pollInterval = setInterval(() => {
+      this.pollTick();
+    }, 30000);
+  }
+
+  stopPolling() {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+  }
+
+  updateLiveIndicator(isActive, text = 'LIVE 30S') {
+    const pill = this.container?.querySelector?.('#levelsLivePill');
+    if (!pill) return;
+    if (isActive) {
+      pill.className = 'levels-live-pill active';
+      pill.innerHTML = `<span class="live-indicator-dot"></span><span class="live-text">${text}</span>`;
+      pill.title = 'Live market polling active (refreshes every 30 seconds)';
+    } else {
+      pill.className = 'levels-live-pill paused';
+      pill.innerHTML = `<span class="live-indicator-dot"></span><span class="live-text">${text}</span>`;
+      pill.title = 'Live polling paused';
+    }
+  }
+
+  async pollTick() {
+    if (this.isLoading) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (this.container && this.container.isConnected === false) {
+      this.stopPolling();
+      return;
+    }
+
+    const status = getEasternMarketStatus();
+    const isToday = !this.selectedDate || this.selectedDate === status.todayDateStr;
+    if (!isToday || !status.isMarketHours) {
+      this.checkAndStartPolling();
+      return;
+    }
+
+    // If user is actively inspecting a candle bar, do not wipe out tooltip/crosshair
+    if (this.candlestickChart && this.candlestickChart.hoveredIndex != null) {
+      return;
+    }
+
+    try {
+      await this.refreshLiveData();
+    } catch (err) {
+      console.warn('[LevelsView] Polling tick error:', err);
+    }
+  }
+
+  async refreshLiveData() {
+    let dataUrl = `/api/quant-levels/data?ticker=${this.ticker}`;
+    if (this.selectedDate) {
+      dataUrl += `&as_of_date=${encodeURIComponent(this.selectedDate)}`;
+    }
+    const resp = await fetchWithAuth(dataUrl);
+    if (!resp || !resp.ok) return;
+    const data = await resp.json();
+    if (!data || data.status === 'empty' || !data.levels) return;
+
+    this.currentData = data;
+    const spot = data.spot_price;
+    const isHistorical = data.spot_type === 'HISTORICAL_CLOSE';
+
+    // Update Price Ladder rows in place
+    const tbody = this.container?.querySelector?.('#priceLadderMount');
+    if (tbody) {
+      tbody.innerHTML = this.buildLadderHtml(data.levels, spot, isHistorical);
+    }
+
+    // Refresh candles and chart in place
+    let candleUrl = `/api/quant-levels/candles?ticker=${this.ticker}`;
+    const targetDate = data.as_of_date || this.selectedDate;
+    if (targetDate) {
+      candleUrl += `&as_of_date=${encodeURIComponent(targetDate)}`;
+    }
+    const candleResp = await fetchWithAuth(candleUrl);
+    if (candleResp && candleResp.ok) {
+      const cData = await candleResp.json();
+      if (this.candlestickChart && cData.candles) {
+        this.candlestickChart.updateData({
+          candles: cData.candles,
+          levels: data.levels,
+          spot_price: spot,
+          as_of_date: targetDate,
+          ticker: this.ticker
+        });
+      }
+    }
   }
 
   async loadCandlesData(levelsData) {
@@ -476,75 +643,51 @@ export class LevelsView {
   }
 
   buildSpotMarkerHtml(spot, isHistorical = false) {
-    const markerClass = isHistorical ? 'ladder-spot-marker historical' : 'ladder-spot-marker';
+    const markerClass = isHistorical ? 'ladder-table-spot-row historical' : 'ladder-table-spot-row';
     const labelText = isHistorical ? 'SPX SESSION CLOSE' : 'SPX LIVE SPOT';
+    const formattedSpot = spot != null ? `$${spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A';
     return `
-      <div class="${markerClass}" id="ladderSpotMarker">
-        <div class="spot-marker-label">
-          <span class="spot-marker-pulse"></span>
-          <span>${labelText}</span>
-        </div>
-        <div class="spot-marker-price">$${spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-      </div>
+      <tr class="${markerClass}" id="ladderSpotMarker">
+        <td colspan="3">
+          <div class="ladder-spot-marker-cell">
+            <div class="spot-marker-label">
+              <span class="spot-marker-pulse"></span>
+              <span>${labelText}</span>
+            </div>
+            <div class="spot-marker-price">${formattedSpot}</div>
+          </div>
+        </td>
+      </tr>
     `;
   }
 
   buildLadderRowHtml(lvl) {
-    const typeClass = lvl.type === 'SELL' ? 'type-sell' : lvl.type === 'BUY' ? 'type-buy' : 'type-pivot';
-    const tagClass = lvl.type === 'SELL' ? 'tag-sell' : lvl.type === 'BUY' ? 'tag-buy' : 'tag-pivot';
+    let typeTag = '';
+    if (lvl.type === 'SELL') {
+      typeTag = '<span class="ladder-tag tag-sell">SELL</span>';
+    } else if (lvl.type === 'BUY') {
+      typeTag = '<span class="ladder-tag tag-buy">BUY</span>';
+    } else {
+      // PIVOT or any other category is completely removed and left blank
+      typeTag = '';
+    }
+
+    const immRes = lvl.is_immediate_resistance ? ' <span class="ladder-tag tag-sell imm-badge">IMM RES</span>' : '';
+    const immSup = lvl.is_immediate_support ? ' <span class="ladder-tag tag-buy imm-badge">IMM SUP</span>' : '';
     const immClass = lvl.is_immediate_resistance ? 'immediate-res' : lvl.is_immediate_support ? 'immediate-sup' : '';
-
-    let deltaClass = 'delta-spot';
-    if (lvl.distance_pts > 0) deltaClass = 'delta-above';
-    else if (lvl.distance_pts < 0) deltaClass = 'delta-below';
-
-    const sign = lvl.distance_pts >= 0 ? '+' : '';
-    const formattedDelta = `${sign}${lvl.distance_pts.toFixed(2)} pts (${sign}${lvl.distance_pct.toFixed(2)}%)`;
     const commentText = sanitizeComment(lvl.comments || lvl.comment || lvl.COMMENTS);
 
     return `
-      <div class="ladder-row ${typeClass} ${immClass}" ${commentText ? `title="Commentary: ${commentText}"` : ''}>
-        <div class="ladder-row-main">
-          <div class="ladder-left">
-            <span class="ladder-tag ${tagClass}">${lvl.type}</span>
-            <span class="ladder-price">${lvl.price_display}</span>
-          </div>
-          <div class="ladder-right">
-            ${lvl.is_immediate_resistance ? '<span class="ladder-tag tag-sell">IMM RESISTANCE</span>' : ''}
-            ${lvl.is_immediate_support ? '<span class="ladder-tag tag-buy">IMM SUPPORT</span>' : ''}
-            <span class="ladder-delta ${deltaClass}">${formattedDelta}</span>
-          </div>
-        </div>
-        ${commentText ? `
-          <div class="ladder-comment-row ladder-comment">
-            <span class="ladder-comment-icon">💬</span>
-            <span class="ladder-comment-text">${commentText}</span>
-          </div>
-        ` : ''}
-      </div>
+      <tr class="ladder-table-row ${immClass}" data-start-price="${lvl.start_price}">
+        <td>${typeTag}</td>
+        <td><strong class="ladder-price">${lvl.price_display}</strong>${immRes}${immSup}</td>
+        <td class="ladder-comment-text">${commentText || '—'}</td>
+      </tr>
     `;
   }
 
   buildTableRowHtml(lvl) {
-    const tagClass = lvl.type === 'SELL' ? 'tag-sell' : lvl.type === 'BUY' ? 'tag-buy' : 'tag-pivot';
-    const sign = lvl.distance_pts >= 0 ? '+' : '';
-    const formattedDelta = `${sign}${lvl.distance_pts.toFixed(2)} pts (${sign}${lvl.distance_pct.toFixed(2)}%)`;
-    const commentText = sanitizeComment(lvl.comments || lvl.comment || lvl.COMMENTS);
-
-    let sourceCell = '<span>Database</span>';
-    if (lvl.web_link) {
-      sourceCell = `<a href="${lvl.web_link}" target="_blank" rel="noopener" class="source-link">View Post &rarr;</a>`;
-    }
-
-    return `
-      <tr>
-        <td><span class="ladder-tag ${tagClass}">${lvl.type}</span></td>
-        <td><strong>${lvl.price_display}</strong></td>
-        <td>${formattedDelta}</td>
-        <td>${commentText || '—'}</td>
-        <td>${sourceCell}</td>
-      </tr>
-    `;
+    return this.buildLadderRowHtml(lvl);
   }
 
   renderEmptyState(mount, msg) {
