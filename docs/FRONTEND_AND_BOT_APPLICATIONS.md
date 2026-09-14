@@ -136,18 +136,31 @@ quant-pwa/
 ---
 
 ### 1.9 SPX Quant Levels View & Candlestick Component (`levels_view.js` & `candlestick_chart.js`)
-* **Dedicated Mobile Navigation Tab:** High-density institutional levels screen rendering SPX support/resistance framework and intraday price action.
+* **Dedicated Mobile Navigation Tab:** High-density institutional levels screen rendering SPX support/resistance framework, historical time-travel, and intraday price action.
+* **Clean 3-Column Price Ladder Table:**
+  - Standardized monospace dark terminal table with strict columns: `Type` | `Level / Range` | `Commentary`.
+  - Removed obsolete columns: `Source` and `Delta vs Spot`.
+  - Completely purged the 4 top Hero HUD metric cards and eliminated duplicate tables below the ladder.
+  - **Binary `Type` Tags:** Exclusively renders `BUY` (Emerald) and `SELL` (Rose). The `PIVOT` category is completely removed and left blank (`""`).
+  - **Immediate Resistance & Support:** Inline monospace badges (`IMM RES`, `IMM SUP`) with subtle row boundary tints.
+* **Integrated Spot Price Row:**
+  - Dynamically anchors `SPX LIVE SPOT` (or `SPX SESSION CLOSE` for historical playback) into the descending price ladder between corresponding price levels.
+* **Automatic 30-Second Smart Live Polling Engine:**
+  - Active regular trading hours execution (**09:30–16:15 ET**, Mon–Fri) on today's session.
+  - Pauses when viewing historical sessions, outside market hours, or when document is hidden (`visibilitychange`).
+  - Defers background canvas redraws when crosshair inspection is active (`hoveredIndex != null`).
+  - Real-time status indicator pill (`#levelsLivePill`): `LIVE 30S` (pulsing green), `MARKET CLOSED`, or `HISTORICAL`.
 * **Commentary Sanitization & Invariants:**
-  - Complete suppression of `"nan"`, `"NaN"`, `"None"`, `"null"`, `"—"`, `""` commentary across Interactive Price Ladder rows and Structured Levels Table.
-  - Dedicates a full-width callout row (`.ladder-comment-row`) with cyan left-border and speech bubble icon (`💬`) only when meaningful commentary exists.
+  - Complete suppression of `"nan"`, `"NaN"`, `"None"`, `"null"`, `"—"`, `""` commentary across ladder table rows.
+  - Displays sanitized commentary or `—` fallback with zero layout overflow.
 * **Interactive HTML5 Canvas Candlestick Chart (`candlestick_chart.js`):**
   - **Regular Trading Hours (09:30–16:15 ET):** Renders 79 5-minute candles with high-DPI retina scaling (`window.devicePixelRatio`).
-  - **Dynamic Y-Axis Price Envelope:** Fits all active quant levels, spot price, and candle wicks dynamically with zero vertical clipping.
-  - **Microstructure Corridors & Glow:** Shaded translucent range corridors between adjacent levels and 2px glowing badges for `IMM RESISTANCE` and `IMM SUPPORT`.
+  - **Constrained Y-Axis Scaling:** Filters far-outlier levels ($\pm 3.5\%$ threshold) to prevent vertical scale flattening.
+  - **Microstructure Corridors & Glow:** Shaded translucent range corridors between adjacent levels and glowing lines for `IMM RES` and `IMM SUP`.
   - **Interactive Crosshair HUD:** Hover/touch tracking displaying bar OHLCV, volume, session net change, and distance to closest support/resistance levels.
   - **Fullscreen Modal Lightbox:** Tap to expand the candlestick chart to a full-screen high-resolution dialog.
 * **Automated In-Situ UI Test Suite (`test_levels_view.js`):**
-  - 8 DOM assertions verifying shell mounting, canvas mounting, spot marker insertion, comment sanitization, and fallback states.
+  - 15 automated DOM assertions verifying ticker lock, clean ladder table, binary types, spot row positioning, empty states, comment sanitization, and 30s smart live polling lifecycle.
 
 
 ---
