@@ -219,3 +219,15 @@ The Settings Modal provides single-point management for application configuratio
 - **Quant Levels Freshness Indicator & In-Process Sync (`/api/quant-levels/*`):** Evaluates `quant_lvl_data_te` against Eastern Time 6:30 AM cutoff and weekend Friday resolution, executing in-process web scraping and upserts on demand.
 - **Full-Width Accessible Layout:** Full-width centered flexbox containers with minimum 44px WCAG tap targets on all action buttons.
 
+---
+
+## 4. SPX Quant Levels View & Proximity Alert Engine
+
+### 4.1 Architecture & Features
+- **Price Ladder & Real-Time Spot Tracking:** Visual price ladder with binary BUY/SELL classifications, commentary sanitization, and real-time spot price positioning.
+- **Interactive Candlestick Chart:** Lightweight Canvas-based candlestick chart with custom corridor overlays and full-screen lightbox inspection.
+- **Dynamic Proximity Audio & Toast Notifications:** Web Audio API harmonic chime triggers alongside high-contrast floating toast banners indicating range spans and touched boundaries.
+- **Persistent "Today's Level Hits" History Ribbon:** Dedicated `#levelsAlertHistoryRibbon` mounted above the price ladder displaying all triggered level hits for today with Eastern Time stamps, preventing visual loss during mobile browser sleep or highlight decay.
+- **Range & Boundary Matching:** Dynamically maps alert boundary hits to ladder rows and keeps visual hit indicators synchronized.
+
+

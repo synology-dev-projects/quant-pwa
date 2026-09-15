@@ -353,6 +353,17 @@ sequenceDiagram
 
 ---
 
+### 3.7 SPX Quant Levels Proximity Alert Engine (`/api/quant-levels/alerts/*`)
+* **Real-Time Level Proximity Detection:** Server-side engine monitors live SPX quotes against intraday buy/sell levels extracted from quant posts.
+* **Range & Boundary Resolution:** For range levels (`BUY 7565.00 - 7575.00`), dynamically evaluates `touched_boundary` based on spot price entry point. Cooldowns (15 minutes) are independently keyed to the specific touched boundary so entering at the top boundary does not suppress alerts if price subsequently drives down to the floor boundary.
+* **Endpoints:**
+  - `GET /api/quant-levels/alerts/recent`: Returns list of today's triggered SPX level alerts (`alerts: LevelAlertItem[]`, `cooldowns: LevelAlertPendingCooldown[]`).
+  - `POST /api/quant-levels/alerts/test`: Synthetic test alert generation accepting `level_price_range`, `touched_boundary`, `level_type`, and `comments`.
+* **Push Notifications (NTFY):** Dispatches high-priority push notifications to Synology NTFY (`https://richntfynotifier.synology.me/spx_alerts`) formatted with full range and touched boundary:
+  `SPX Level Hit: BUY @ 7565.00 - 7575.00 (Touched 7575.00)`
+
+---
+
 ## 4. Model Context Protocol (MCP) Server Specifications
 
 The Gateway exposes standard Model Context Protocol (MCP) Universal Dual-Transport endpoints for autonomous agents, supporting both modern Streamable HTTP direct JSON-RPC POST and legacy Server-Sent Events (SSE):
