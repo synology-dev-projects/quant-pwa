@@ -307,6 +307,50 @@ sequenceDiagram
   ```
 
 
+### 3.5 GEX/DEX Snapshot & Confluence Radar Endpoints (`/api/snapshot/*`, `/api/radar/*`)
+
+#### 1. GEX/DEX Snapshot Manual Sync (`POST /api/snapshot/sync`)
+* **Auth:** `Authorization: Bearer <SESSION_TOKEN>` (Protected)
+* **Purpose:** Triggers downstream GEX/DEX Snapshot pipeline. Uniquely aggregates user watchlist symbols (`quant_watchlist_tickers`) with top institutional options flow momentum leaders (`unusual_option_flow_te`), paces TradingEdge queries (50ms rate limit delay), and upserts records into `gexdex_snapshot`.
+* **Threading SLA:** Executed in threadpool via `asyncio.to_thread` to preserve FastAPI event loop responsiveness.
+* **Response (`200 OK`):**
+  ```json
+  {
+    "status": "ok",
+    "message": "Successfully committed 18 snapshot rows for session 2026-09-11.",
+    "rows_upserted": 18,
+    "snapshot_date": "2026-09-11"
+  }
+  ```
+
+#### 2. Confluence Radar Unified Table (`GET /api/radar/unified-table`)
+* **Auth:** None (Public / Token supported)
+* **Query Parameters:**
+  - `as_of_date` (optional: `YYYY-MM-DD`, defaults to latest session).
+  - `source` (optional: `"WATCHLIST"`, `"FLOW"`).
+  - `sort_by` (optional: `"net_gex"`, `"call_wall"`, etc.).
+* **Purpose:** Queries `gexdex_snapshot` with enriched metadata, including `source_scorecards` array and `is_watchlist` boolean flag, plus total watchlist and flow leader aggregate counts.
+* **Response (`200 OK`):**
+  ```json
+  {
+    "snapshot_date": "2026-09-11",
+    "total_rows": 18,
+    "watchlist_count": 4,
+    "flow_leaders_count": 16,
+    "rows": [
+      {
+        "ticker": "AAPL",
+        "net_gex": 1250000.0,
+        "net_dex": -450000.0,
+        "call_wall": 240.0,
+        "put_wall": 220.0,
+        "source_scorecards": ["WATCHLIST", "3D_BULL_PREM"],
+        "is_watchlist": true
+      }
+    ]
+  }
+  ```
+
 ---
 
 ## 4. Model Context Protocol (MCP) Server Specifications

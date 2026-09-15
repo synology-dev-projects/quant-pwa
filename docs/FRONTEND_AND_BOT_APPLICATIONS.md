@@ -162,6 +162,18 @@ quant-pwa/
 * **Automated In-Situ UI Test Suite (`test_levels_view.js`):**
   - 15 automated DOM assertions verifying ticker lock, clean ladder table, binary types, spot row positioning, empty states, comment sanitization, and 30s smart live polling lifecycle.
 
+### 1.5 Confluence Radar & Watchlists Integration (`v1.1.36`)
+
+* **User Watchlists Ingestion (`gexdex_snapshot`):**
+  - Dynamically extracts all constituent tickers across user watchlists (`quant_watchlist_tickers`), tags them with `"WATCHLIST"`, and unions them into the daily GEX/DEX snapshot fact table.
+* **Confluence Radar 3-Pill Filter Strip (`radar_view.js`):**
+  - **Segmented Filter Bar:** `[ ALL (N) ]` | `[ ⭐ WATCHLIST (M) ]` | `[ ⚡ FLOW LEADERS (K) ]` positioned in the ribbon bar with dynamic count badges.
+  - **Ultra-Fast Filtering:** Client-side `<10ms` response toggling without DOM repaints or network re-fetches.
+  - **Visual Distinction:** Distinct `⭐ WL` badges rendered adjacent to ticker buttons for watchlist constituents.
+* **Watchlists On-Demand Snapshot Sync (`watchlist_view.js`):**
+  - Glassmorphic dark amber `[ ⚡ Sync GEX/DEX ]` trigger button (`#watchlistSyncSnapshotBtn`) in the Watchlist tab header bar.
+  - Triggers `POST /api/snapshot/sync` with live `⚡ Syncing...` loading state and glassmorphic toast notification (`.watchlist-toast`).
+  - Non-blocking execution via `asyncio.to_thread` guarantees 100% frontend and gateway UI responsiveness during snapshot ingestion.
 
 ---
 
