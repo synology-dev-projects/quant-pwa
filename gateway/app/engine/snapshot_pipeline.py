@@ -421,12 +421,15 @@ def run_snapshot_pipeline(
 
     logger.info(f"Executing GEX/DEX Snapshot Pipeline for target date: {target_date}")
 
-    # 1. Flow presence verification
+    # 1. Flow & Watchlist presence verification
     has_flow = check_session_flow_exists(engine, target_date, config=config)
-    if not has_flow:
-        msg = f"No flow records detected in unusual_option_flow_te for trade session {target_date}."
+    user_tickers = get_user_watchlist_tickers(engine)
+    if not has_flow and not user_tickers:
+        msg = f"No flow records detected in unusual_option_flow_te for trade session {target_date} and no user watchlist tickers."
         logger.warning(msg)
         return 0, target_date, msg
+    elif not has_flow:
+        logger.info(f"No flow records detected for {target_date}, but {len(user_tickers)} user watchlist tickers found. Proceeding with watchlist snapshot.")
 
     # 2. Watchlist generation
     watchlist = generate_scorecard_watchlist(engine, target_date)
