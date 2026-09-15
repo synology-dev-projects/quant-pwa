@@ -27,6 +27,9 @@ export class WatchlistView {
             <span class="watchlist-live-tag" id="watchlistLiveTag" title="Live quote feed (updates every 5s)">
               <span class="dot-live"></span> 5s LIVE
             </span>
+            <button type="button" class="watchlist-btn-sync-snapshot" id="syncSnapshotBtn" title="Compute and refresh daily GEX/DEX Snapshot for all watchlists">
+              ⚡ Sync GEX/DEX
+            </button>
           </div>
 
           <!-- Hidden select preserved for test fixture compatibility -->
@@ -294,6 +297,35 @@ export class WatchlistView {
           : true;
         if (ok) {
           await this.deleteWatchlist(this.selectedWatchlistId);
+        }
+      });
+    }
+
+    // Sync Snapshot Button
+    const syncSnapshotBtn = this.container?.querySelector?.('#syncSnapshotBtn');
+    if (syncSnapshotBtn) {
+      syncSnapshotBtn.addEventListener('click', async () => {
+        if (syncSnapshotBtn.disabled) return;
+        syncSnapshotBtn.disabled = true;
+        syncSnapshotBtn.classList.add('syncing');
+        syncSnapshotBtn.textContent = '⚡ Syncing...';
+
+        try {
+          const res = await fetchWithAuth('/api/snapshot/sync', { method: 'POST' });
+          if (res && res.ok) {
+            const data = await res.json();
+            this.showToast(`✓ GEX/DEX Snapshot refreshed: ${data.rows_upserted || 0} rows committed for session ${data.snapshot_date || 'current'}.`);
+          } else {
+            const err = await res.json().catch(() => ({ detail: 'Snapshot sync failed' }));
+            this.showToast(`⚠️ Sync failed: ${err.detail || 'Server error'}`);
+          }
+        } catch (ex) {
+          console.error('[WatchlistView] Snapshot sync error:', ex);
+          this.showToast(`⚠️ Sync failed: ${ex.message || 'Network error'}`);
+        } finally {
+          syncSnapshotBtn.disabled = false;
+          syncSnapshotBtn.classList.remove('syncing');
+          syncSnapshotBtn.textContent = '⚡ Sync GEX/DEX';
         }
       });
     }
@@ -916,6 +948,20 @@ export class WatchlistView {
         window.quantApp.cockpitView.searchTicker(ticker);
       }
     }
+  }
+
+  showToast(message) {
+    if (typeof document === 'undefined') return;
+    const existing = document.querySelector('.watchlist-toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.className = 'watchlist-toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.classList.add('fade-out');
+      setTimeout(() => toast.remove(), 400);
+    }, 3500);
   }
 
   destroy() {

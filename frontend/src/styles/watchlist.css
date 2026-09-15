@@ -98,6 +98,66 @@
   animation: none;
 }
 
+.watchlist-btn-sync-snapshot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 4px;
+  color: #fbbf24;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 28px;
+}
+
+.watchlist-btn-sync-snapshot:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: #f59e0b;
+  color: #fff;
+}
+
+.watchlist-btn-sync-snapshot:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.watchlist-btn-sync-snapshot.syncing {
+  animation: pulseSync 1.2s infinite ease-in-out;
+}
+
+@keyframes pulseSync {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.watchlist-toast {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: #1e293b;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #f8fafc;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-family: var(--font-mono, monospace);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  z-index: 99999;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.watchlist-toast.fade-out {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
 /* ==============================================================================
    2. 1-Tap Horizontal Watchlist Tabs Strip (Compact & Inline Deletion)
    ============================================================================== */

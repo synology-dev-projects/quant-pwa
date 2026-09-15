@@ -1,5 +1,6 @@
 import logging
 import math
+import time as pytime
 from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple, Set
 from zoneinfo import ZoneInfo
@@ -111,6 +112,29 @@ def get_available_trade_dates(engine: sa.Engine, session_date: date, limit: int 
         return result_dates
 
 
+def get_user_watchlist_tickers(engine: sa.Engine) -> Set[str]:
+    """
+    Extracts all deduplicated, non-empty uppercase symbols across all user watchlists
+    from quant_watchlist_tickers. Returns empty set on failure or if table doesn't exist.
+    """
+    tickers = set()
+    try:
+        query = sa.text("""
+            SELECT DISTINCT UPPER(TRIM(ticker)) AS ticker
+            FROM quant_watchlist_tickers
+            WHERE ticker IS NOT NULL AND TRIM(ticker) != ''
+        """)
+        with engine.connect() as conn:
+            rows = conn.execute(query).scalars().all()
+            for t in rows:
+                if t:
+                    tickers.add(str(t).strip().upper())
+        logger.info(f"Discovered {len(tickers)} unique user watchlist ticker(s): {sorted(list(tickers))}")
+    except Exception as ex:
+        logger.warning(f"Unable to load quant_watchlist_tickers (table may be absent or empty): {ex}")
+    return tickers
+
+
 def generate_scorecard_watchlist(engine: sa.Engine, session_date: date) -> Dict[str, List[str]]:
     """
     Executes the 4 flow scorecard queries across both 3D (3-day) and 1W (5-day) windows:
@@ -118,18 +142,30 @@ def generate_scorecard_watchlist(engine: sa.Engine, session_date: date) -> Dict[
       2. Top 5 Bullish Hits (BUY_CALL, SELL_PUT)
       3. Top 5 Bearish Premium (BUY_PUT, SELL_CALL)
       4. Top 5 Bearish Hits (BUY_PUT, SELL_CALL)
+    
+    Also queries quant_watchlist_tickers and tags user watchlist symbols with 'WATCHLIST'.
     Unions the results, performs DISTINCT on ticker symbol, and tracks which scorecards surfaced each ticker.
     """
+    watchlist: Dict[str, Set[str]] = {}
+
+    # Seed user watchlist tickers
+    user_tickers = get_user_watchlist_tickers(engine)
+    for sym in user_tickers:
+        if sym not in watchlist:
+            watchlist[sym] = set()
+        watchlist[sym].add("WATCHLIST")
+
     trade_dates = get_available_trade_dates(engine, session_date, limit=5)
     if not trade_dates:
         logger.warning(f"No trade dates found <= {session_date} in unusual_option_flow_te.")
+        if watchlist:
+            return {sym: sorted(list(tags)) for sym, tags in watchlist.items()}
         return {}
 
     window_3d = trade_dates[:3]
     window_1w = trade_dates[:5]
 
     logger.info(f"Generating Watchlist using 3D window: {window_3d} and 1W window: {window_1w}")
-    watchlist: Dict[str, Set[str]] = {}
 
     def _query_top_tickers(dates: List[date], order_types: Tuple[str, ...], order_by: str, tag: str):
         if not dates:
@@ -210,6 +246,7 @@ def collect_gexdex_for_watchlist(
     for ticker, scorecards in sorted(watchlist.items()):
         try:
             logger.info(f"Fetching GEX/DEX data for {ticker}...")
+            pytime.sleep(0.05)  # 50ms pacing delay to safeguard TradingEdge rate limits
             raw_data = extract_raw_data(config, session, ticker, max_dte=50, strike_range=25)
 
             if raw_data and isinstance(raw_data, dict):

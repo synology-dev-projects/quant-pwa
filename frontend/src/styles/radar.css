@@ -383,3 +383,70 @@
 .radar-empty-cell.error {
   color: #ef4444;
 }
+
+/* ==============================================================================
+   Segmented Source Filter Pills & Badges
+   ============================================================================== */
+.radar-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: -0.15rem;
+}
+
+.radar-filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 0.25rem 0.35rem;
+}
+
+.radar-filter-pill {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 28px;
+}
+
+.radar-filter-pill:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.radar-filter-pill.active {
+  background: #38bdf8;
+  color: #0b0f19;
+}
+
+.radar-ticker-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.radar-tag-pill.tag-watchlist {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #fbbf24;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}

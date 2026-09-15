@@ -118,6 +118,8 @@ class RadarUnifiedRow(BaseModel):
     net_gex: Optional[float] = None
     formatted_net_gex: str = "N/A"
     gamma_regime: str = "Neutral"
+    source_scorecards: List[str] = []
+    is_watchlist: bool = False
 
 
 class RadarUnifiedResponse(BaseModel):
@@ -125,6 +127,8 @@ class RadarUnifiedResponse(BaseModel):
     dates_3d: List[str]
     dates_7d: List[str]
     total_tickers: int
+    watchlist_count: int = 0
+    flow_leaders_count: int = 0
     top_flow_ticker: Optional[str] = None
     rows: List[RadarUnifiedRow]
     available_dates: List[str]
@@ -153,12 +157,14 @@ def get_radar_dates(_: str = Depends(get_current_user)) -> List[str]:
 @router.get("/unified-table", response_model=RadarUnifiedResponse)
 def get_unified_radar_table(
     target_date: Optional[str] = Query(None, alias="date"),
+    source: Optional[str] = Query(None),
     _: str = Depends(get_current_user)
 ) -> RadarUnifiedResponse:
     """
     Returns the unified Confluence Radar table combining GEX/DEX snapshot key levels
     and options flow metrics across trailing 3-day and 7-day trade sessions.
     Grain: (snapshot_date, ticker).
+    Supports filtering by source ('WATCHLIST', 'FLOW', or specific scorecard tag).
     """
     engine = _get_engine()
     with engine.connect() as conn:
@@ -202,7 +208,8 @@ def get_unified_radar_table(
                 zero_flip,
                 net_gex,
                 net_dex,
-                gamma_regime
+                gamma_regime,
+                source_scorecards
             FROM gexdex_snapshot
             WHERE snapshot_date = :target_date
         """)
@@ -230,7 +237,6 @@ def get_unified_radar_table(
         # 6. Confluence symbols: strictly include curated watchlist tickers with GEX/DEX levels
         all_symbols = sorted(snap_map.keys())
 
-
         rows: List[RadarUnifiedRow] = []
         for sym in all_symbols:
             s = snap_map.get(sym)
@@ -248,6 +254,17 @@ def get_unified_radar_table(
             p7 = int(f.get("prints_7d", 0)) if f else 0
             prem3 = float(f.get("premium_3d", 0.0)) if f else 0.0
             prem7 = float(f.get("premium_7d", 0.0)) if f else 0.0
+
+            raw_scorecards = s.get("source_scorecards") if s else None
+            scorecard_list: List[str] = []
+            if raw_scorecards:
+                if isinstance(raw_scorecards, list):
+                    scorecard_list = [str(x).strip().upper() for x in raw_scorecards if x]
+                elif isinstance(raw_scorecards, str):
+                    cleaned = raw_scorecards.strip("{}[]'\"")
+                    if cleaned:
+                        scorecard_list = [x.strip().strip("'\"").upper() for x in cleaned.split(",") if x.strip()]
+            is_wl = "WATCHLIST" in scorecard_list
 
             rows.append(RadarUnifiedRow(
                 ticker=sym,
@@ -269,11 +286,26 @@ def get_unified_radar_table(
                 formatted_zero_flip=_format_price(zf_val),
                 net_gex=gex_val,
                 formatted_net_gex=_format_currency(gex_val) if gex_val is not None else "N/A",
-                gamma_regime=regime_val
+                gamma_regime=regime_val,
+                source_scorecards=scorecard_list,
+                is_watchlist=is_wl
             ))
 
         # Default sort: premium_7d DESC, then prints_7d DESC
         rows.sort(key=lambda r: (r.premium_7d, r.prints_7d), reverse=True)
+
+        total_wl = sum(1 for r in rows if r.is_watchlist)
+        total_flow = sum(1 for r in rows if any(x != "WATCHLIST" for x in r.source_scorecards))
+
+        # Filter by source if requested
+        if source and source.strip():
+            src_upper = source.strip().upper()
+            if src_upper == "WATCHLIST":
+                rows = [r for r in rows if r.is_watchlist]
+            elif src_upper == "FLOW":
+                rows = [r for r in rows if any(x != "WATCHLIST" for x in r.source_scorecards)]
+            else:
+                rows = [r for r in rows if src_upper in [x.upper() for x in r.source_scorecards]]
 
         top_flow_ticker = rows[0].ticker if rows and rows[0].premium_7d > 0 else None
 
@@ -282,6 +314,8 @@ def get_unified_radar_table(
             dates_3d=dates_3d,
             dates_7d=dates_7d,
             total_tickers=len(rows),
+            watchlist_count=total_wl,
+            flow_leaders_count=total_flow,
             top_flow_ticker=top_flow_ticker,
             rows=rows,
             available_dates=avail_dates,

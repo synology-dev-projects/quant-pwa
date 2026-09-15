@@ -8,6 +8,7 @@ export class RadarView {
     this.selectedDate = null;
     this.sortColumn = 'premium_7d';
     this.sortDirection = 'desc'; // 'desc' | 'asc' | 'natural'
+    this.activeFilter = 'all'; // 'all' | 'watchlist' | 'flow'
     this.isLoading = false;
   }
 
@@ -57,6 +58,21 @@ export class RadarView {
           </div>
           <div class="radar-ribbon-hint">
             <span>💡 Click any ticker to inspect in Cockpit ↗</span>
+          </div>
+        </div>
+
+        <!-- Segmented Source Filter Pills -->
+        <div class="radar-filter-bar" id="radarFilterBar">
+          <div class="radar-filter-group" id="radarFilterGroup" role="tablist" aria-label="Filter Ticker Source">
+            <button type="button" class="radar-filter-pill active" data-filter="all" id="filterAllBtn">
+              ALL (<span id="radarCountAll">0</span>)
+            </button>
+            <button type="button" class="radar-filter-pill" data-filter="watchlist" id="filterWlBtn">
+              ⭐ WATCHLIST (<span id="radarCountWl">0</span>)
+            </button>
+            <button type="button" class="radar-filter-pill" data-filter="flow" id="filterFlowBtn">
+              ⚡ FLOW LEADERS (<span id="radarCountFlow">0</span>)
+            </button>
           </div>
         </div>
 
@@ -117,6 +133,22 @@ export class RadarView {
       dateSelect.addEventListener('change', (e) => {
         this.selectedDate = e.target.value || null;
         this.loadScanData(this.selectedDate);
+      });
+    }
+
+    // Source Filter Pills (ALL | WATCHLIST | FLOW LEADERS)
+    const filterGroup = this.container.querySelector('#radarFilterGroup');
+    if (filterGroup) {
+      filterGroup.addEventListener('click', (e) => {
+        const btn = e.target.closest('.radar-filter-pill');
+        if (!btn) return;
+        const filter = btn.getAttribute('data-filter');
+        if (!filter || filter === this.activeFilter) return;
+        this.activeFilter = filter;
+        const pills = filterGroup.querySelectorAll('.radar-filter-pill');
+        pills.forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        this.renderRows();
       });
     }
 
@@ -262,6 +294,29 @@ export class RadarView {
     if (topFlowEl) {
       topFlowEl.textContent = this.currentData.top_flow_ticker || '-';
     }
+
+    // Update Filter Pill Counts
+    const allRows = this.currentData.rows || [];
+    const countAllEl = this.container.querySelector('#radarCountAll');
+    if (countAllEl) {
+      countAllEl.textContent = `${this.currentData.total_tickers || allRows.length}`;
+    }
+
+    const countWlEl = this.container.querySelector('#radarCountWl');
+    if (countWlEl) {
+      const wlCount = this.currentData.watchlist_count !== undefined
+        ? this.currentData.watchlist_count
+        : allRows.filter(r => r.is_watchlist || (r.source_scorecards && r.source_scorecards.includes('WATCHLIST'))).length;
+      countWlEl.textContent = `${wlCount}`;
+    }
+
+    const countFlowEl = this.container.querySelector('#radarCountFlow');
+    if (countFlowEl) {
+      const flowCount = this.currentData.flow_leaders_count !== undefined
+        ? this.currentData.flow_leaders_count
+        : allRows.filter(r => (r.source_scorecards || []).some(x => x !== 'WATCHLIST')).length;
+      countFlowEl.textContent = `${flowCount}`;
+    }
   }
 
   handleSort(column) {
@@ -292,7 +347,15 @@ export class RadarView {
 
   getSortedRows() {
     if (!this.currentData || !this.currentData.rows) return [];
-    const rows = [...this.currentData.rows];
+    let rows = [...this.currentData.rows];
+
+    // Filter by active source pill
+    if (this.activeFilter === 'watchlist') {
+      rows = rows.filter(r => r.is_watchlist || (r.source_scorecards && r.source_scorecards.includes('WATCHLIST')));
+    } else if (this.activeFilter === 'flow') {
+      rows = rows.filter(r => (r.source_scorecards || []).some(x => x !== 'WATCHLIST'));
+    }
+
     const col = this.sortColumn || 'premium_7d';
     const isAsc = this.sortDirection === 'asc';
 
@@ -354,10 +417,11 @@ export class RadarView {
 
     const rows = this.getSortedRows();
     if (rows.length === 0) {
+      const filterLabel = this.activeFilter === 'watchlist' ? 'watchlist ' : this.activeFilter === 'flow' ? 'flow leader ' : '';
       tbody.innerHTML = `
         <tr>
           <td colspan="10" class="radar-empty-cell">
-            No qualifying tickers found for session ${this.selectedDate || 'current'}.
+            No qualifying ${filterLabel}tickers found for session ${this.selectedDate || 'current'}.
           </td>
         </tr>
       `;
@@ -366,10 +430,15 @@ export class RadarView {
 
     tbody.innerHTML = rows.map(r => {
       const ratioClass = this.getRatioClass(r.call_put_ratio);
+      const isWl = r.is_watchlist || (r.source_scorecards && r.source_scorecards.includes('WATCHLIST'));
+      const wlBadge = isWl ? `<span class="radar-tag-pill tag-watchlist" title="On User Watchlist">⭐ WL</span>` : '';
       return `
         <tr data-ticker="${r.ticker}" title="Open ${r.ticker} in Cockpit">
           <td class="col-ticker">
-            <span class="flow-ticker-btn radar-ticker-btn">${r.ticker}</span>
+            <div class="radar-ticker-cell">
+              <span class="flow-ticker-btn radar-ticker-btn">${r.ticker}</span>
+              ${wlBadge}
+            </div>
           </td>
           <td class="col-num">${r.formatted_spot_price}</td>
           <td class="col-ratio"><span class="radar-ratio-pill ${ratioClass}">${r.call_put_ratio}</span></td>
