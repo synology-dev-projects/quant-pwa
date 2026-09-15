@@ -1,3 +1,4 @@
+import os
 import asyncio
 import collections
 import logging
@@ -65,7 +66,7 @@ class LevelAlertMonitor:
         """
         endpoint = "https://richntfynotifier.synology.me"
         topic = "spx_alerts"
-        priority = 4
+        priority = int(os.getenv("SPX_ALERT_NTFY_PRIORITY", "5"))
         tags = "chart_with_upwards_trend,bell"
 
         lvl_type = alert.get("level_type", "LEVEL")

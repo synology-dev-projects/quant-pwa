@@ -13,12 +13,13 @@ client = TestClient(app)
 NY_TZ = ZoneInfo("America/New_York")
 
 
+import asyncio
+
 # ==============================================================================
 # PROXIMITY DETECTION & COOLDOWN UNIT TESTS
 # ==============================================================================
 
-@pytest.mark.asyncio
-async def test_hit_detection_within_threshold():
+def test_hit_detection_within_threshold():
     """Spot 6020.85 vs Level 6020.00 (|0.85| <= 1.50) triggers alert."""
     monitor = LevelAlertMonitor()
     levels = [{
@@ -31,7 +32,7 @@ async def test_hit_detection_within_threshold():
 
     with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
         mock_dispatch.return_value = True
-        alerts = await monitor.check_proximity(spot=6020.85, levels=levels)
+        alerts = asyncio.run(monitor.check_proximity(spot=6020.85, levels=levels))
 
     assert len(alerts) == 1
     alert = alerts[0]
@@ -45,8 +46,7 @@ async def test_hit_detection_within_threshold():
     assert 6020.00 in monitor.cooldown_map
 
 
-@pytest.mark.asyncio
-async def test_miss_detection_outside_threshold():
+def test_miss_detection_outside_threshold():
     """Spot 6025.00 vs Level 6020.00 (|5.00| > 1.50) does not trigger."""
     monitor = LevelAlertMonitor()
     levels = [{
@@ -57,7 +57,7 @@ async def test_miss_detection_outside_threshold():
     }]
 
     with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
-        alerts = await monitor.check_proximity(spot=6025.00, levels=levels)
+        alerts = asyncio.run(monitor.check_proximity(spot=6025.00, levels=levels))
 
     assert len(alerts) == 0
     assert len(monitor.recent_alerts) == 0
@@ -65,8 +65,7 @@ async def test_miss_detection_outside_threshold():
     mock_dispatch.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_range_level_proximity_detection():
+def test_range_level_proximity_detection():
     """Range level 6010 to 6020: spot 6021.20 is within 1.5 pts of upper bound."""
     monitor = LevelAlertMonitor()
     levels = [{
@@ -77,7 +76,7 @@ async def test_range_level_proximity_detection():
     }]
 
     with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
-        alerts = await monitor.check_proximity(spot=6021.20, levels=levels)
+        alerts = asyncio.run(monitor.check_proximity(spot=6021.20, levels=levels))
 
     assert len(alerts) == 1
     assert alerts[0]["level_price"] == 6010.00
@@ -85,8 +84,7 @@ async def test_range_level_proximity_detection():
     assert alerts[0]["distance_pts"] == 1.20
 
 
-@pytest.mark.asyncio
-async def test_15_minute_cooldown_suppression():
+def test_15_minute_cooldown_suppression():
     """Second hit within 15 minutes is suppressed; hit after 15 minutes triggers."""
     monitor = LevelAlertMonitor()
     levels = [{
@@ -99,26 +97,25 @@ async def test_15_minute_cooldown_suppression():
 
     with patch("time.time", return_value=start_time):
         with patch.object(monitor, "dispatch_ntfy_alert"):
-            alerts1 = await monitor.check_proximity(spot=6020.50, levels=levels)
+            alerts1 = asyncio.run(monitor.check_proximity(spot=6020.50, levels=levels))
     assert len(alerts1) == 1
 
     # Second hit at minute 5 (300s later) -> should be suppressed
     with patch("time.time", return_value=start_time + 300.0):
         with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
-            alerts2 = await monitor.check_proximity(spot=6020.80, levels=levels)
+            alerts2 = asyncio.run(monitor.check_proximity(spot=6020.80, levels=levels))
     assert len(alerts2) == 0
     mock_dispatch.assert_not_called()
 
     # Third hit at minute 16 (960s later) -> should trigger!
     with patch("time.time", return_value=start_time + 960.0):
         with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
-            alerts3 = await monitor.check_proximity(spot=6020.20, levels=levels)
+            alerts3 = asyncio.run(monitor.check_proximity(spot=6020.20, levels=levels))
     assert len(alerts3) == 1
     mock_dispatch.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_multi_level_independence():
+def test_multi_level_independence():
     """Hits on 6020.00 and 6035.00 both fire without blocking each other."""
     monitor = LevelAlertMonitor()
     levels = [
@@ -130,14 +127,14 @@ async def test_multi_level_independence():
     # First hit level 1
     with patch("time.time", return_value=t0):
         with patch.object(monitor, "dispatch_ntfy_alert"):
-            alerts1 = await monitor.check_proximity(spot=6020.50, levels=levels)
+            alerts1 = asyncio.run(monitor.check_proximity(spot=6020.50, levels=levels))
     assert len(alerts1) == 1
     assert alerts1[0]["level_price"] == 6020.00
 
     # 2 minutes later, price moves to 6035.20 -> level 2 triggers independently
     with patch("time.time", return_value=t0 + 120.0):
         with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
-            alerts2 = await monitor.check_proximity(spot=6035.20, levels=levels)
+            alerts2 = asyncio.run(monitor.check_proximity(spot=6035.20, levels=levels))
     assert len(alerts2) == 1
     assert alerts2[0]["level_price"] == 6035.00
     mock_dispatch.assert_called_once()
@@ -169,7 +166,7 @@ def test_dispatch_ntfy_alert_contract():
     kwargs = mock_send.call_args[1]
     assert kwargs["endpoint"] == "https://richntfynotifier.synology.me"
     assert kwargs["topic"] == "spx_alerts"
-    assert kwargs["priority"] == 4
+    assert kwargs["priority"] == 5
     assert kwargs["tags"] == "chart_with_upwards_trend,bell"
     assert "SPX Level Hit: BUY @ 6020.00" in kwargs["title"]
     assert "6020.85" in kwargs["message"]
