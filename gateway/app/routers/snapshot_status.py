@@ -181,9 +181,12 @@ async def trigger_snapshot_sync(current_user: str = Depends(get_current_user)):
     logger.info(f"User '{current_user}' triggered manual GEX/DEX Snapshot sync.")
 
     try:
+        import asyncio
         from app.engine.snapshot_pipeline import run_snapshot_pipeline
         config = load_config()
-        rows_written, target_date, message = run_snapshot_pipeline(config=config, force_refresh=True)
+        rows_written, target_date, message = await asyncio.to_thread(
+            run_snapshot_pipeline, config=config, force_refresh=True
+        )
 
         return SnapshotSyncResponse(
             status="ok",

@@ -27,7 +27,7 @@ export class WatchlistView {
             <span class="watchlist-live-tag" id="watchlistLiveTag" title="Live quote feed (updates every 5s)">
               <span class="dot-live"></span> 5s LIVE
             </span>
-            <button type="button" class="watchlist-btn-sync-snapshot" id="syncSnapshotBtn" title="Compute and refresh daily GEX/DEX Snapshot for all watchlists">
+            <button type="button" class="watchlist-btn-sync-snapshot" id="watchlistSyncSnapshotBtn" title="Compute and refresh daily GEX/DEX Snapshot for all watchlists">
               ⚡ Sync GEX/DEX
             </button>
           </div>
@@ -302,7 +302,7 @@ export class WatchlistView {
     }
 
     // Sync Snapshot Button
-    const syncSnapshotBtn = this.container?.querySelector?.('#syncSnapshotBtn');
+    const syncSnapshotBtn = this.container?.querySelector?.('#watchlistSyncSnapshotBtn');
     if (syncSnapshotBtn) {
       syncSnapshotBtn.addEventListener('click', async () => {
         if (syncSnapshotBtn.disabled) return;
