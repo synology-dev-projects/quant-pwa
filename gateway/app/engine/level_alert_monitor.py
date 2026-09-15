@@ -71,18 +71,30 @@ class LevelAlertMonitor:
 
         lvl_type = alert.get("level_type", "LEVEL")
         lvl_price = alert.get("level_price", 0.0)
+        lvl_range = alert.get("level_price_range")
+        touched = alert.get("touched_boundary")
         spot = alert.get("current_spot", 0.0)
         dist = alert.get("distance_pts", 0.0)
         comments = alert.get("comments") or "N/A"
         timestamp = alert.get("timestamp", "")
 
-        title = f"SPX Level Hit: {lvl_type} @ {lvl_price:.2f}"
-        message = (
-            f"SPX Spot: {spot:.2f} ({dist:+.2f} pts away)\n"
-            f"Type: {lvl_type} Level ({lvl_price:.2f})\n"
-            f"Time: {timestamp}\n"
-            f"Comment: {comments}"
-        )
+        if lvl_range and touched is not None:
+            title = f"SPX Level Hit: {lvl_type} @ {lvl_range} (Touched {touched:.2f})"
+            message = (
+                f"SPX Spot: {spot:.2f} ({dist:+.2f} pts away)\n"
+                f"Type: {lvl_type} Range ({lvl_range})\n"
+                f"Boundary: Touched {touched:.2f}\n"
+                f"Time: {timestamp}\n"
+                f"Comment: {comments}"
+            )
+        else:
+            title = f"SPX Level Hit: {lvl_type} @ {lvl_price:.2f}"
+            message = (
+                f"SPX Spot: {spot:.2f} ({dist:+.2f} pts away)\n"
+                f"Type: {lvl_type} Level ({lvl_price:.2f})\n"
+                f"Time: {timestamp}\n"
+                f"Comment: {comments}"
+            )
 
         try:
             from common_lib.connectors.nfty import send_ntfy_notification
@@ -95,7 +107,7 @@ class LevelAlertMonitor:
                 tags=tags,
                 timeout=5
             )
-            logger.info(f"Dispatched NTFY push alert for SPX level {lvl_price:.2f} ({lvl_type}).")
+            logger.info(f"Dispatched NTFY push alert for SPX level {title}.")
             return True
         except Exception as ex:
             logger.warning(f"Failed to dispatch NTFY alert for SPX level {lvl_price:.2f}: {ex}")
@@ -147,15 +159,26 @@ class LevelAlertMonitor:
                         dist = round(spot - upper, 2)
                     else:
                         dist = 0.0
+
+                    # Determine which boundary was touched / entered
+                    if abs(spot - upper) <= abs(spot - lower):
+                        touched_boundary = round(upper, 2)
+                    else:
+                        touched_boundary = round(lower, 2)
+                    cooldown_key = touched_boundary
+                    level_price_range = f"{lower:.2f} - {upper:.2f}"
                 else:
                     dist = round(spot - lvl_price, 2)
                     is_hit = abs(dist) <= 1.50
+                    touched_boundary = lvl_price
+                    cooldown_key = lvl_price
+                    level_price_range = None
 
                 if not is_hit:
                     continue
 
-                # Check 15-minute cooldown (900 seconds)
-                last_alert_ts = self.cooldown_map.get(lvl_price, 0.0)
+                # Check 15-minute cooldown (900 seconds) on the specific boundary touched
+                last_alert_ts = self.cooldown_map.get(cooldown_key, 0.0)
                 if now_epoch - last_alert_ts < 900.0:
                     continue
 
@@ -174,7 +197,7 @@ class LevelAlertMonitor:
                 if not session_date:
                     session_date = now_ny.strftime("%Y-%m-%d")
 
-                alert_id = f"alt-spx-{int(lvl_price)}-{int(now_epoch)}"
+                alert_id = f"alt-spx-{int(cooldown_key)}-{int(now_epoch)}"
                 alert = {
                     "id": alert_id,
                     "ticker": "SPX",
@@ -185,11 +208,13 @@ class LevelAlertMonitor:
                     "comments": comments,
                     "timestamp": now_ny.isoformat(),
                     "session_date": session_date,
+                    "level_price_range": level_price_range,
+                    "touched_boundary": touched_boundary,
                 }
 
                 # Update cooldown and tracking
-                self.cooldown_map[lvl_price] = now_epoch
-                self.level_type_map[lvl_price] = level_type
+                self.cooldown_map[cooldown_key] = now_epoch
+                self.level_type_map[cooldown_key] = level_type
                 self.recent_alerts.append(alert)
                 self.dispatch_ntfy_alert(alert)
                 triggered_alerts.append(alert)
@@ -355,7 +380,10 @@ class LevelAlertMonitor:
         self,
         test_spot: float = 6020.85,
         test_level: float = 6020.00,
-        level_type: str = "BUY"
+        level_type: str = "BUY",
+        comments: str = "Synthetic test alert triggered via REST API",
+        level_price_range: Optional[str] = None,
+        touched_boundary: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Generates and dispatches a synthetic alert for testing & verification.
@@ -366,22 +394,25 @@ class LevelAlertMonitor:
         spot = round(float(test_spot), 2)
         dist = round(spot - lvl_price, 2)
         clean_type = level_type.strip().upper() if level_type else "BUY"
+        cooldown_key = touched_boundary if touched_boundary is not None else lvl_price
 
         alert = {
-            "id": f"alt-spx-{int(lvl_price)}-{int(now_epoch)}",
+            "id": f"alt-spx-{int(cooldown_key)}-{int(now_epoch)}",
             "ticker": "SPX",
             "level_price": lvl_price,
             "level_type": clean_type,
             "current_spot": spot,
             "distance_pts": dist,
-            "comments": "Synthetic test alert triggered via REST API",
+            "comments": comments or "Synthetic test alert triggered via REST API",
             "timestamp": now_ny.isoformat(),
             "session_date": now_ny.strftime("%Y-%m-%d"),
+            "level_price_range": level_price_range,
+            "touched_boundary": touched_boundary if touched_boundary is not None else lvl_price,
         }
 
         self.recent_alerts.append(alert)
-        self.cooldown_map[lvl_price] = now_epoch
-        self.level_type_map[lvl_price] = clean_type
+        self.cooldown_map[cooldown_key] = now_epoch
+        self.level_type_map[cooldown_key] = clean_type
         self.dispatch_ntfy_alert(alert)
         return alert
 

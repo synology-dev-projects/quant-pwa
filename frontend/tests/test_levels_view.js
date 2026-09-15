@@ -761,7 +761,7 @@ Promise.all([
   assert(alertLadderHtml.includes('hit-buy'), 'Matching BUY level row contains .hit-buy class');
   
   // Verify non-hit level row does NOT receive level-row-hit
-  const sellRowMatch = /<tr class="ladder-table-row [^"]*" data-start-price="5650">/.exec(alertLadderHtml);
+  const sellRowMatch = /<tr class="ladder-table-row [^"]*" data-start-price="5650"[^>]*>/.exec(alertLadderHtml);
   assert(sellRowMatch, 'Found row for 5650');
   assert(!sellRowMatch[0].includes('level-row-hit'), 'Non-hit row (5650) does not receive .level-row-hit');
 
@@ -771,6 +771,42 @@ Promise.all([
   const aliasTable = levelsView.renderTable(testLevels, 5550.80, false);
   assert(aliasTable.includes('level-row-hit hit-buy'), 'renderTable alias renders glowing hit pulse');
   console.log('  ✓ PASS: Price ladder row correctly receives .level-row-hit and .hit-buy pulse when matching recent alert');
+
+  // Test Range Level matching & Alert History Ribbon
+  const rangeLevels = [
+    {
+      type: 'BUY',
+      start_price: 7565.00,
+      end_price: 7575.00,
+      price_display: '7565.00 - 7575.00',
+      is_immediate_resistance: false,
+      is_immediate_support: true,
+      comments: 'IMM SUP range'
+    }
+  ];
+  levelsView.recentAlerts = [
+    {
+      id: 'alert-range-1',
+      level_type: 'BUY',
+      level_price: 7565.00,
+      level_price_range: '7565.00 - 7575.00',
+      touched_boundary: 7575.00,
+      current_spot: 7574.45,
+      timestamp: new Date().toISOString()
+    }
+  ];
+  const rangeLadderHtml = levelsView.buildLadderHtml(rangeLevels, 7574.45, false);
+  assert(rangeLadderHtml.includes('level-row-hit'), 'Range level row matches and receives .level-row-hit class');
+  assert(rangeLadderHtml.includes('data-end-price="7575"'), 'Range level row contains data-end-price="7575"');
+  
+  levelsView.renderAlertHistoryRibbon();
+  const ribbonEl = levelsView.container ? levelsView.container.querySelector('#levelsAlertHistoryRibbon') : null;
+  if (ribbonEl) {
+    assert(ribbonEl.innerHTML.includes("TODAY'S LEVEL HITS (1)"), 'Ribbon displays alert count');
+    assert(ribbonEl.innerHTML.includes('7565.00 - 7575.00'), 'Ribbon displays full price range');
+    assert(ribbonEl.innerHTML.includes('(Touched 7575.00)'), 'Ribbon displays touched boundary');
+  }
+  console.log('  ✓ PASS: SPX range levels match correctly and alert history ribbon renders chips with touched boundaries');
 
   console.log('\n==================================================================');
   console.log('  ALL SPX QUANT LEVELS & CANDLESTICK TESTS PASSED (100% GREEN)');

@@ -114,6 +114,9 @@ export class LevelsView {
           </div>
         </div>
 
+        <!-- Persistent Alert Hits History Ribbon -->
+        <div class="levels-alert-history-ribbon" id="levelsAlertHistoryRibbon"></div>
+
         <!-- Content Mount Target -->
         <div id="levelsContentMount">
           <div class="levels-empty-state">
@@ -334,16 +337,18 @@ export class LevelsView {
         continue;
       }
       const alertPrice = Number(alert.level_price);
-      if (isNaN(alertPrice)) continue;
+      const alertBoundary = alert.touched_boundary != null ? Number(alert.touched_boundary) : alertPrice;
 
       if (lvl.end_price != null && !isNaN(lvl.end_price)) {
         const minP = Math.min(lvl.start_price, lvl.end_price) - 1.5;
         const maxP = Math.max(lvl.start_price, lvl.end_price) + 1.5;
-        if (alertPrice >= minP && alertPrice <= maxP) {
+        if ((!isNaN(alertPrice) && alertPrice >= minP && alertPrice <= maxP) ||
+            (!isNaN(alertBoundary) && alertBoundary >= minP && alertBoundary <= maxP)) {
           return alert;
         }
       } else if (lvl.start_price != null && !isNaN(lvl.start_price)) {
-        if (Math.abs(lvl.start_price - alertPrice) <= 1.5) {
+        if ((!isNaN(alertPrice) && Math.abs(lvl.start_price - alertPrice) <= 1.5) ||
+            (!isNaN(alertBoundary) && Math.abs(lvl.start_price - alertBoundary) <= 1.5)) {
           return alert;
         }
       }
@@ -362,7 +367,10 @@ export class LevelsView {
       const startPrice = parseFloat(startPriceAttr);
       if (isNaN(startPrice)) continue;
 
-      const matchingAlert = this.findMatchingAlert({ start_price: startPrice });
+      const endPriceAttr = row.getAttribute ? row.getAttribute('data-end-price') : null;
+      const endPrice = endPriceAttr && !isNaN(parseFloat(endPriceAttr)) ? parseFloat(endPriceAttr) : null;
+
+      const matchingAlert = this.findMatchingAlert({ start_price: startPrice, end_price: endPrice });
       if (matchingAlert) {
         const hitType = (matchingAlert.level_type || 'buy').toLowerCase();
         if (row.classList && typeof row.classList.add === 'function') {
@@ -387,6 +395,54 @@ export class LevelsView {
     }
   }
 
+  renderAlertHistoryRibbon() {
+    const ribbon = this.container ? this.container.querySelector('#levelsAlertHistoryRibbon') : null;
+    if (!ribbon) return;
+
+    if (!this.recentAlerts || this.recentAlerts.length === 0) {
+      ribbon.innerHTML = `
+        <div class="levels-history-inner empty">
+          <span class="history-label">⚡ TODAY'S LEVEL HITS:</span>
+          <span class="history-empty-text">No SPX buy/sell levels triggered yet today.</span>
+        </div>
+      `;
+      return;
+    }
+
+    const count = this.recentAlerts.length;
+    const chipsHtml = this.recentAlerts.map(alert => {
+      const type = (alert.level_type || 'BUY').toUpperCase();
+      const typeClass = type === 'SELL' ? 'chip-sell' : 'chip-buy';
+      const rangeOrPrice = alert.level_price_range || (alert.level_price != null ? Number(alert.level_price).toFixed(2) : '—');
+      const touched = alert.touched_boundary != null && alert.level_price_range ? ` (Touched ${Number(alert.touched_boundary).toFixed(2)})` : '';
+      let timeStr = '';
+      if (alert.timestamp) {
+        try {
+          const d = new Date(alert.timestamp);
+          timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET';
+        } catch (_) {
+          timeStr = alert.timestamp;
+        }
+      }
+      return `
+        <span class="levels-history-chip ${typeClass}" title="Spot: ${alert.current_spot != null ? alert.current_spot : '—'}">
+          <span class="chip-type">${type}</span>
+          <span class="chip-price">${rangeOrPrice}${touched}</span>
+          <span class="chip-time">${timeStr}</span>
+        </span>
+      `;
+    }).join('');
+
+    ribbon.innerHTML = `
+      <div class="levels-history-inner">
+        <span class="history-label">⚡ TODAY'S LEVEL HITS (${count}):</span>
+        <div class="levels-history-chips-scroll">
+          ${chipsHtml}
+        </div>
+      </div>
+    `;
+  }
+
   async checkRecentAlerts() {
     try {
       const resp = await fetchWithAuth('/api/quant-levels/alerts/recent');
@@ -395,6 +451,7 @@ export class LevelsView {
       const alerts = Array.isArray(data.alerts) ? data.alerts : [];
       this.recentAlerts = alerts;
 
+      this.renderAlertHistoryRibbon();
       this.applyRecentAlertHighlights();
 
       if (!AppState.isLevelAlertsEnabled()) {
@@ -430,7 +487,8 @@ export class LevelsView {
     toast.className = `level-alert-toast ${typeClass}`;
     toast.setAttribute('role', 'alert');
 
-    const formattedPrice = alert.level_price != null ? Number(alert.level_price).toFixed(2) : '0.00';
+    const formattedPrice = alert.level_price_range || (alert.level_price != null ? Number(alert.level_price).toFixed(2) : '0.00');
+    const touchedBadge = alert.touched_boundary != null && alert.level_price_range ? ` <span class="level-alert-touched">(Touched ${Number(alert.touched_boundary).toFixed(2)})</span>` : '';
     const formattedSpot = alert.current_spot != null ? Number(alert.current_spot).toFixed(2) : '—';
     const distPts = alert.distance_pts != null ? Math.abs(Number(alert.distance_pts)).toFixed(2) : '0.00';
     const comment = sanitizeComment(alert.comments || alert.comment || '');
@@ -445,7 +503,7 @@ export class LevelsView {
         </div>
         <div class="level-alert-content">
           <div class="level-alert-price-row">
-            <span class="level-alert-price">${formattedPrice}</span>
+            <span class="level-alert-price">${formattedPrice}${touchedBadge}</span>
             <span class="level-alert-spot">Spot: ${formattedSpot}</span>
           </div>
           ${comment ? `<p class="level-alert-comment">${comment}</p>` : ''}
@@ -995,7 +1053,7 @@ export class LevelsView {
     const commentText = sanitizeComment(lvl.comments || lvl.comment || lvl.COMMENTS);
 
     return `
-      <tr class="ladder-table-row ${immClass}${hitClass}" data-start-price="${lvl.start_price}">
+      <tr class="ladder-table-row ${immClass}${hitClass}" data-start-price="${lvl.start_price}" data-end-price="${lvl.end_price != null && !isNaN(lvl.end_price) ? lvl.end_price : ''}">
         <td>${typeTag}</td>
         <td><strong class="ladder-price">${lvl.price_display}</strong>${immRes}${immSup}</td>
         <td class="ladder-comment-text">${commentText || '—'}</td>

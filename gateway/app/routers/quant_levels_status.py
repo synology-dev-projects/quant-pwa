@@ -119,6 +119,8 @@ class LevelAlertItem(BaseModel):
     comments: Optional[str] = None
     timestamp: str
     session_date: Optional[str] = None
+    level_price_range: Optional[str] = None
+    touched_boundary: Optional[float] = None
 
 
 class LevelAlertPendingCooldown(BaseModel):
@@ -149,6 +151,9 @@ class TestAlertRequest(BaseModel):
     test_spot: float = 6020.85
     test_level: float = 6020.00
     level_type: str = "BUY"
+    comments: Optional[str] = "Synthetic test alert triggered via REST API"
+    level_price_range: Optional[str] = None
+    touched_boundary: Optional[float] = None
 
 
 class TestAlertResponse(BaseModel):
@@ -866,7 +871,10 @@ async def trigger_test_level_alert(
     alert = level_alert_monitor.trigger_test_alert(
         test_spot=spot,
         test_level=level,
-        level_type=lvl_type
+        level_type=lvl_type,
+        comments=payload.comments if payload else "Synthetic test alert triggered via REST API",
+        level_price_range=payload.level_price_range if payload else None,
+        touched_boundary=payload.touched_boundary if payload else None
     )
 
     return TestAlertResponse(
