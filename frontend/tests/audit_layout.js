@@ -822,6 +822,10 @@ function buildAuditDomTree() {
   levelsControls.className = 'levels-controls levels-controls-group';
   levelsHeaderBar.appendChild(levelsControls);
 
+  const levelsAlertToggleBtn = new MockElement('button', 'levelsAlertToggleBtn');
+  levelsAlertToggleBtn.className = 'levels-step-btn levels-alert-toggle-btn active';
+  levelsControls.appendChild(levelsAlertToggleBtn);
+
   const levelsPrevBtn = new MockElement('button', 'levelsPrevBtn');
   levelsPrevBtn.className = 'levels-step-btn';
   levelsControls.appendChild(levelsPrevBtn);
@@ -1093,6 +1097,7 @@ const interactiveAuditTargets = [
   { name: 'Watchlist Ticker Input', selector: '#watchlistTickerInput', minTap: 44, requiresContainer: false },
   { name: 'Watchlist Add Button', selector: '#watchlistAddBtn', minTap: 44, requiresContainer: false },
   { name: 'Watchlist Remove Ticker Button', selector: '.watchlist-remove-btn', minTap: 44, requiresContainer: false },
+  { name: 'Levels Alert Toggle Button', selector: '#levelsAlertToggleBtn', minTap: 44, requiresContainer: false },
   { name: 'Levels Prev Session Button', selector: '#levelsPrevBtn', minTap: 44, requiresContainer: false },
   { name: 'Levels Next Session Button', selector: '#levelsNextBtn', minTap: 44, requiresContainer: false },
   { name: 'Levels Date Picker', selector: '#levelsDatePicker', minTap: 44, requiresContainer: false },

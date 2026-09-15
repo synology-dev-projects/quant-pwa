@@ -4,7 +4,9 @@ const STORAGE_KEYS = {
   MODEL: 'quant_selected_model',
   GATEWAY_URL: 'quant_gateway_url',
   ACTIVE_TAB: 'quant_active_tab',
-  SHOW_DIAGNOSTICS: 'quant_show_diagnostics'
+  SHOW_DIAGNOSTICS: 'quant_show_diagnostics',
+  LEVEL_ALERTS_ENABLED: 'quant_spx_alerts_enabled',
+  NTFY_TOPIC: 'quant_ntfy_topic'
 };
 
 const _sessionExpiredCallbacks = new Set();
@@ -95,6 +97,23 @@ export const AppState = {
 
   setShowDiagnostics(enabled) {
     localStorage.setItem(STORAGE_KEYS.SHOW_DIAGNOSTICS, String(enabled));
+  },
+
+  isLevelAlertsEnabled() {
+    const val = localStorage.getItem(STORAGE_KEYS.LEVEL_ALERTS_ENABLED);
+    return val === null ? true : val === 'true';
+  },
+
+  setLevelAlertsEnabled(enabled) {
+    localStorage.setItem(STORAGE_KEYS.LEVEL_ALERTS_ENABLED, String(Boolean(enabled)));
+  },
+
+  getNtfyTopic() {
+    return localStorage.getItem(STORAGE_KEYS.NTFY_TOPIC) || 'spx_alerts';
+  },
+
+  setNtfyTopic(topic) {
+    localStorage.setItem(STORAGE_KEYS.NTFY_TOPIC, (topic || '').trim());
   }
 };
 

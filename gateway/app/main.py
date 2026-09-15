@@ -35,6 +35,7 @@ from app.routers.pipelines_router import router as pipelines_router
 from app.routers.watchlists import router as watchlists_router
 from app.tools.gexdex_tool import run_cache_warmer_loop
 from app.engine.service import gexdex_service
+from app.engine.level_alert_monitor import level_alert_monitor
 
 import collections
 from collections import deque
@@ -75,7 +76,17 @@ async def lifespan(app: FastAPI):
     await mcp_client_manager.initialize()
     # Startup: Background Market Hours Pre-Cache Warmer (In-Process Engine)
     warmer_task = asyncio.create_task(run_cache_warmer_loop())
+    # Startup: SPX Quant Buy/Sell Level Proximity Alert Engine
+    level_alert_monitor.start()
+    alert_monitor_task = asyncio.create_task(level_alert_monitor.run_loop())
     yield
+    # Shutdown: Stop alert monitor & cancel task
+    level_alert_monitor.stop()
+    alert_monitor_task.cancel()
+    try:
+        await alert_monitor_task
+    except asyncio.CancelledError:
+        pass
     # Shutdown: Cancel pre-cache warmer gracefully
     warmer_task.cancel()
     try:

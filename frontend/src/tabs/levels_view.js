@@ -9,7 +9,7 @@
  * 4. Institutional Structured Levels Table.
  */
 
-import { fetchWithAuth } from '../state.js';
+import { fetchWithAuth, AppState } from '../state.js';
 import { CandlestickChart } from '../components/candlestick_chart.js';
 
 export function sanitizeComment(raw) {
@@ -78,6 +78,8 @@ export class LevelsView {
     this.candlestickChart = null;
     this.pollInterval = null;
     this._onVisibilityChange = null;
+    this._seenAlertIds = new Set();
+    this.recentAlerts = [];
   }
 
   render(container) {
@@ -94,6 +96,7 @@ export class LevelsView {
             </div>
           </div>
           <div class="levels-controls levels-controls-group">
+            <button type="button" class="levels-step-btn levels-alert-toggle-btn active" id="levelsAlertToggleBtn" title="Toggle SPX Level Proximity Alerts"><span class="alert-icon">🔔</span> <span class="alert-label">ALERTS ON</span></button>
             <button type="button" class="levels-step-btn" id="levelsPrevBtn" title="Previous Session">◄ Prev</button>
             <input type="date" class="levels-date-picker" id="levelsDatePicker" max="${new Date().toISOString().split('T')[0]}" aria-label="Select Date">
             <button type="button" class="levels-step-btn" id="levelsNextBtn" title="Next Session">Next ►</button>
@@ -122,7 +125,12 @@ export class LevelsView {
     `;
 
     this.bindEvents();
+    this.init();
     this.loadInitialData();
+  }
+
+  init() {
+    this.updateAlertToggleBtn(AppState.isLevelAlertsEnabled());
   }
 
   bindEvents() {
@@ -135,6 +143,22 @@ export class LevelsView {
     };
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
       document.addEventListener('visibilitychange', this._onVisibilityChange);
+    }
+
+    const alertToggleBtn = this.container.querySelector('#levelsAlertToggleBtn');
+    if (alertToggleBtn) {
+      alertToggleBtn.addEventListener('click', () => {
+        const currentlyEnabled = AppState.isLevelAlertsEnabled();
+        const nextState = !currentlyEnabled;
+        AppState.setLevelAlertsEnabled(nextState);
+        this.updateAlertToggleBtn(nextState);
+        if (nextState) {
+          if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            Notification.requestPermission().catch(() => {});
+          }
+          this.checkRecentAlerts();
+        }
+      });
     }
 
     const datePicker = this.container.querySelector('#levelsDatePicker');
@@ -192,11 +216,292 @@ export class LevelsView {
     }
   }
 
+  updateAlertToggleBtn(enabled) {
+    const btn = this.container ? this.container.querySelector('#levelsAlertToggleBtn') : null;
+    if (!btn) return;
+    if (enabled) {
+      btn.className = 'levels-step-btn levels-alert-toggle-btn active';
+      btn.innerHTML = '<span class="alert-icon">🔔</span> <span class="alert-label">ALERTS ON</span>';
+      btn.title = 'SPX Level Proximity Alerts: ACTIVE (Tap to Mute)';
+    } else {
+      btn.className = 'levels-step-btn levels-alert-toggle-btn muted';
+      btn.innerHTML = '<span class="alert-icon">🔕</span> <span class="alert-label">ALERTS OFF</span>';
+      btn.title = 'SPX Level Proximity Alerts: MUTED (Tap to Enable)';
+    }
+  }
+
+  playLevelHitChime(levelType) {
+    try {
+      const AudioCtx = (typeof window !== 'undefined') && (window.AudioContext || window.webkitAudioContext);
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime || 0;
+
+      // Gain envelope: attack 5ms, decay 320ms, max volume 0.15
+      const masterGain = ctx.createGain();
+      if (masterGain && masterGain.gain) {
+        if (typeof masterGain.gain.setValueAtTime === 'function') {
+          masterGain.gain.setValueAtTime(0.0001, now);
+        }
+        if (typeof masterGain.gain.linearRampToValueAtTime === 'function') {
+          masterGain.gain.linearRampToValueAtTime(0.15, now + 0.005);
+        }
+        if (typeof masterGain.gain.exponentialRampToValueAtTime === 'function') {
+          masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+        }
+        if (typeof masterGain.connect === 'function' && ctx.destination) {
+          masterGain.connect(ctx.destination);
+        }
+      }
+
+      // Tone 1: D5 (587.33 Hz) for 120ms
+      const osc1 = ctx.createOscillator();
+      if (osc1) {
+        osc1.type = 'sine';
+        if (osc1.frequency && typeof osc1.frequency.setValueAtTime === 'function') {
+          osc1.frequency.setValueAtTime(587.33, now);
+        }
+        if (typeof osc1.connect === 'function' && masterGain) {
+          osc1.connect(masterGain);
+        }
+        if (typeof osc1.start === 'function') osc1.start(now);
+        if (typeof osc1.stop === 'function') osc1.stop(now + 0.12);
+      }
+
+      // Tone 2: A5 (880.00 Hz) for 200ms
+      const osc2 = ctx.createOscillator();
+      if (osc2) {
+        osc2.type = 'sine';
+        if (osc2.frequency && typeof osc2.frequency.setValueAtTime === 'function') {
+          osc2.frequency.setValueAtTime(880.00, now + 0.12);
+        }
+        if (typeof osc2.connect === 'function' && masterGain) {
+          osc2.connect(masterGain);
+        }
+        if (typeof osc2.start === 'function') osc2.start(now + 0.12);
+        if (typeof osc2.stop === 'function') osc2.stop(now + 0.32);
+      }
+
+      // Subtle 2nd harmonic overtone for institutional warmth
+      const overtoneGain = ctx.createGain ? ctx.createGain() : null;
+      if (overtoneGain && overtoneGain.gain) {
+        if (typeof overtoneGain.gain.setValueAtTime === 'function') {
+          overtoneGain.gain.setValueAtTime(0.05, now);
+        }
+        if (typeof overtoneGain.gain.exponentialRampToValueAtTime === 'function') {
+          overtoneGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+        }
+        if (typeof overtoneGain.connect === 'function' && masterGain) {
+          overtoneGain.connect(masterGain);
+        }
+      }
+
+      const overtone = ctx.createOscillator ? ctx.createOscillator() : null;
+      if (overtone) {
+        overtone.type = 'sine';
+        if (overtone.frequency && typeof overtone.frequency.setValueAtTime === 'function') {
+          overtone.frequency.setValueAtTime(1174.66, now);
+        }
+        if (typeof overtone.connect === 'function' && overtoneGain) {
+          overtone.connect(overtoneGain);
+        }
+        if (typeof overtone.start === 'function') overtone.start(now);
+        if (typeof overtone.stop === 'function') overtone.stop(now + 0.32);
+      }
+
+      setTimeout(() => {
+        try {
+          if (ctx && ctx.state !== 'closed' && typeof ctx.close === 'function') {
+            ctx.close().catch(() => {});
+          }
+        } catch (_) {}
+      }, 400);
+      return true;
+    } catch (err) {
+      console.warn('[LevelsView] Web Audio chime playback deferred/restricted:', err);
+      return false;
+    }
+  }
+
+  findMatchingAlert(lvl) {
+    if (!this.recentAlerts || this.recentAlerts.length === 0) return null;
+    const now = Date.now();
+    for (const alert of this.recentAlerts) {
+      if (!alert) continue;
+      // Check freshness: within 15 minutes (900 seconds)
+      const alertTime = alert.timestamp ? new Date(alert.timestamp).getTime() : 0;
+      if (alertTime && !isNaN(alertTime) && (now - alertTime > 15 * 60 * 1000)) {
+        continue;
+      }
+      const alertPrice = Number(alert.level_price);
+      if (isNaN(alertPrice)) continue;
+
+      if (lvl.end_price != null && !isNaN(lvl.end_price)) {
+        const minP = Math.min(lvl.start_price, lvl.end_price) - 1.5;
+        const maxP = Math.max(lvl.start_price, lvl.end_price) + 1.5;
+        if (alertPrice >= minP && alertPrice <= maxP) {
+          return alert;
+        }
+      } else if (lvl.start_price != null && !isNaN(lvl.start_price)) {
+        if (Math.abs(lvl.start_price - alertPrice) <= 1.5) {
+          return alert;
+        }
+      }
+    }
+    return null;
+  }
+
+  applyRecentAlertHighlights() {
+    if (!this.container) return;
+    const rows = this.container.querySelectorAll('.ladder-table-row');
+    if (!rows || rows.length === 0) return;
+
+    for (const row of rows) {
+      const startPriceAttr = row.getAttribute ? row.getAttribute('data-start-price') : null;
+      if (startPriceAttr == null) continue;
+      const startPrice = parseFloat(startPriceAttr);
+      if (isNaN(startPrice)) continue;
+
+      const matchingAlert = this.findMatchingAlert({ start_price: startPrice });
+      if (matchingAlert) {
+        const hitType = (matchingAlert.level_type || 'buy').toLowerCase();
+        if (row.classList && typeof row.classList.add === 'function') {
+          row.classList.add('level-row-hit');
+          row.classList.remove('hit-buy', 'hit-sell');
+          row.classList.add(`hit-${hitType}`);
+        } else if (row.className !== undefined) {
+          if (!row.className.includes('level-row-hit')) {
+            row.className = `${row.className} level-row-hit hit-${hitType}`.trim();
+          }
+        }
+      } else {
+        if (row.classList && typeof row.classList.remove === 'function') {
+          row.classList.remove('level-row-hit', 'hit-buy', 'hit-sell');
+        } else if (row.className) {
+          row.className = row.className.replace(/\s*level-row-hit\s*/g, ' ')
+            .replace(/\s*hit-buy\s*/g, ' ')
+            .replace(/\s*hit-sell\s*/g, ' ')
+            .trim();
+        }
+      }
+    }
+  }
+
+  async checkRecentAlerts() {
+    try {
+      const resp = await fetchWithAuth('/api/quant-levels/alerts/recent');
+      if (!resp || !resp.ok) return;
+      const data = await resp.json();
+      const alerts = Array.isArray(data.alerts) ? data.alerts : [];
+      this.recentAlerts = alerts;
+
+      this.applyRecentAlertHighlights();
+
+      if (!AppState.isLevelAlertsEnabled()) {
+        alerts.forEach(a => { if (a && a.id) this._seenAlertIds.add(a.id); });
+        return;
+      }
+
+      const newAlerts = alerts.filter(a => a && a.id && !this._seenAlertIds.has(a.id));
+      for (const alert of newAlerts) {
+        this._seenAlertIds.add(alert.id);
+        this.playLevelHitChime(alert.level_type);
+        this.showLevelAlertToast(alert);
+        this.triggerBrowserNotification(alert);
+      }
+    } catch (err) {
+      console.warn('[LevelsView] Failed checking recent alerts:', err);
+    }
+  }
+
+  showLevelAlertToast(alert) {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+
+    if (typeof document.querySelectorAll === 'function') {
+      const existing = document.querySelectorAll('.level-alert-toast');
+      if (existing && existing.length >= 3 && existing[0] && typeof existing[0].remove === 'function') {
+        existing[0].remove();
+      }
+    }
+
+    const toast = document.createElement('div');
+    const levelType = (alert.level_type || 'BUY').toUpperCase();
+    const typeClass = levelType === 'SELL' ? 'toast-sell' : 'toast-buy';
+    toast.className = `level-alert-toast ${typeClass}`;
+    toast.setAttribute('role', 'alert');
+
+    const formattedPrice = alert.level_price != null ? Number(alert.level_price).toFixed(2) : '0.00';
+    const formattedSpot = alert.current_spot != null ? Number(alert.current_spot).toFixed(2) : '—';
+    const distPts = alert.distance_pts != null ? Math.abs(Number(alert.distance_pts)).toFixed(2) : '0.00';
+    const comment = sanitizeComment(alert.comments || alert.comment || '');
+
+    toast.innerHTML = `
+      <div class="level-alert-accent-bar"></div>
+      <div class="level-alert-body">
+        <div class="level-alert-header">
+          <span class="level-alert-badge ${typeClass}">SPX ${levelType} HIT</span>
+          <span class="level-alert-dist">&plusmn;${distPts} pts away</span>
+          <button type="button" class="level-alert-close-btn" aria-label="Dismiss alert">&times;</button>
+        </div>
+        <div class="level-alert-content">
+          <div class="level-alert-price-row">
+            <span class="level-alert-price">${formattedPrice}</span>
+            <span class="level-alert-spot">Spot: ${formattedSpot}</span>
+          </div>
+          ${comment ? `<p class="level-alert-comment">${comment}</p>` : ''}
+        </div>
+      </div>
+    `;
+
+    const closeBtn = toast.querySelector('.level-alert-close-btn');
+    if (closeBtn && typeof closeBtn.addEventListener === 'function') {
+      closeBtn.addEventListener('click', (e) => {
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 250);
+      });
+    }
+
+    const container = document.body || (this.container || null);
+    if (container && typeof container.appendChild === 'function') {
+      container.appendChild(toast);
+    }
+
+    setTimeout(() => {
+      if (toast.parentElement) {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 250);
+      }
+    }, 8000);
+  }
+
+  triggerBrowserNotification(alert) {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try {
+        const type = (alert.level_type || 'BUY').toUpperCase();
+        const price = alert.level_price != null ? Number(alert.level_price).toFixed(2) : '';
+        const spot = alert.current_spot != null ? Number(alert.current_spot).toFixed(2) : '';
+        const dist = alert.distance_pts != null ? `${Number(alert.distance_pts) >= 0 ? '+' : ''}${Number(alert.distance_pts).toFixed(2)} pts` : '';
+        new Notification(`SPX Level Proximity: ${type} @ ${price}`, {
+          body: `SPX touched ${type} level ${price} (Spot: ${spot}, Dist: ${dist}). ${alert.comments || ''}`,
+          icon: '/favicon.ico',
+          tag: alert.id || `spx-alert-${price}`
+        });
+      } catch (_) {}
+    }
+  }
+
   destroy() {
     this.stopPolling();
     if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function' && this._onVisibilityChange) {
       document.removeEventListener('visibilitychange', this._onVisibilityChange);
       this._onVisibilityChange = null;
+    }
+    if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+      const toasts = document.querySelectorAll('.level-alert-toast');
+      if (toasts && typeof toasts.forEach === 'function') {
+        toasts.forEach(t => { if (t && typeof t.remove === 'function') t.remove(); });
+      }
     }
     if (this.candlestickChart) {
       if (typeof this.candlestickChart.destroy === 'function') {
@@ -367,6 +672,7 @@ export class LevelsView {
         return;
       }
 
+      await this.checkRecentAlerts();
       this.renderLevelsUI(mount, data);
     } catch (err) {
       this.renderErrorState(mount, err.message || 'Failed connecting to gateway');
@@ -524,6 +830,9 @@ export class LevelsView {
     const spot = data.spot_price;
     const isHistorical = data.spot_type === 'HISTORICAL_CLOSE';
 
+    // Poll latest proximity alerts and update highlight state
+    await this.checkRecentAlerts();
+
     // Update Price Ladder rows in place
     const tbody = this.container?.querySelector?.('#priceLadderMount');
     if (tbody) {
@@ -675,10 +984,18 @@ export class LevelsView {
     const immRes = lvl.is_immediate_resistance ? ' <span class="ladder-tag tag-sell imm-badge">IMM RES</span>' : '';
     const immSup = lvl.is_immediate_support ? ' <span class="ladder-tag tag-buy imm-badge">IMM SUP</span>' : '';
     const immClass = lvl.is_immediate_resistance ? 'immediate-res' : lvl.is_immediate_support ? 'immediate-sup' : '';
+
+    const matchingAlert = this.findMatchingAlert(lvl);
+    let hitClass = '';
+    if (matchingAlert) {
+      const hitType = (matchingAlert.level_type || lvl.type || 'buy').toLowerCase();
+      hitClass = ` level-row-hit hit-${hitType}`;
+    }
+
     const commentText = sanitizeComment(lvl.comments || lvl.comment || lvl.COMMENTS);
 
     return `
-      <tr class="ladder-table-row ${immClass}" data-start-price="${lvl.start_price}">
+      <tr class="ladder-table-row ${immClass}${hitClass}" data-start-price="${lvl.start_price}">
         <td>${typeTag}</td>
         <td><strong class="ladder-price">${lvl.price_display}</strong>${immRes}${immSup}</td>
         <td class="ladder-comment-text">${commentText || '—'}</td>
@@ -688,6 +1005,14 @@ export class LevelsView {
 
   buildTableRowHtml(lvl) {
     return this.buildLadderRowHtml(lvl);
+  }
+
+  renderPriceLadder(levels, spot, isHistorical = false) {
+    return this.buildLadderHtml(levels, spot, isHistorical);
+  }
+
+  renderTable(levels, spot, isHistorical = false) {
+    return this.buildLadderHtml(levels, spot, isHistorical);
   }
 
   renderEmptyState(mount, msg) {

@@ -106,6 +106,57 @@
   cursor: not-allowed;
 }
 
+.levels-alert-toggle-btn {
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.levels-alert-toggle-btn .alert-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+  display: inline-block;
+}
+
+.levels-alert-toggle-btn .alert-label {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.levels-alert-toggle-btn.active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+.levels-alert-toggle-btn.active:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.6);
+  color: #6ee7b7;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.35);
+}
+
+.levels-alert-toggle-btn.muted {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #64748b;
+  box-shadow: none;
+}
+
+.levels-alert-toggle-btn.muted:hover:not(:disabled) {
+  background: rgba(51, 65, 85, 0.8);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #94a3b8;
+}
+
+.levels-alert-toggle-btn.muted .alert-icon {
+  opacity: 0.6;
+  filter: grayscale(1);
+}
+
 .levels-date-picker {
   background: #1e293b;
   color: #f1f5f9;
@@ -338,6 +389,62 @@
 .ladder-table-row.immediate-sup {
   border-left: 3px solid #22c55e;
   background: rgba(34, 197, 94, 0.06);
+}
+
+/* --- Level Proximity Hit Animated Glowing Pulse --- */
+.level-row-hit {
+  position: relative;
+  z-index: 1;
+}
+
+.level-row-hit.hit-buy {
+  border-left: 3px solid #10b981 !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  box-shadow: inset 0 0 14px rgba(16, 185, 129, 0.2), 0 0 12px rgba(16, 185, 129, 0.25);
+  animation: level-hit-pulse-buy 2s infinite ease-in-out;
+}
+
+.level-row-hit.hit-sell {
+  border-left: 3px solid #ef4444 !important;
+  background: rgba(239, 68, 68, 0.12) !important;
+  box-shadow: inset 0 0 14px rgba(239, 68, 68, 0.2), 0 0 12px rgba(239, 68, 68, 0.25);
+  animation: level-hit-pulse-sell 2s infinite ease-in-out;
+}
+
+@keyframes level-hit-pulse-buy {
+  0% {
+    background-color: rgba(16, 185, 129, 0.08);
+    box-shadow: inset 0 0 8px rgba(16, 185, 129, 0.15), 0 0 6px rgba(16, 185, 129, 0.15);
+  }
+  50% {
+    background-color: rgba(16, 185, 129, 0.22);
+    box-shadow: inset 0 0 18px rgba(16, 185, 129, 0.35), 0 0 16px rgba(16, 185, 129, 0.4);
+  }
+  100% {
+    background-color: rgba(16, 185, 129, 0.08);
+    box-shadow: inset 0 0 8px rgba(16, 185, 129, 0.15), 0 0 6px rgba(16, 185, 129, 0.15);
+  }
+}
+
+@keyframes level-hit-pulse-sell {
+  0% {
+    background-color: rgba(239, 68, 68, 0.08);
+    box-shadow: inset 0 0 8px rgba(239, 68, 68, 0.15), 0 0 6px rgba(239, 68, 68, 0.15);
+  }
+  50% {
+    background-color: rgba(239, 68, 68, 0.22);
+    box-shadow: inset 0 0 18px rgba(239, 68, 68, 0.35), 0 0 16px rgba(239, 68, 68, 0.4);
+  }
+  100% {
+    background-color: rgba(239, 68, 68, 0.08);
+    box-shadow: inset 0 0 8px rgba(239, 68, 68, 0.15), 0 0 6px rgba(239, 68, 68, 0.15);
+  }
+}
+
+@keyframes level-hit-pulse {
+  0% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.01); }
+  100% { opacity: 0.85; transform: scale(1); }
 }
 
 .imm-badge {
@@ -901,3 +1008,175 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ==========================================================================
+   SPX LEVEL PROXIMITY ALERT TOAST BANNER
+   Institutional Dark Mode Floating Notification
+   ========================================================================== */
+.level-alert-toast {
+  position: fixed;
+  bottom: 5.5rem;
+  right: 1.25rem;
+  z-index: 1000;
+  max-width: 380px;
+  width: calc(100% - 2.5rem);
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 20px rgba(0, 0, 0, 0.4);
+  display: flex;
+  overflow: hidden;
+  animation: toastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.level-alert-toast.fade-out {
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  pointer-events: none;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.level-alert-accent-bar {
+  width: 5px;
+  flex-shrink: 0;
+  background: #38bdf8;
+}
+
+.level-alert-toast.toast-buy .level-alert-accent-bar {
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981;
+}
+
+.level-alert-toast.toast-sell .level-alert-accent-bar {
+  background: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+}
+
+.level-alert-body {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.level-alert-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.level-alert-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.level-alert-badge.toast-buy {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.level-alert-badge.toast-sell {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.level-alert-dist {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.level-alert-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 4px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.level-alert-close-btn:hover {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.level-alert-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.level-alert-price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.level-alert-price {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+
+.level-alert-spot {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #38bdf8;
+}
+
+.level-alert-comment {
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+@media (max-width: 480px) {
+  .level-alert-toast {
+    bottom: 5rem;
+    right: 0.75rem;
+    left: 0.75rem;
+    width: auto;
+    max-width: none;
+  }
+}
+

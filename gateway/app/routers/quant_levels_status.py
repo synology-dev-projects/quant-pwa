@@ -109,6 +109,54 @@ class QuantLevelCandlesResponse(BaseModel):
     message: Optional[str] = None
 
 
+class LevelAlertItem(BaseModel):
+    id: str
+    ticker: str
+    level_price: float
+    level_type: str  # "BUY" or "SELL"
+    current_spot: float
+    distance_pts: float
+    comments: Optional[str] = None
+    timestamp: str
+    session_date: Optional[str] = None
+
+
+class LevelAlertPendingCooldown(BaseModel):
+    level_price: float
+    level_type: str = "ALERT"
+    cooldown_remaining_sec: int
+    triggered_at: str
+
+
+class LevelAlertMonitorStatusResponse(BaseModel):
+    active: bool
+    is_market_hours: bool
+    market_session: str
+    last_check_timestamp: Optional[str] = None
+    last_spot_price: Optional[float] = None
+    monitored_levels_count: int = 0
+    active_cooldowns_count: int = 0
+    pending_cooldowns: List[LevelAlertPendingCooldown] = []
+
+
+class LevelAlertsRecentResponse(BaseModel):
+    status: str = "success"
+    count: int = 0
+    alerts: List[LevelAlertItem] = []
+
+
+class TestAlertRequest(BaseModel):
+    test_spot: float = 6020.85
+    test_level: float = 6020.00
+    level_type: str = "BUY"
+
+
+class TestAlertResponse(BaseModel):
+    status: str
+    message: str
+    alert: LevelAlertItem
+
+
 def get_expected_quant_levels_date(ref_dt: Optional[datetime] = None) -> date:
     """
     Determines the expected quant levels date based on US/Eastern time:
@@ -771,3 +819,59 @@ async def extract_quant_levels_for_date(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Targeted date extraction failed: {str(ex)}"
         )
+
+
+# ==============================================================================
+# SPX QUANT LEVEL PROXIMITY ALERTS ENDPOINTS
+# ==============================================================================
+
+@router.get("/alerts/status", response_model=LevelAlertMonitorStatusResponse)
+async def get_level_alerts_status():
+    """
+    Returns real-time diagnostics of the SPX Quant Level Proximity Alert monitor worker.
+    """
+    from app.engine.level_alert_monitor import level_alert_monitor
+    return level_alert_monitor.get_status()
+
+
+@router.get("/alerts/recent", response_model=LevelAlertsRecentResponse)
+async def get_recent_level_alerts(limit: int = 50):
+    """
+    Returns recent SPX level proximity alerts triggered in the current session (sorted newest first).
+    """
+    from app.engine.level_alert_monitor import level_alert_monitor
+    alerts = level_alert_monitor.get_recent_alerts(limit=limit)
+    return LevelAlertsRecentResponse(
+        status="success",
+        count=len(alerts),
+        alerts=alerts
+    )
+
+
+@router.post("/alerts/test", response_model=TestAlertResponse)
+async def trigger_test_level_alert(
+    payload: Optional[TestAlertRequest] = None,
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Dispatches a synthetic test alert through NTFY and registers it in recent alerts history.
+    Auth protected via session token.
+    """
+    from app.engine.level_alert_monitor import level_alert_monitor
+    logger.info(f"User '{current_user}' triggered synthetic SPX level alert.")
+    spot = payload.test_spot if payload else 6020.85
+    level = payload.test_level if payload else 6020.00
+    lvl_type = payload.level_type if payload else "BUY"
+
+    alert = level_alert_monitor.trigger_test_alert(
+        test_spot=spot,
+        test_level=level,
+        level_type=lvl_type
+    )
+
+    return TestAlertResponse(
+        status="dispatched",
+        message="Test alert sent to NTFY topic 'spx_alerts' and recorded in memory.",
+        alert=alert
+    )
+

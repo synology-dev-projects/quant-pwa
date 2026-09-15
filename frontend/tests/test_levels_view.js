@@ -10,23 +10,68 @@ console.log('  PROBING SPX QUANT LEVELS VIEW & CANDLESTICK COMPONENT');
 console.log('==================================================================\n');
 
 // Mock browser globals
+const _mockStorage = { quant_session_token: 'mock-token' };
 global.window = {
   innerWidth: 1024,
   devicePixelRatio: 2,
   location: { origin: 'http://127.0.0.1:8000', hostname: '127.0.0.1', port: '8000' },
   localStorage: {
-    getItem: (key) => {
-      if (key === 'quant_session_token') return 'mock-token';
-      return null;
-    },
-    setItem: () => {},
-    removeItem: () => {}
+    getItem: (key) => _mockStorage[key] !== undefined ? _mockStorage[key] : null,
+    setItem: (key, val) => { _mockStorage[key] = String(val); },
+    removeItem: (key) => { delete _mockStorage[key]; }
   },
   addEventListener: () => {},
   removeEventListener: () => {}
 };
 global.localStorage = global.window.localStorage;
 global.requestAnimationFrame = (cb) => { cb(); return 1; };
+
+global.window.AudioContext = class MockAudioContext {
+  constructor() {
+    this.currentTime = 0;
+    this.state = 'running';
+    this.destination = {};
+  }
+  createGain() {
+    return {
+      gain: {
+        setValueAtTime: () => {},
+        linearRampToValueAtTime: () => {},
+        exponentialRampToValueAtTime: () => {}
+      },
+      connect: () => {}
+    };
+  }
+  createOscillator() {
+    return {
+      type: 'sine',
+      frequency: {
+        setValueAtTime: () => {}
+      },
+      connect: () => {},
+      start: () => {},
+      stop: () => {}
+    };
+  }
+  close() {
+    this.state = 'closed';
+    return Promise.resolve();
+  }
+};
+global.AudioContext = global.window.AudioContext;
+
+global.Notification = class MockNotification {
+  static permission = 'default';
+  static requestPermission() {
+    MockNotification.permission = 'granted';
+    return Promise.resolve('granted');
+  }
+  constructor(title, options) {
+    this.title = title;
+    this.options = options;
+  }
+};
+global.window.Notification = global.Notification;
 
 global.ResizeObserver = class {
   observe() {}
@@ -126,6 +171,9 @@ function createMockElement(tag) {
 global.document = {
   createElement: createMockElement,
   getElementById: (id) => null,
+  querySelector: (sel) => null,
+  querySelectorAll: (sel) => [],
+  body: createMockElement('body'),
   addEventListener: () => {},
   removeEventListener: () => {}
 };
@@ -245,6 +293,28 @@ global.fetch = async (url) => {
       })
     };
   }
+  if (url.includes('/api/quant-levels/alerts/recent')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: 'success',
+        count: 1,
+        alerts: [
+          {
+            id: 'alt-spx-5550-00-1',
+            ticker: 'SPX',
+            level_price: 5550.00,
+            level_type: 'BUY',
+            current_spot: 5550.80,
+            distance_pts: 0.80,
+            comments: 'Immediate put support floor',
+            timestamp: new Date().toISOString()
+          }
+        ]
+      })
+    };
+  }
   return {
     ok: true,
     status: 200,
@@ -254,13 +324,21 @@ global.fetch = async (url) => {
 
 Promise.all([
   import('../src/tabs/levels_view.js'),
-  import('../src/components/candlestick_chart.js')
-]).then(async ([{ LevelsView, sanitizeComment, getEasternMarketStatus }, { CandlestickChart }]) => {
+  import('../src/components/candlestick_chart.js'),
+  import('../src/state.js')
+]).then(async ([{ LevelsView, sanitizeComment, getEasternMarketStatus }, { CandlestickChart }, { AppState }]) => {
   const levelsView = new LevelsView();
 
   console.log('--- TEST 1: SPX Ticker Lock & Shell Mounting ---');
   assert.equal(levelsView.ticker, 'SPX', 'LevelsView is strictly locked to SPX');
 
+  const alertToggleBtnMock = {
+    className: 'levels-step-btn levels-alert-toggle-btn active',
+    innerHTML: '<span class="alert-icon">🔔</span> <span class="alert-label">ALERTS ON</span>',
+    title: '',
+    addEventListener: (ev, cb) => { alertToggleBtnMock.listeners[ev] = cb; },
+    listeners: {}
+  };
   const dateSelectMock = {
     innerHTML: '',
     children: [],
@@ -293,6 +371,7 @@ Promise.all([
   const container = createMockElement('div');
   container.innerHTML = '';
   container.querySelector = (sel) => {
+    if (sel === '#levelsAlertToggleBtn') return alertToggleBtnMock;
     if (sel === '#levelsDateSelect') return dateSelectMock;
     if (sel === '#levelsDatePicker') return datePickerMock;
     if (sel === '#levelsPrevBtn') return prevBtnMock;
@@ -607,6 +686,91 @@ Promise.all([
   levelsView.destroy();
   assert.equal(levelsView.pollInterval, null, 'destroy cleanly terminates poll interval');
   console.log('  ✓ PASS: 30s smart live polling engine respects market hours, tab visibility, and crosshair inspection');
+
+  console.log('\n--- TEST 15: SPX Quant Buy/Sell Level Proximity Alert Engine ---');
+  levelsView.container = container;
+  
+  // 1. Alert toggle button mounting in DOM with initial active state
+  assert(container.innerHTML.includes('id="levelsAlertToggleBtn"'), 'Alert toggle button mounted in DOM');
+  assert(container.innerHTML.includes('levels-alert-toggle-btn'), 'Alert toggle button has levels-alert-toggle-btn class');
+  assert(container.innerHTML.includes('ALERTS ON'), 'Alert toggle button mounts with ALERTS ON label');
+  assert.equal(AppState.isLevelAlertsEnabled(), true, 'AppState defaults to level alerts enabled = true');
+  assert(alertToggleBtnMock.className.includes('active'), 'Button mock has active class');
+
+  // 2. Clicking toggle button flips state and updates class/text
+  assert(typeof alertToggleBtnMock.listeners['click'] === 'function', 'Click listener registered on alert toggle button');
+  // Click to mute
+  alertToggleBtnMock.listeners['click']();
+  assert.equal(AppState.isLevelAlertsEnabled(), false, 'Clicking alert toggle button updates AppState to false');
+  assert(alertToggleBtnMock.className.includes('muted'), 'Button mock class updated to muted');
+  assert(alertToggleBtnMock.innerHTML.includes('ALERTS OFF'), 'Button text updated to ALERTS OFF');
+  assert(alertToggleBtnMock.innerHTML.includes('🔕'), 'Button icon updated to muted bell');
+
+  // Click to un-mute / re-enable
+  alertToggleBtnMock.listeners['click']();
+  assert.equal(AppState.isLevelAlertsEnabled(), true, 'Clicking alert toggle button updates AppState back to true');
+  assert(alertToggleBtnMock.className.includes('active'), 'Button mock class restored to active');
+  assert(alertToggleBtnMock.innerHTML.includes('ALERTS ON'), 'Button text restored to ALERTS ON');
+  assert(alertToggleBtnMock.innerHTML.includes('🔔'), 'Button icon restored to active bell');
+  assert.equal(global.Notification.permission, 'granted', 'requestPermission called when toggling to active');
+  console.log('  ✓ PASS: Alert toggle button mounts active, clicks flip state/classes/text, and requests permission');
+
+  // 3. Web Audio chime executes without exceptions in mock and browser environments
+  const chimeResult = levelsView.playLevelHitChime('BUY');
+  assert.equal(chimeResult, true, 'playLevelHitChime returns true and executes audio oscillator graph without exceptions');
+  const chimeSellResult = levelsView.playLevelHitChime('SELL');
+  assert.equal(chimeSellResult, true, 'playLevelHitChime for SELL tone executes without exceptions');
+  console.log('  ✓ PASS: Web Audio API institutional harmonic chime executes cleanly without exceptions');
+
+  // 4. Price ladder row correctly receives .level-row-hit when matching recent alert
+  levelsView.recentAlerts = [
+    {
+      id: 'alt-test-5550',
+      ticker: 'SPX',
+      level_price: 5550.00,
+      level_type: 'BUY',
+      current_spot: 5550.80,
+      distance_pts: 0.80,
+      timestamp: new Date().toISOString()
+    }
+  ];
+
+  const testLevels = [
+    {
+      type: 'BUY',
+      start_price: 5550.00,
+      end_price: null,
+      price_display: '5550.00',
+      is_immediate_resistance: false,
+      is_immediate_support: true,
+      comments: 'Support floor hit'
+    },
+    {
+      type: 'SELL',
+      start_price: 5650.00,
+      end_price: null,
+      price_display: '5650.00',
+      is_immediate_resistance: true,
+      is_immediate_support: false,
+      comments: 'Resistance wall'
+    }
+  ];
+
+  const alertLadderHtml = levelsView.buildLadderHtml(testLevels, 5550.80, false);
+  assert(alertLadderHtml.includes('level-row-hit'), 'Matching level row contains .level-row-hit class');
+  assert(alertLadderHtml.includes('hit-buy'), 'Matching BUY level row contains .hit-buy class');
+  
+  // Verify non-hit level row does NOT receive level-row-hit
+  const sellRowMatch = /<tr class="ladder-table-row [^"]*" data-start-price="5650">/.exec(alertLadderHtml);
+  assert(sellRowMatch, 'Found row for 5650');
+  assert(!sellRowMatch[0].includes('level-row-hit'), 'Non-hit row (5650) does not receive .level-row-hit');
+
+  // Verify renderPriceLadder and renderTable aliases
+  const aliasLadder = levelsView.renderPriceLadder(testLevels, 5550.80, false);
+  assert(aliasLadder.includes('level-row-hit hit-buy'), 'renderPriceLadder alias renders glowing hit pulse');
+  const aliasTable = levelsView.renderTable(testLevels, 5550.80, false);
+  assert(aliasTable.includes('level-row-hit hit-buy'), 'renderTable alias renders glowing hit pulse');
+  console.log('  ✓ PASS: Price ladder row correctly receives .level-row-hit and .hit-buy pulse when matching recent alert');
 
   console.log('\n==================================================================');
   console.log('  ALL SPX QUANT LEVELS & CANDLESTICK TESTS PASSED (100% GREEN)');

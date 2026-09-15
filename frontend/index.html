@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=v1.1.36" />
+  <link rel="stylesheet" href="styles.css?v=v1.1.37" />
   <link rel="stylesheet" href="src/styles/radar.css?v=v1.1.31" />
   <link rel="stylesheet" href="src/styles/flow.css?v=v1.1.31" />
   <link rel="stylesheet" href="src/styles/watchlist.css?v=v1.1.31" />
@@ -74,14 +74,28 @@
             <span class="slider round"></span>
           </label>
         </div>
+        <div class="form-group switch-group">
+          <div class="switch-label-wrapper">
+            <label for="levelAlertsToggle" class="form-label">SPX Level Proximity Alerts</label>
+            <span class="form-sublabel">Audio chime &amp; visual pulse alerts when spot touches buy/sell levels (&plusmn;1.5 pts)</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="levelAlertsToggle" checked />
+            <span class="slider round"></span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="ntfyTopicInput" class="form-label">NTFY Alerts Topic</label>
+          <input type="text" id="ntfyTopicInput" class="form-input" placeholder="spx_alerts" />
+        </div>
         <div class="version-info-card" id="versionInfoCard">
           <div class="version-row">
             <span class="version-label">App Build</span>
-            <span class="version-val" id="appBuildVersion">v1.1.36 (Production)</span>
+            <span class="version-val" id="appBuildVersion">v1.1.37 (Production)</span>
           </div>
           <div class="version-row">
             <span class="version-label">App Status</span>
-            <span class="version-status"><span class="status-dot dot-live" id="appSyncDot"></span> <span id="syncStatusText">Synchronized (v1.1.36)</span></span>
+            <span class="version-status"><span class="status-dot dot-live" id="appSyncDot"></span> <span id="syncStatusText">Synchronized (v1.1.37)</span></span>
           </div>
           <div class="version-row flow-status-row">
             <span class="version-label">Options Flow</span>
@@ -97,7 +111,7 @@
           </div>
         </div>
         <div class="update-action-container settings-actions">
-          <button type="button" id="forceUpdateBtn" class="btn btn-synced" disabled>✓ App Up to Date (v1.1.36)</button>
+          <button type="button" id="forceUpdateBtn" class="btn btn-synced" disabled>✓ App Up to Date (v1.1.37)</button>
           <div id="manualResyncLink" class="manual-resync-link" title="Wipe local storage and re-download fresh server build">Force manual re-sync</div>
           <button type="button" id="syncFlowBtn" class="btn btn-synced" disabled>✓ Flow Up to Date</button>
           <button type="button" id="syncLevelsBtn" class="btn btn-synced" disabled>✓ Quant Levels Up to Date</button>
@@ -284,6 +298,6 @@
   </div>
 
   <!-- Core Module Script -->
-  <script type="module" src="src/app.js?v=v1.1.36"></script>
+  <script type="module" src="src/app.js?v=v1.1.37"></script>
 </body>
 </html>

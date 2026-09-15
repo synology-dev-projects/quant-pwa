@@ -1,6 +1,6 @@
 import { AppState } from '../state.js';
 
-export const CLIENT_VERSION = 'v1.1.36';
+export const CLIENT_VERSION = 'v1.1.37';
 
 export class SettingsModal {
   constructor({ onSettingsChanged, onLockApp } = {}) {
@@ -31,6 +31,8 @@ export class SettingsModal {
     this.passcodeInput = document.getElementById('passcodeInput');
     this.gatewayUrlInput = document.getElementById('gatewayUrlInput');
     this.diagnosticsToggle = document.getElementById('diagnosticsToggle');
+    this.levelAlertsToggle = document.getElementById('levelAlertsToggle');
+    this.ntfyTopicInput = document.getElementById('ntfyTopicInput');
 
     this.init();
   }
@@ -54,6 +56,24 @@ export class SettingsModal {
         if (this.onSettingsChanged) {
           this.onSettingsChanged({ showDiagnostics: isChecked });
         }
+      });
+    }
+
+    if (this.levelAlertsToggle) {
+      this.levelAlertsToggle.checked = AppState.isLevelAlertsEnabled();
+      this.levelAlertsToggle.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        AppState.setLevelAlertsEnabled(isChecked);
+        if (this.onSettingsChanged) {
+          this.onSettingsChanged({ levelAlertsEnabled: isChecked });
+        }
+      });
+    }
+
+    if (this.ntfyTopicInput) {
+      this.ntfyTopicInput.value = AppState.getNtfyTopic();
+      this.ntfyTopicInput.addEventListener('change', (e) => {
+        AppState.setNtfyTopic(e.target.value);
       });
     }
 
@@ -87,6 +107,12 @@ export class SettingsModal {
     }
     if (this.diagnosticsToggle) {
       this.diagnosticsToggle.checked = AppState.getShowDiagnostics();
+    }
+    if (this.levelAlertsToggle) {
+      this.levelAlertsToggle.checked = AppState.isLevelAlertsEnabled();
+    }
+    if (this.ntfyTopicInput) {
+      this.ntfyTopicInput.value = AppState.getNtfyTopic();
     }
     this.checkVersionStatus();
     this.checkFlowStatus();
@@ -444,6 +470,14 @@ export class SettingsModal {
     if (this.diagnosticsToggle) {
       AppState.setShowDiagnostics(this.diagnosticsToggle.checked);
       this.updateDiagnosticsVisibility(this.diagnosticsToggle.checked);
+    }
+
+    if (this.levelAlertsToggle) {
+      AppState.setLevelAlertsEnabled(this.levelAlertsToggle.checked);
+    }
+
+    if (this.ntfyTopicInput) {
+      AppState.setNtfyTopic(this.ntfyTopicInput.value || 'spx_alerts');
     }
 
     // If user entered a new passcode, verify and obtain fresh session
