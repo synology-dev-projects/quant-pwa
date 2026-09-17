@@ -109,7 +109,7 @@ export const AppState = {
   },
 
   getNtfyTopic() {
-    return localStorage.getItem(STORAGE_KEYS.NTFY_TOPIC) || 'spx_alerts';
+    return localStorage.getItem(STORAGE_KEYS.NTFY_TOPIC) || 'quant_alerts';
   },
 
   setNtfyTopic(topic) {

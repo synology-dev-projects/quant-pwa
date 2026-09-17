@@ -162,14 +162,17 @@ def test_dispatch_ntfy_alert_contract():
         success = monitor.dispatch_ntfy_alert(alert)
 
     assert success is True
-    mock_send.assert_called_once()
-    kwargs = mock_send.call_args[1]
-    assert kwargs["endpoint"] == "https://richntfynotifier.synology.me"
-    assert kwargs["topic"] == "spx_alerts"
-    assert kwargs["priority"] == 5
-    assert kwargs["tags"] == "chart_with_upwards_trend,bell"
-    assert "SPX Level Hit: BUY @ 6020.00" in kwargs["title"]
-    assert "6020.85" in kwargs["message"]
+    assert mock_send.call_count == 2
+    dispatched_topics = [call_args[1]["topic"] for call_args in mock_send.call_args_list]
+    assert "quant_alerts" in dispatched_topics
+    assert "spx_alerts" in dispatched_topics
+    for call_args in mock_send.call_args_list:
+        kwargs = call_args[1]
+        assert kwargs["endpoint"] == "https://richntfynotifier.synology.me"
+        assert kwargs["priority"] == 5
+        assert kwargs["tags"] == "chart_with_upwards_trend,bell"
+        assert "SPX Level Hit: BUY @ 6020.00" in kwargs["title"]
+        assert "6020.85" in kwargs["message"]
 
 
 def test_dispatch_ntfy_alert_exception_handling():

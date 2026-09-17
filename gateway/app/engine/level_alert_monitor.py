@@ -64,8 +64,11 @@ class LevelAlertMonitor:
         Priority: 4 (High urgency, vibrate + sound)
         Tags: 'chart_with_upwards_trend,bell'
         """
-        endpoint = "https://richntfynotifier.synology.me"
-        topic = "spx_alerts"
+        endpoint = os.getenv("NTFY_ENDPOINT", "https://richntfynotifier.synology.me")
+        raw_topics = os.getenv("SPX_ALERT_NTFY_TOPICS", "quant_alerts,spx_alerts")
+        topics = [t.strip() for t in raw_topics.split(",") if t.strip()]
+        if not topics:
+            topics = ["quant_alerts", "spx_alerts"]
         priority = int(os.getenv("SPX_ALERT_NTFY_PRIORITY", "5"))
         tags = "chart_with_upwards_trend,bell"
 
@@ -98,17 +101,23 @@ class LevelAlertMonitor:
 
         try:
             from common_lib.connectors.nfty import send_ntfy_notification
-            send_ntfy_notification(
-                endpoint=endpoint,
-                topic=topic,
-                title=title,
-                message=message,
-                priority=priority,
-                tags=tags,
-                timeout=5
-            )
-            logger.info(f"Dispatched NTFY push alert for SPX level {title}.")
-            return True
+            success = False
+            for t in topics:
+                try:
+                    send_ntfy_notification(
+                        endpoint=endpoint,
+                        topic=t,
+                        title=title,
+                        message=message,
+                        priority=priority,
+                        tags=tags,
+                        timeout=5
+                    )
+                    logger.info(f"Dispatched NTFY push alert for SPX level {title} to topic '{t}'.")
+                    success = True
+                except Exception as sub_ex:
+                    logger.warning(f"Failed dispatching to NTFY topic '{t}': {sub_ex}")
+            return success
         except Exception as ex:
             logger.warning(f"Failed to dispatch NTFY alert for SPX level {lvl_price:.2f}: {ex}")
             return False
