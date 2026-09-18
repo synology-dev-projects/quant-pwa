@@ -95,3 +95,27 @@ def test_reproduce_extract_raw_data_no_reauth_on_server_error():
         res = dexgex.extract_raw_data(mock_config, mock_session, "AAPL")
         assert res is None
         assert not mock_reauth.called, "extract_raw_data must not trigger re-authentication on HTTP 500 server error"
+
+
+def test_reproduce_disk_session_cache_reuse(tmp_path):
+    """
+    REPRODUCTION TEST (DEFECT-gexdex-snapshot-failure):
+    Verifies that a valid session persisted on disk avoids hitting /gate entirely across processes.
+    """
+    dexgex._cached_session = None
+    mock_config = MagicMock()
+    mock_config.te_user_agent = "Mozilla/5.0"
+
+    test_cache = tmp_path / "test_session_cache.json"
+    import time, json
+    test_cache.write_text(json.dumps({
+        "timestamp": time.time(),
+        "cookies": {"trading-edge-session": "valid_cookie_value"}
+    }))
+
+    with patch.object(dexgex, "SESSION_CACHE_FILE", test_cache), \
+         patch("requests.Session.post") as mock_post:
+        session = dexgex.get_authenticated_session(mock_config, force_refresh=False)
+        assert session is not None
+        assert session.cookies.get("trading-edge-session") == "valid_cookie_value"
+        assert not mock_post.called, "Must not make POST request to /gate when valid disk cache exists"
