@@ -235,6 +235,10 @@ def collect_gexdex_for_watchlist(
 
     session = get_authenticated_session(config, force_refresh=force_refresh)
     if not session:
+        logger.warning("Initial TradingEdge auth returned None. Retrying once with backoff...")
+        pytime.sleep(2.0)
+        session = get_authenticated_session(config, force_refresh=True)
+    if not session:
         logger.error("Failed to authenticate with TradingEdge login gate.")
         raise RuntimeError("TradingEdge session authentication failed.")
 
@@ -246,7 +250,7 @@ def collect_gexdex_for_watchlist(
     for ticker, scorecards in sorted(watchlist.items()):
         try:
             logger.info(f"Fetching GEX/DEX data for {ticker}...")
-            pytime.sleep(0.05)  # 50ms pacing delay to safeguard TradingEdge rate limits
+            pytime.sleep(0.10)  # 100ms pacing delay to safeguard TradingEdge rate limits
             raw_data = extract_raw_data(config, session, ticker, max_dte=50, strike_range=25)
 
             if raw_data and isinstance(raw_data, dict):

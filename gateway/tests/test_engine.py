@@ -160,7 +160,10 @@ async def test_gexdex_service_get_summary_in_process():
         updated_at="2026-08-22T23:00:00Z"
     )
 
+    mock_dist = MagicMock()
+    mock_dist.model_dump.return_value = {"strikes": []}
     with patch("app.engine.service.get_gexdex_data", return_value={"AAPL": mock_metrics}), \
+         patch("app.engine.service.get_strike_distribution", return_value=mock_dist), \
          patch("app.engine.service.render_gexdex_chart_image", return_value=b"PNG_BYTES"):
 
         summary = await service.get_summary("AAPL", force_refresh=True)
