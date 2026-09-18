@@ -65,13 +65,16 @@ export class RadarView {
         <div class="radar-filter-bar" id="radarFilterBar">
           <div class="radar-filter-group" id="radarFilterGroup" role="tablist" aria-label="Filter Ticker Source">
             <button type="button" class="radar-filter-pill active" data-filter="all" id="filterAllBtn">
-              ALL (<span id="radarCountAll">0</span>)
+              <span class="radar-pill-label">ALL</span>
+              <span class="radar-pill-badge" id="radarCountAll">0</span>
             </button>
             <button type="button" class="radar-filter-pill" data-filter="watchlist" id="filterWlBtn">
-              ⭐ WATCHLIST (<span id="radarCountWl">0</span>)
+              <span class="radar-pill-label">⭐ WATCHLIST</span>
+              <span class="radar-pill-badge" id="radarCountWl">0</span>
             </button>
             <button type="button" class="radar-filter-pill" data-filter="flow" id="filterFlowBtn">
-              ⚡ FLOW LEADERS (<span id="radarCountFlow">0</span>)
+              <span class="radar-pill-label">⚡ FLOW LEADERS</span>
+              <span class="radar-pill-badge" id="radarCountFlow">0</span>
             </button>
           </div>
         </div>
