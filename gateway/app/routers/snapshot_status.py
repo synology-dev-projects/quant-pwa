@@ -196,6 +196,11 @@ async def trigger_snapshot_sync(current_user: str = Depends(get_current_user)):
         )
     except Exception as ex:
         logger.error(f"In-process snapshot pipeline sync failed: {ex}", exc_info=True)
+        try:
+            from common_lib.connectors.alerts import dispatch_pipeline_failure_alert
+            dispatch_pipeline_failure_alert("GEX/DEX Snapshot (Manual Sync)", ex)
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Snapshot pipeline execution failed: {str(ex)}"
