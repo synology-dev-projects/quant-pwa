@@ -279,9 +279,10 @@ global.window = {
 global.localStorage = global.window.localStorage;
 
 // ============================================================================
-// 2. Import Component under Test
+// 2. Import Component under Test & Run Suite
 // ============================================================================
-const { renderMarkdown, initInteractiveTables } = await import('../src/components/message_renderer.js');
+async function runAllTests() {
+  const { renderMarkdown, initInteractiveTables } = await import('../src/components/message_renderer.js');
 
 // ============================================================================
 // 3. Test Suite Probe
@@ -521,13 +522,18 @@ assert(firstCell.textContent.includes('NVDA'), 'Top row in second table is NVDA 
 
 // ============================================================================
 // Summary & Exit
-// ============================================================================
 console.log('\n==================================================================');
 console.log(`  TEST RESULTS: ${passCount} PASSED, ${failCount} FAILED`);
 console.log('==================================================================');
 
-if (failCount > 0) {
-  process.exit(1);
-} else {
-  process.exit(0);
+  if (failCount > 0) {
+    process.exit(1);
+  } else {
+    process.exit(0);
+  }
 }
+
+runAllTests().catch(err => {
+  console.error("Unhandled error running tests:", err);
+  process.exit(1);
+});
