@@ -4,7 +4,7 @@ import collections
 import logging
 import math
 import time
-from datetime import datetime, date, time as dt_time
+from datetime import datetime, date, time as dt_time, timedelta
 from typing import Dict, List, Any, Optional
 from zoneinfo import ZoneInfo
 import pandas as pd
@@ -55,6 +55,31 @@ class LevelAlertMonitor:
 
         t = dt.time()
         return dt_time(9, 30) <= t <= dt_time(16, 15)
+
+    def get_expected_session_date(self, dt: Optional[datetime] = None) -> date:
+        """
+        Computes expected trading session date for Quant Levels based on ET market schedule.
+        Cutoff time: 06:30 ET on trading days.
+        """
+        if dt is None:
+            now = datetime.now(NY_TZ)
+        elif dt.tzinfo is None:
+            now = dt.replace(tzinfo=NY_TZ)
+        else:
+            now = dt.astimezone(NY_TZ)
+
+        weekday = now.weekday()
+        cutoff_time = dt_time(6, 30)
+        is_after_cutoff = (now.time() >= cutoff_time)
+
+        if weekday == 5:  # Saturday
+            return (now - timedelta(days=1)).date()  # Friday
+        elif weekday == 6:  # Sunday
+            return (now - timedelta(days=2)).date()  # Friday
+        elif weekday == 0:  # Monday
+            return now.date() if is_after_cutoff else (now - timedelta(days=3)).date()
+        else:  # Tuesday (1), Wednesday (2), Thursday (3), Friday (4)
+            return now.date() if is_after_cutoff else (now - timedelta(days=1)).date()
 
     def dispatch_ntfy_alert(self, alert: Dict[str, Any]) -> bool:
         """
@@ -122,20 +147,34 @@ class LevelAlertMonitor:
             logger.warning(f"Failed to dispatch NTFY alert for SPX level {lvl_price:.2f}: {ex}")
             return False
 
-    async def check_proximity(self, spot: float, levels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def check_proximity(self, spot: float, levels: List[Dict[str, Any]], enforce_session_freshness: bool = True) -> List[Dict[str, Any]]:
         """
         Evaluates spot price against active levels.
         Proximity condition: |spot - level_price| <= 1.50 points.
         Supports range levels: (start_lvl_price - 1.50) <= spot <= (end_lvl_price + 1.50).
         Enforces 15-minute (900s) cooldown per level price.
+        Suppresses alerts on stale levels from prior sessions when enforce_session_freshness=True.
         Returns newly triggered alerts.
         """
         triggered_alerts: List[Dict[str, Any]] = []
         now_epoch = time.time()
         now_ny = datetime.now(NY_TZ)
+        expected_session_date = self.get_expected_session_date(now_ny)
+        expected_date_str = expected_session_date.strftime("%Y-%m-%d")
 
         for lvl in levels:
             try:
+                # Suppress proximity alerts on stale / expired levels from past sessions
+                if enforce_session_freshness:
+                    session_d = lvl.get("session_date") or lvl.get("SESSION_DATE")
+                    if not session_d and lvl.get("datetime"):
+                        session_d = str(lvl["datetime"]).split()[0]
+                    if session_d and str(session_d) < expected_date_str:
+                        logger.warning(
+                            f"Suppressing proximity alert on stale SPX level from session {session_d} "
+                            f"(expected active session: {expected_date_str})."
+                        )
+                        continue
                 raw_start = lvl.get("start_lvl_price") if "start_lvl_price" in lvl else lvl.get("START_LVL_PRICE")
                 if raw_start is None or (isinstance(raw_start, float) and math.isnan(raw_start)):
                     continue
@@ -234,30 +273,33 @@ class LevelAlertMonitor:
 
         return triggered_alerts
 
-    def fetch_active_spx_levels(self) -> List[Dict[str, Any]]:
+    def fetch_active_spx_levels(self, target_date: Optional[date] = None) -> List[Dict[str, Any]]:
         """
-        Fetches active SPX levels from PostgreSQL quant_lvl_data_te for the latest session.
+        Fetches active SPX levels from PostgreSQL quant_lvl_data_te for the current trading session.
         Filters for buy_sell_ind IN ('BUY', 'SELL') and start_lvl_price >= 2500.0.
+        Strictly suppresses alerts if the latest levels in the DB are stale (prior to expected session).
         """
         try:
             from common_lib.config.main_config import load_config
             from common_lib.connectors import postgres
             config = load_config()
+
+            if target_date is None:
+                target_date = self.get_expected_session_date()
+            target_date_str = target_date.strftime("%Y-%m-%d")
+
             query = """
                 SELECT datetime, ticker, start_lvl_price, end_lvl_price, comments, buy_sell_ind, web_link
                 FROM quant_lvl_data_te
                 WHERE ticker = 'SPX'
                   AND UPPER(buy_sell_ind) IN ('BUY', 'SELL')
                   AND start_lvl_price >= 2500.0
-                  AND datetime::date = (
-                      SELECT MAX(datetime::date)
-                      FROM quant_lvl_data_te
-                      WHERE ticker = 'SPX' AND start_lvl_price >= 2500.0
-                  )
+                  AND datetime::date = :target_date
                 ORDER BY start_lvl_price ASC;
             """
-            df = postgres.sql(config, query)
+            df = postgres.sql(config, query, params={"target_date": target_date_str})
             if df is None or df.empty:
+                logger.info(f"No active SPX buy/sell levels found in DB for session {target_date_str}. Proximity alerts suppressed.")
                 return []
 
             records = []

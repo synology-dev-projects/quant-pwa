@@ -17,28 +17,29 @@ def test_reproduce_spx_range_level_alert_labeling():
          'SPX Level Hit: BUY @ 7565.00 - 7575.00 (Touched 7575.00)'.
     """
     monitor = LevelAlertMonitor()
+    active_session_date = monitor.get_expected_session_date().strftime("%Y-%m-%d")
     
     levels = [{
         "start_lvl_price": 7565.00,
         "end_lvl_price": 7575.00,
         "buy_sell_ind": "BUY",
         "comments": "Immediate Support Range",
-        "session_date": "2026-09-15"
+        "session_date": active_session_date
     }]
 
     spot = 7575.00
-    alerts = asyncio.run(monitor.check_proximity(spot, levels))
-    
-    assert len(alerts) == 1, "Expected 1 alert when spot enters range at 7575.00"
-    alert = alerts[0]
-    
-    assert "level_price_range" in alert, "Alert must contain 'level_price_range' for range levels"
-    assert alert["level_price_range"] == "7565.00 - 7575.00"
-    
-    assert "touched_boundary" in alert, "Alert must identify the touched boundary"
-    assert alert["touched_boundary"] == 7575.00
-
     with patch("common_lib.connectors.nfty.send_ntfy_notification") as mock_ntfy:
+        alerts = asyncio.run(monitor.check_proximity(spot, levels))
+        
+        assert len(alerts) == 1, "Expected 1 alert when spot enters range at 7575.00"
+        alert = alerts[0]
+        
+        assert "level_price_range" in alert, "Alert must contain 'level_price_range' for range levels"
+        assert alert["level_price_range"] == "7565.00 - 7575.00"
+        
+        assert "touched_boundary" in alert, "Alert must identify the touched boundary"
+        assert alert["touched_boundary"] == 7575.00
+
         monitor.dispatch_ntfy_alert(alert)
         assert mock_ntfy.called
         call_kwargs = mock_ntfy.call_args[1]

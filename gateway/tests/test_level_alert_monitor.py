@@ -27,7 +27,7 @@ def test_hit_detection_within_threshold():
         "end_lvl_price": None,
         "buy_sell_ind": "BUY",
         "comments": "Daily bounce shelf",
-        "session_date": "2026-09-15"
+        "session_date": monitor.get_expected_session_date().strftime("%Y-%m-%d")
     }]
 
     with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
