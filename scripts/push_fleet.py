@@ -101,7 +101,7 @@ def get_latest_run_for_repo(repo: str, branch: str) -> Optional[Dict]:
     return None
 
 
-def wait_for_tier_ci(pushed_repos: List[str], branch: str, timeout: int = 360, poll_interval: int = 8) -> bool:
+def wait_for_tier_ci(pushed_repos: List[str], branch: str, timeout: int = 600, poll_interval: int = 8, expected_shas: Optional[Dict[str, str]] = None) -> bool:
     """Blocks until all pushed repos in a tier achieve completed:success in GitHub Actions."""
     if not pushed_repos:
         return True
@@ -128,6 +128,15 @@ def wait_for_tier_ci(pushed_repos: List[str], branch: str, timeout: int = 360, p
                 print(f"   ℹ️ [{repo}] No active workflow detected. Skipping CI wait.")
                 skipped_no_workflow.add(repo)
                 continue
+
+            # Verify that the run matches the pushed commit SHA if provided
+            if expected_shas and repo in expected_shas:
+                expected_sha = expected_shas[repo]
+                run_sha = run.get("headSha", "")
+                if run_sha and not run_sha.startswith(expected_sha[:7]) and not expected_sha.startswith(run_sha[:7]):
+                    all_passed = False
+                    still_running.append(f"{repo} (registering webhook...)")
+                    continue
 
             st = run.get("status")
             conc = run.get("conclusion")
@@ -242,8 +251,16 @@ def run_fleet_push(branch: str = "develop2", dry_run: bool = False, timeout: int
                 return 1
             pushed_in_tier.append(r)
 
+        # Collect expected SHAs for pushed repos
+        expected_shas = {}
+        for r in pushed_in_tier:
+            p, _ = repos_to_push[r]
+            res_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=p, capture_output=True, text=True)
+            if res_sha.returncode == 0:
+                expected_shas[r] = res_sha.stdout.strip()
+
         # Wait for CI on current tier before advancing to next tier
-        if not wait_for_tier_ci(pushed_in_tier, branch, timeout=timeout):
+        if not wait_for_tier_ci(pushed_in_tier, branch, timeout=timeout, expected_shas=expected_shas):
             print(f"\n🛑 [ABORT] CI validation failed on {tier_name}. Downstream tiers will NOT be deployed.", file=sys.stderr)
             return 1
 
@@ -257,7 +274,7 @@ def main():
     parser = argparse.ArgumentParser(description="Topological Multi-Repo Push Orchestrator")
     parser.add_argument("--branch", default="develop2", help="Target branch to deploy (default: develop2)")
     parser.add_argument("--dry-run", action="store_true", help="Analyze diffs and print execution plan without pushing")
-    parser.add_argument("--timeout", type=int, default=360, help="Per-tier CI wait timeout in seconds (default: 360)")
+    parser.add_argument("--timeout", type=int, default=600, help="Per-tier CI wait timeout in seconds (default: 600)")
     parser.add_argument("--repos", nargs="+", help="Explicit list of repositories to push (bypasses auto-diff)")
 
     args = parser.parse_args()

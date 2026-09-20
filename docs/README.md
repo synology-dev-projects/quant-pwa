@@ -8,13 +8,13 @@ Welcome to the central technical design documentation for the **Quant System**â€
 
 | Document | Purpose & Scope |
 | :--- | :--- |
-| **[1. System Architecture Overview](file:///C:/Coding/VSCode/Quant%20System/docs/ARCHITECTURE_OVERVIEW.md)** | High-level system architecture, microservices topology, data flow, and NAS deployment layout. |
-| **[2. Database & Data Models](file:///C:/Coding/VSCode/Quant%20System/docs/DATABASE_AND_DATA_MODELS.md)** | Oracle database tables, DDL schemas, `db_catalog.yaml`, UUID staging `MERGE` patterns, and indexing. |
-| **[3. APIs, Gateways & MCP Protocols](file:///C:/Coding/VSCode/Quant%20System/docs/APIS_AND_GATEWAYS.md)** | `gexdex-api` endpoints, `quant-pwa` FastAPI Gateway, SSE streaming lifecycles, and Model Context Protocol (MCP) tools. |
-| **[4. ETL Data Pipelines & Scrapers](file:///C:/Coding/VSCode/Quant%20System/docs/ETL_PIPELINES_AND_INGESTION.md)** | Deep dive into `quant-level`, `ibkr-historical`, `mm-dex-gex`, and `unusual-option-flow` pipelines and financial math. |
-| **[5. Frontend & Client Applications](file:///C:/Coding/VSCode/Quant%20System/docs/FRONTEND_AND_BOT_APPLICATIONS.md)** | Architecture of `quant-pwa` (HTML5 Canvas engine, SWR, Lightbox, Service Worker) and `discord-quant-bot`. |
-| **[6. Infrastructure, Docker & Containers](file:///C:/Coding/VSCode/Quant%20System/docs/INFRASTRUCTURE_AND_CICD.md)** | Synology NAS Docker orchestration, network topology, Cloudflare edge routing, and resource management. |
-| **[7. DevOps, CI/CD & Automated Verification](file:///C:/Coding/VSCode/Quant%20System/docs/DEVOPS_AND_CICD.md)** | Consolidated 4-stage GitHub Actions CI/CD pipeline, Master Agent Test Runner CLI, and pre-commit hooks. |
+| **[1. System Architecture Overview](ARCHITECTURE_OVERVIEW.md)** | High-level system architecture, microservices topology, data flow, and NAS deployment layout. |
+| **[2. Database & Data Models](DATABASE_AND_DATA_MODELS.md)** | PostgreSQL / TimescaleDB hypertable schemas, UUID staging patterns, and indexing. |
+| **[3. APIs, Gateways & MCP Protocols](APIS_AND_GATEWAYS.md)** | `quant-pwa` FastAPI Gateway, SSE streaming lifecycles, and Model Context Protocol (MCP) tools. |
+| **[4. ETL Data Pipelines & Scrapers](ETL_PIPELINES_AND_INGESTION.md)** | Deep dive into `quant-level`, `ibkr-historical`, `gexdex-snapshot`, `market-confluence`, and `unusual-option-flow` pipelines. |
+| **[5. Frontend & Client Applications](FRONTEND_AND_BOT_APPLICATIONS.md)** | Architecture of `quant-pwa` (HTML5 Canvas engine, SWR, Lightbox, Service Worker) and mobile-first PWA. |
+| **[6. Infrastructure, Docker & Containers](INFRASTRUCTURE_AND_CICD.md)** | Synology NAS Docker orchestration, network topology, Cloudflare edge routing, and resource management. |
+| **[7. DevOps, CI/CD & Automated Verification](DEVOPS_AND_CICD.md)** | Consolidated GitHub Actions CI/CD deployment, topological fleet push orchestrator, and pre-commit hooks. |
 
 ---
 
