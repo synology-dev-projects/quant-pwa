@@ -487,10 +487,14 @@ def cmd_audit(args):
         all_diff = os.environ.get("PROTOCOL_TEST_AUDIT_DIFF")
         modified_files = [f.strip() for f in all_diff.splitlines() if f.strip()]
     else:
-        res = subprocess.run(["git", "diff", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
-        res_staged = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
-        all_diff = res.stdout + "\n" + res_staged.stdout
-        modified_files = [f.strip() for f in res.stdout.splitlines() if f.strip()]
+        try:
+            res = subprocess.run(["git", "diff", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
+            res_staged = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
+            all_diff = (res.stdout or "") + "\n" + (res_staged.stdout or "")
+            modified_files = [f.strip() for f in (res.stdout or "").splitlines() if f.strip()]
+        except Exception:
+            all_diff = ""
+            modified_files = []
 
     print(f"[AUDIT] Checking {len(modified_files)} modified files...")
     if state["workflow_type"] == "bug":
@@ -613,8 +617,11 @@ def cmd_check_commit(args):
     if os.environ.get("PROTOCOL_TEST_STAGED_FILES") is not None:
         staged = [f.strip() for f in os.environ["PROTOCOL_TEST_STAGED_FILES"].splitlines() if f.strip()]
     else:
-        res = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
-        staged = [f.strip() for f in res.stdout.splitlines() if f.strip()]
+        try:
+            res = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
+            staged = [f.strip() for f in (res.stdout or "").splitlines() if f.strip()]
+        except Exception:
+            staged = []
 
     if not staged:
         sys.exit(0)

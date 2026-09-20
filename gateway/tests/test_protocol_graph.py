@@ -43,8 +43,12 @@ def clean_state_per_test():
 
 
 def run_protocol_cli(*args, env=None):
+    merged_env = os.environ.copy()
+    if env:
+        merged_env.update(env)
+    merged_env.setdefault("PROTOCOL_TEST_MODE", "1")
     cmd = [sys.executable, str(SCRIPT_PATH)] + list(args)
-    return subprocess.run(cmd, cwd=str(WORKSPACE_ROOT), capture_output=True, text=True, env=env)
+    return subprocess.run(cmd, cwd=str(WORKSPACE_ROOT), capture_output=True, text=True, env=merged_env)
 
 
 def test_protocol_graph_start_and_status():
