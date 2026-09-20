@@ -546,14 +546,41 @@ def cmd_staging_verify(args):
         print("==================================================================")
         return
 
+    # Multi-Repo Fleet CI Verification Gate
+    print("\n🔍 [Protocol Gate] Auditing Multi-Repo Fleet CI on 'develop2'...")
+    verify_script = WORKSPACE_ROOT / "scripts" / "verify_fleet.py"
+    if verify_script.exists():
+        cmd = [sys.executable, str(verify_script), "--branch", "develop2"]
+        res = subprocess.run(cmd, cwd=str(WORKSPACE_ROOT))
+        if res.returncode != 0:
+            print("\n[STOP] [STAGING BLOCKED BY FLEET CI GATE]", file=sys.stderr)
+            print("   One or more repositories failed or are incomplete in GitHub Actions.", file=sys.stderr)
+            print("   All CI builds must be 100% green before staging can be verified.", file=sys.stderr)
+            sys.exit(1)
+
     state["guards"]["staging_verified"] = True
     state["active_node"] = "PHASE_6_PRODUCTION_GATE"
-    append_audit(state, "STAGING_VERIFIED", "Staging in-situ health confirmed on port 8096")
+    append_audit(state, "STAGING_VERIFIED", "Staging in-situ health and Fleet CI confirmed on develop2")
     save_state(state)
-    print("[OK] Staging Verified. Graph advanced to: PHASE_6_PRODUCTION_GATE.")
+    print("[OK] Staging & Fleet CI Verified. Graph advanced to: PHASE_6_PRODUCTION_GATE.")
     skill_name, skill_path, skill_hint = get_node_bound_skill(state['active_node'], state['workflow_type'], state['task_name'])
     print(f"   [ACTIVE SKILL] {skill_name} ({skill_path}): {skill_hint}")
     print("[LOCK] Production push to master is locked awaiting explicit human command.")
+
+
+def cmd_fleet_verify(args):
+    """Executes multi-repo fleet verification via CLI."""
+    verify_script = WORKSPACE_ROOT / "scripts" / "verify_fleet.py"
+    if not verify_script.exists():
+        print(f"[ERROR] verify_fleet.py not found at {verify_script}", file=sys.stderr)
+        sys.exit(1)
+    cmd = [sys.executable, str(verify_script), "--branch", args.branch]
+    if getattr(args, "wait", False):
+        cmd.append("--wait")
+    if getattr(args, "timeout", None):
+        cmd.extend(["--timeout", str(args.timeout)])
+    res = subprocess.run(cmd, cwd=str(WORKSPACE_ROOT))
+    sys.exit(res.returncode)
 
 
 def cmd_prod_authorize(args):
@@ -668,6 +695,12 @@ def main():
     subparsers.add_parser("audit")
     subparsers.add_parser("staging-verify")
     subparsers.add_parser("prod-authorize")
+
+    p_fver = subparsers.add_parser("fleet-verify", help="Verify all multi-repo fleet CI runs")
+    p_fver.add_argument("--branch", default="develop2", help="Branch to verify (default: develop2)")
+    p_fver.add_argument("--wait", action="store_true", help="Wait and poll until runs finish")
+    p_fver.add_argument("--timeout", type=int, default=600, help="Wait timeout in seconds")
+
     subparsers.add_parser("check-commit")
     subparsers.add_parser("reset")
 
@@ -689,6 +722,7 @@ def main():
         "audit": cmd_audit,
         "staging-verify": cmd_staging_verify,
         "prod-authorize": cmd_prod_authorize,
+        "fleet-verify": cmd_fleet_verify,
         "check-commit": cmd_check_commit,
         "reset": cmd_reset
     }
