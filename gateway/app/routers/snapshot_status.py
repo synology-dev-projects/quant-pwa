@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from common_lib.config.main_config import load_config
 from common_lib.connectors import postgres
+from common_lib.orchestration.registry import PIPELINE_DAG, resolve_runner
 from app.core.auth import get_current_user
 from app.routers.flow_status import get_last_market_day
 
@@ -182,17 +183,18 @@ async def trigger_snapshot_sync(current_user: str = Depends(get_current_user)):
 
     try:
         import asyncio
-        from app.engine.snapshot_pipeline import run_snapshot_pipeline
         config = load_config()
+        runner = resolve_runner(PIPELINE_DAG["gexdex_snapshot"]["runner"])
         rows_written, target_date, message = await asyncio.to_thread(
-            run_snapshot_pipeline, config=config, force_refresh=True
+            runner, force_refresh=True, config=config
         )
 
+        date_str = target_date.strftime("%Y-%m-%d") if hasattr(target_date, "strftime") else str(target_date)
         return SnapshotSyncResponse(
             status="ok",
             message=message,
             rows_upserted=rows_written,
-            snapshot_date=target_date.strftime("%Y-%m-%d")
+            snapshot_date=date_str
         )
     except Exception as ex:
         logger.error(f"In-process snapshot pipeline sync failed: {ex}", exc_info=True)

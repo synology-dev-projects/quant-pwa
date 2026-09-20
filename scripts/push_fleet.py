@@ -43,7 +43,8 @@ TIER_2_REPOS = [
     "quant-level-pipeline",
     "unusual-option-flow-pipeline",
     "ibkr-historical-data-pipeline",
-    "market-confluence-pipeline"
+    "market-confluence-pipeline",
+    "gexdex-snapshot-pipeline",
 ]
 TIER_3_REPOS = ["quant-pwa"]
 

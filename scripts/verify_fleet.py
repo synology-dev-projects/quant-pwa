@@ -28,6 +28,7 @@ FLEET_REPOS = [
     "unusual-option-flow-pipeline",
     "ibkr-historical-data-pipeline",
     "market-confluence-pipeline",
+    "gexdex-snapshot-pipeline",
     "quant-pwa",
 ]
 

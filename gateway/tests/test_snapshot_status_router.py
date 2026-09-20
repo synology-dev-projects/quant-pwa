@@ -157,7 +157,8 @@ def test_trigger_snapshot_sync_success():
     token, _ = create_session_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    with patch("app.engine.snapshot_pipeline.run_snapshot_pipeline", return_value=(16, date(2026, 9, 8), "Committed 16 snapshot rows")):
+    with patch("app.routers.snapshot_status.resolve_runner") as mock_resolve:
+        mock_resolve.return_value = MagicMock(return_value=(16, date(2026, 9, 8), "Committed 16 snapshot rows"))
         res = client.post("/api/snapshot/sync", headers=headers)
         assert res.status_code == 200
         data = res.json()
