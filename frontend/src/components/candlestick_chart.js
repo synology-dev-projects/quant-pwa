@@ -12,7 +12,10 @@ export class CandlestickChart {
     this.options = options;
     this.candles = options.candles || [];
     this.levels = options.levels || [];
-    this.spotPrice = options.spot_price != null ? Number(options.spot_price) : null;
+    const rawSpot = options.spot_price != null ? Number(options.spot_price) : null;
+    this.spotPrice = (rawSpot != null && !isNaN(rawSpot))
+      ? rawSpot
+      : (this.candles.length > 0 ? this.candles[this.candles.length - 1].close : null);
     this.asOfDate = options.as_of_date || '';
     this.ticker = options.ticker || 'SPX';
     this.isLightbox = !!options.isLightbox;
@@ -34,7 +37,13 @@ export class CandlestickChart {
   updateData(newOptions = {}) {
     if (newOptions.candles !== undefined) this.candles = newOptions.candles || [];
     if (newOptions.levels !== undefined) this.levels = newOptions.levels || [];
-    if (newOptions.spot_price !== undefined) this.spotPrice = newOptions.spot_price != null ? Number(newOptions.spot_price) : null;
+    if (newOptions.spot_price !== undefined) {
+      const sp = newOptions.spot_price != null ? Number(newOptions.spot_price) : null;
+      this.spotPrice = (sp != null && !isNaN(sp)) ? sp : null;
+    }
+    if (this.spotPrice == null && this.candles && this.candles.length > 0) {
+      this.spotPrice = this.candles[this.candles.length - 1].close;
+    }
     if (newOptions.as_of_date !== undefined) this.asOfDate = newOptions.as_of_date || '';
     if (newOptions.ticker !== undefined) this.ticker = newOptions.ticker || 'SPX';
 

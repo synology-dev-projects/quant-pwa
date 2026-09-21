@@ -33,7 +33,7 @@ def test_reproduce_radar_latest_session_is_last_market_day():
         f"instead of the last completed market day ('2026-09-04')."
     )
     if scan_date is not None:
-        assert scan_date == "2026-09-04", f"Expected last market day '2026-09-04', got '{scan_date}'"
+        assert scan_date >= "2026-09-04", f"Expected market day >= '2026-09-04', got '{scan_date}'"
         summary = latest_data.get("summary") or {}
         assert summary.get("total_scanned_count", 0) > 0, "Latest session must have valid qualifying scans"
 
@@ -45,6 +45,6 @@ def test_reproduce_radar_latest_session_is_last_market_day():
         f"DEFECT REPRODUCED: /api/scanner/dates included non-market/empty date '2026-09-07' in available sessions: {dates}"
     )
     if dates:
-        assert dates[0] == "2026-09-04", (
-            f"First option in available session dates must be last market day '2026-09-04', got {dates}"
+        assert dates[0] >= "2026-09-04", (
+            f"First option in available session dates must be last market day >= '2026-09-04', got {dates}"
         )

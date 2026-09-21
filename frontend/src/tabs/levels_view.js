@@ -906,11 +906,18 @@ export class LevelsView {
     const candleResp = await fetchWithAuth(candleUrl);
     if (candleResp && candleResp.ok) {
       const cData = await candleResp.json();
+      const latestBarClose = (cData.candles && cData.candles.length > 0) ? cData.candles[cData.candles.length - 1].close : null;
+      const effectiveSpot = spot != null ? spot : latestBarClose;
+
+      if (spot == null && effectiveSpot != null && tbody) {
+        tbody.innerHTML = this.buildLadderHtml(data.levels, effectiveSpot, isHistorical);
+      }
+
       if (this.candlestickChart && cData.candles) {
         this.candlestickChart.updateData({
           candles: cData.candles,
           levels: data.levels,
-          spot_price: spot,
+          spot_price: effectiveSpot,
           as_of_date: targetDate,
           ticker: this.ticker
         });
@@ -990,15 +997,20 @@ export class LevelsView {
     // levels are sorted descending by start_price
     for (let i = 0; i < levels.length; i++) {
       const lvl = levels[i];
-      const midPrice = lvl.end_price ? (lvl.start_price + lvl.end_price) / 2 : lvl.start_price;
+      const p1 = lvl.start_price;
+      const p2 = lvl.end_price != null && !isNaN(lvl.end_price) ? lvl.end_price : p1;
+      const minPrice = Math.min(p1, p2);
+      const maxPrice = Math.max(p1, p2);
 
-      // Insert spot marker if spot is higher than current level and not yet inserted
-      if (!spotInserted && spot != null && spot >= midPrice) {
+      const isInside = (spot != null && spot >= minPrice && spot <= maxPrice);
+
+      // Insert spot marker if spot is higher than or equal to current level's lower bound and not yet inserted
+      if (!spotInserted && spot != null && spot >= minPrice) {
         html += this.buildSpotMarkerHtml(spot, isHistorical);
         spotInserted = true;
       }
 
-      html += this.buildLadderRowHtml(lvl);
+      html += this.buildLadderRowHtml(lvl, isInside);
     }
 
     // If spot was lower than all levels, insert at bottom
@@ -1028,7 +1040,7 @@ export class LevelsView {
     `;
   }
 
-  buildLadderRowHtml(lvl) {
+  buildLadderRowHtml(lvl, isInside = false) {
     let typeTag = '';
     if (lvl.type === 'SELL') {
       typeTag = '<span class="ladder-tag tag-sell">SELL</span>';
@@ -1041,7 +1053,9 @@ export class LevelsView {
 
     const immRes = lvl.is_immediate_resistance ? ' <span class="ladder-tag tag-sell imm-badge">IMM RES</span>' : '';
     const immSup = lvl.is_immediate_support ? ' <span class="ladder-tag tag-buy imm-badge">IMM SUP</span>' : '';
+    const insideBadge = isInside ? ' <span class="ladder-tag tag-inside-zone imm-badge">INSIDE ZONE</span>' : '';
     const immClass = lvl.is_immediate_resistance ? 'immediate-res' : lvl.is_immediate_support ? 'immediate-sup' : '';
+    const insideClass = isInside ? ' inside-zone' : '';
 
     const matchingAlert = this.findMatchingAlert(lvl);
     let hitClass = '';
@@ -1053,9 +1067,9 @@ export class LevelsView {
     const commentText = sanitizeComment(lvl.comments || lvl.comment || lvl.COMMENTS);
 
     return `
-      <tr class="ladder-table-row ${immClass}${hitClass}" data-start-price="${lvl.start_price}" data-end-price="${lvl.end_price != null && !isNaN(lvl.end_price) ? lvl.end_price : ''}">
+      <tr class="ladder-table-row ${immClass}${insideClass}${hitClass}" data-start-price="${lvl.start_price}" data-end-price="${lvl.end_price != null && !isNaN(lvl.end_price) ? lvl.end_price : ''}">
         <td>${typeTag}</td>
-        <td><strong class="ladder-price">${lvl.price_display}</strong>${immRes}${immSup}</td>
+        <td><strong class="ladder-price">${lvl.price_display}</strong>${immRes}${immSup}${insideBadge}</td>
         <td class="ladder-comment-text">${commentText || '—'}</td>
       </tr>
     `;

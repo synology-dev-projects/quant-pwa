@@ -431,11 +431,13 @@ async def get_quant_levels_data(
     else:
         spot_type = "LIVE"
         spot_label = "SPX Live Spot"
-        quote_syms = [clean_ticker]
+        quote_syms = []
         if clean_ticker == "SPX":
-            quote_syms.append("^SPX")
+            quote_syms.extend(["^GSPC", "^SPX", "SPX"])
         elif clean_ticker == "NDX":
-            quote_syms.append("^NDX")
+            quote_syms.extend(["^NDX", "^IXIC", "NDX"])
+        else:
+            quote_syms.append(clean_ticker)
 
         try:
             quotes = await get_batch_quotes(quote_syms)
@@ -445,6 +447,16 @@ async def get_quant_levels_data(
                     break
         except Exception as ex:
             logger.warning(f"Failed fetching spot price for {clean_ticker}: {ex}")
+
+        # If live quote feed failed, fallback to latest intraday candle close
+        if spot_price is None and clean_ticker == "SPX":
+            try:
+                today_eastern = now_eastern.date()
+                bars = await _get_candles_bars(today_eastern)
+                if bars:
+                    spot_price = bars[-1].close
+            except Exception as ex:
+                logger.warning(f"Failed falling back to latest candle close for {clean_ticker}: {ex}")
 
     if df_levels.empty:
         summary = QuantLevelSummary(
