@@ -45,6 +45,7 @@ TIER_2_REPOS = [
     "ibkr-historical-data-pipeline",
     "market-confluence-pipeline",
     "gexdex-snapshot-pipeline",
+    "economic-events-pipeline",
 ]
 TIER_3_REPOS = ["quant-pwa"]
 
