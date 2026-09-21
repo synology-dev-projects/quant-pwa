@@ -39,6 +39,10 @@ from app.engine.level_alert_monitor import level_alert_monitor
 
 import collections
 from collections import deque
+import time
+
+from app.core.metrics import REQUEST_COUNT, REQUEST_LATENCY, get_metrics_payload, CONTENT_TYPE_LATEST
+from app.core.logging_config import configure_gateway_logging
 
 _RECENT_LOG_BUFFER = deque(maxlen=200)
 
@@ -50,17 +54,10 @@ class _RingBufferHandler(logging.Handler):
         except Exception:
             pass
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-logger = logging.getLogger("quant.gateway")
 _rb_handler = _RingBufferHandler()
 _rb_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
-logger.addHandler(_rb_handler)
-# Also capture root logger for full framework events
-logging.getLogger().addHandler(_rb_handler)
+configure_gateway_logging(ring_buffer_handler=_rb_handler)
+logger = logging.getLogger("quant.gateway")
 
 
 @asynccontextmanager
@@ -111,6 +108,37 @@ async def trace_id_middleware(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Trace-ID"] = trace_id
     return response
+
+
+@app.middleware("http")
+async def prometheus_metrics_middleware(request: Request, call_next):
+    path = request.url.path
+    if path == "/metrics":
+        return await call_next(request)
+
+    endpoint = path
+    if path.startswith("/api/cockpit/"):
+        endpoint = "/api/cockpit/{ticker}"
+    elif path.startswith("/api/watchlists/"):
+        endpoint = "/api/watchlists/{id}"
+
+    start_time = time.time()
+    try:
+        response = await call_next(request)
+        duration = time.time() - start_time
+        status_code = str(response.status_code)
+        REQUEST_COUNT.labels(method=request.method, endpoint=endpoint, status_code=status_code).inc()
+        REQUEST_LATENCY.labels(method=request.method, endpoint=endpoint).observe(duration)
+        return response
+    except Exception as exc:
+        duration = time.time() - start_time
+        REQUEST_COUNT.labels(method=request.method, endpoint=endpoint, status_code="500").inc()
+        REQUEST_LATENCY.labels(method=request.method, endpoint=endpoint).observe(duration)
+        raise exc
+
+@app.get("/metrics", include_in_schema=False)
+def metrics_endpoint():
+    return Response(content=get_metrics_payload(), media_type=CONTENT_TYPE_LATEST)
 
 # Enable CORS for PWA and Cloudflare tunnel origins
 app.add_middleware(

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Tuple
 import httpx
 from pydantic import BaseModel, Field
+from app.core.metrics import CACHE_HITS, CACHE_MISSES
 
 logger = logging.getLogger("quant.gateway.quotes")
 
@@ -99,10 +100,12 @@ async def get_batch_quotes(tickers: List[str]) -> Dict[str, Dict[str, Any]]:
             ts, item = _QUOTE_CACHE[t]
             if now - ts < CACHE_TTL:
                 quotes[t] = item
+                CACHE_HITS.labels(cache_name="quote_feed").inc()
                 continue
         missing.append(t)
 
     if missing:
+        CACHE_MISSES.labels(cache_name="quote_feed").inc(len(missing))
         async with httpx.AsyncClient(timeout=3.5) as client:
             tasks = [fetch_single_quote(client, t) for t in missing]
             results = await asyncio.gather(*tasks, return_exceptions=True)
