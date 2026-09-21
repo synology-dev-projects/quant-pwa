@@ -137,6 +137,7 @@ async def prometheus_metrics_middleware(request: Request, call_next):
         raise exc
 
 @app.get("/metrics", include_in_schema=False)
+@app.get("/api/metrics", include_in_schema=False)
 def metrics_endpoint():
     return Response(content=get_metrics_payload(), media_type=CONTENT_TYPE_LATEST)
 

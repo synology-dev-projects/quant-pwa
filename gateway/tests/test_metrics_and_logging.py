@@ -35,6 +35,11 @@ def test_metrics_endpoint_unauthenticated():
     assert "quant_cache_hits_total" in content
     assert "quant_cache_misses_total" in content
 
+    # Test /api/metrics alias
+    resp_api = client.get("/api/metrics")
+    assert resp_api.status_code == 200
+    assert "quant_http_requests_total" in resp_api.text
+
 
 def test_http_request_metrics_middleware_increments():
     """
