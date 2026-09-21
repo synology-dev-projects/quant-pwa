@@ -63,12 +63,8 @@ def _clean_str_field(val: Any) -> Optional[str]:
 
 
 def _run_sync(force: bool = False) -> Dict[str, Any]:
-    """Dynamically invokes economic-events-pipeline sync service."""
-    pipeline_root = Path(__file__).resolve().parents[4] / "economic-events-pipeline"
-    if str(pipeline_root) not in sys.path:
-        sys.path.insert(0, str(pipeline_root))
-
-    from src.sync_service import run_economic_events_sync
+    """Invokes economic events sync service via common_lib."""
+    from common_lib.economic_events import run_economic_events_sync
     return run_economic_events_sync(force_refresh=force)
 
 
