@@ -33,6 +33,7 @@ from app.routers.scanner import router as scanner_router
 from app.routers.radar import router as radar_router
 from app.routers.pipelines_router import router as pipelines_router
 from app.routers.watchlists import router as watchlists_router
+from app.routers.economic_events import router as economic_events_router
 from app.tools.gexdex_tool import run_cache_warmer_loop
 from app.engine.service import gexdex_service
 from app.engine.level_alert_monitor import level_alert_monitor
@@ -199,6 +200,9 @@ app.include_router(
 
 # Mount Watchlists Management Router
 app.include_router(watchlists_router)
+
+# Mount Economic Events & Macro RAG Feed Router
+app.include_router(economic_events_router)
 
 
 
