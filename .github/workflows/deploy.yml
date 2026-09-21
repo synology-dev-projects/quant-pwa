@@ -137,6 +137,11 @@ jobs:
           else
             echo "COMMON_LIB_PATH=/volume2/homes/rachardv/git-repos/master/common-lib/common_lib" >> "$ENV_FILE"
           fi
+          if [ -d "/volume2/homes/rachardv/git-repos/${BRANCH_NAME}/gexdex-snapshot-pipeline" ]; then
+            echo "SNAPSHOT_PIPELINE_PATH=/volume2/homes/rachardv/git-repos/${BRANCH_NAME}/gexdex-snapshot-pipeline" >> "$ENV_FILE"
+          else
+            echo "SNAPSHOT_PIPELINE_PATH=/volume2/homes/rachardv/git-repos/master/gexdex-snapshot-pipeline" >> "$ENV_FILE"
+          fi
           echo "COMMON_CONFIG_PATH=/volume2/homes/rachardv/git-repos/master/common_config" >> "$ENV_FILE"
           
           chmod 600 "$ENV_FILE"
