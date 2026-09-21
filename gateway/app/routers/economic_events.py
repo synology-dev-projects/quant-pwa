@@ -69,7 +69,7 @@ def _run_sync(force: bool = False) -> Dict[str, Any]:
 
 
 @router.get("", response_model=EconomicEventsListResponse, summary="Query Economic Events & RAG Chunks")
-async def list_economic_events(
+def list_economic_events(
     country: Optional[str] = Query(None, description="Country or currency filter (e.g. USD, EUR, JPY)"),
     min_impact: str = Query("Medium", description="Minimum impact tier: High, Medium, Low, or All"),
     start_date: Optional[str] = Query(None, description="Start date ISO string (e.g. 2026-09-20)"),
@@ -129,7 +129,7 @@ async def list_economic_events(
 
 
 @router.post("/sync", response_model=EconomicEventsSyncResponse, summary="Trigger On-Demand Economic Calendar Ingestion")
-async def sync_economic_events(
+def sync_economic_events(
     force: bool = Query(False, description="Force refresh ignoring disk cache")
 ):
     """
