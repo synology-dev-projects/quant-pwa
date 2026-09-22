@@ -22,3 +22,6 @@ Thumbs.db
 .protocol_state.json
 evaluation_reports/
 gateway/evaluation_reports/
+
+# Subagent Ephemeral Worktrees (DEPLOY-02)
+.worktrees/
