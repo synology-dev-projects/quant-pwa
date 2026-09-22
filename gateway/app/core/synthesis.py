@@ -247,9 +247,15 @@ class MacroEventsContextPoint(SynthesisPoint):
             from common_lib.config.main_config import load_config
             from common_lib.database.postgres import get_postgres_engine
             from common_lib.economic_events.retrieval import retrieve_relevant_events
+            from app.config import settings
             cfg = load_config()
             engine = get_postgres_engine(cfg)
-            events = retrieve_relevant_events(engine=engine, ticker=ticker, top_k=3)
+            events = retrieve_relevant_events(
+                engine=engine,
+                ticker=ticker,
+                api_key=settings.GEMINI_API_KEY,
+                top_k=3
+            )
             return {"events": events}
         except Exception as e:
             logger.debug(f"Could not retrieve macro events for {ticker}: {e}")

@@ -96,7 +96,8 @@ def _clean_str_field(val: Any) -> Optional[str]:
 def _run_sync(force: bool = False) -> Dict[str, Any]:
     """Invokes economic events sync service via common_lib."""
     from common_lib.economic_events import run_economic_events_sync
-    return run_economic_events_sync(force_refresh=force)
+    from app.config import settings
+    return run_economic_events_sync(force_refresh=force, api_key=settings.GEMINI_API_KEY)
 
 
 @router.get("", response_model=EconomicEventsListResponse, summary="Query Economic Events & RAG Chunks")
@@ -213,10 +214,13 @@ def get_macro_events_cards(
         clean_ticker = ticker.strip().upper()
         country = get_ticker_currency(clean_ticker)
 
+        from app.config import settings
+
         raw_events = retrieve_relevant_events(
             engine=engine,
             ticker=clean_ticker,
             semantic_query=query,
+            api_key=settings.GEMINI_API_KEY,
             top_k=limit
         )
 
@@ -279,6 +283,7 @@ def get_rag_context_block(
     try:
         from common_lib.database.postgres import get_postgres_engine
         from common_lib.economic_events.retrieval import retrieve_relevant_events, format_rag_context_block
+        from app.config import settings
 
         cfg = load_config()
         engine = get_postgres_engine(cfg)
@@ -288,6 +293,7 @@ def get_rag_context_block(
             engine=engine,
             ticker=clean_ticker,
             semantic_query=query,
+            api_key=settings.GEMINI_API_KEY,
             top_k=top_k
         )
 
