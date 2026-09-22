@@ -5,6 +5,7 @@
 * **Host Hardware:** Synology NAS (`DS920+` / `DS1821+` DSM 7.2)
 * **Host IP:** `192.168.1.68`
 * **Target Root Directory:** `/volume2/homes/rachardv/git-repos/`
+* **Raw Archival Storage:** `/volume2/data/sec_filings/` (compressed gzip 10-K archive)
 * **Docker Network:** Shared external bridge `quant-system-network`
 * **Edge Tunnel:** Cloudflare Zero-Port Outbound Daemon (`cloudflared`)
 

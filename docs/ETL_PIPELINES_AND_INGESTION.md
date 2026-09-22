@@ -106,6 +106,20 @@ graph LR
 
 ---
 
+### 2.6 `sec-filings-pipeline`
+* **Source:** SEC EDGAR REST APIs (`company_tickers.json`, Submissions API `CIK{cik}.json`, and raw document Archives).
+* **Core Architecture & Responsibilities:**
+  - **Decoupled Standalone Pipeline:** Operates independently of option flow scraping, eliminating runtime coupling or latency impact on live market sweeps.
+  - **Auto-Discovery Engine (`sync_service.py`):** Dynamically scans `unusual_option_flow_te` for active symbols exceeding configurable premium thresholds (e.g. $\ge \$500\text{k}$) lacking an embedded semantic profile.
+  - **Raw 10-K Archival Invariant (`extract.py`):** Downloads the primary Form 10-K document once per fiscal year from SEC EDGAR, compressing with gzip (`level=6`) and storing at `/volume2/data/sec_filings/{ticker}/{year}_10K_raw.html.gz` on Synology NAS. Idempotency guarantees zero network re-download if the archived file exists locally.
+  - **High-Signal Regex Extractor (`transform.py`):** Extracts Item 1 (Business Overview) and Item 1A (Risk Factors & Macro Drivers) using multi-stage boundary matching that filters out Table of Contents false positives.
+  - **Dense Vector Embedding (`transform.py`):** Formats a high-signal text chunk and generates 768-dimensional dense vector embeddings using Google Gemini `gemini-embedding-001` with `outputDimensionality: 768`.
+  - **Relational & HNSW Storage (`load.py`):** Idempotently upserts metadata and embeddings into `ticker_semantic_profiles` via `common_lib.flow.clustering.upsert_semantic_profile` and records execution telemetry into `pipeline_runs`.
+* **Compliance & Rate Limiting:** Enforces SEC-compliant User-Agent header with institutional contact info and paces requests with 0.3s delay (~3.3 req/sec), staying safely below the SEC 10 req/sec threshold.
+* **Target Tables:** `ticker_semantic_profiles`, `pipeline_runs` on PostgreSQL 16 `quant_db` (Port 5435).
+
+---
+
 ## 3. Resilience, Schedulers & Alerts
 
 1. **Daily Cycle Orchestrator (`scripts/run_daily_cycle.py`):**
