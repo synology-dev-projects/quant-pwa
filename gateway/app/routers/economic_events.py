@@ -73,6 +73,7 @@ class MacroEventsResponse(BaseModel):
     country: str
     count: int
     events: List[MacroEventCardItem]
+    sensitivity_profile: Optional[Dict[str, Any]] = None
 
 
 class RagContextResponse(BaseModel):
@@ -255,12 +256,25 @@ def get_macro_events_cards(
                 similarity_score=ev.get("similarity_score")
             ))
 
+        # Fetch dynamic sensitivity profile
+        from common_lib.economic_events.sensitivities import get_or_compute_sensitivity
+        try:
+            sensitivity_profile = get_or_compute_sensitivity(engine, clean_ticker)
+            # convert datetimes to strings if any for json serialization
+            if sensitivity_profile and "last_calculated_at" in sensitivity_profile:
+                if isinstance(sensitivity_profile["last_calculated_at"], datetime):
+                    sensitivity_profile["last_calculated_at"] = sensitivity_profile["last_calculated_at"].isoformat()
+        except Exception as e:
+            logger.warning(f"Could not load sensitivity for {clean_ticker}: {e}")
+            sensitivity_profile = None
+
         return MacroEventsResponse(
             status="ok",
             ticker=clean_ticker,
             country=country,
             count=len(items),
-            events=items
+            events=items,
+            sensitivity_profile=sensitivity_profile
         )
     except Exception as ex:
         logger.error(f"Error fetching macro cards for {ticker}: {ex}", exc_info=True)
@@ -313,3 +327,33 @@ def get_rag_context_block(
             detail=f"Failed to build RAG context: {str(ex)}"
         )
 
+
+@router.get("/sensitivity", summary="Get Company Macro-Sensitivity Profile")
+def get_sensitivity_profile(
+    ticker: str = Query("SPY", description="Ticker symbol to query sensitivity profile"),
+    force_refresh: bool = Query(False, description="Force re-computation of sensitivities")
+):
+    try:
+        from common_lib.database.postgres import get_postgres_engine
+        from common_lib.economic_events.sensitivities import get_or_compute_sensitivity
+
+        cfg = load_config()
+        engine = get_postgres_engine(cfg)
+        clean_ticker = ticker.strip().upper()
+
+        profile = get_or_compute_sensitivity(engine, clean_ticker, force_refresh=force_refresh)
+        
+        if profile and "last_calculated_at" in profile and isinstance(profile["last_calculated_at"], datetime):
+            profile["last_calculated_at"] = profile["last_calculated_at"].isoformat()
+            
+        return {
+            "status": "ok",
+            "ticker": clean_ticker,
+            "sensitivity_profile": profile
+        }
+    except Exception as ex:
+        logger.error(f"Error fetching sensitivity for {ticker}: {ex}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch sensitivity profile: {str(ex)}"
+        )

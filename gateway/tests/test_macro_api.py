@@ -29,8 +29,10 @@ def test_get_macro_events_cards_mocked():
     ]
 
     with patch("common_lib.economic_events.retrieval.retrieve_relevant_events") as mock_ret:
-        mock_ret.return_value = fake_events
-        response = client.get("/api/economic-events/macro?ticker=SPY")
+        with patch("common_lib.economic_events.sensitivities.get_or_compute_sensitivity") as mock_sens:
+            mock_ret.return_value = fake_events
+            mock_sens.return_value = {"beta_rates": -0.1}
+            response = client.get("/api/economic-events/macro?ticker=SPY")
 
     assert response.status_code == 200
     data = response.json()
@@ -81,3 +83,27 @@ def test_synthesis_includes_macro_catalysts():
     det_output = macro_point.generate_deterministic("SPY", {"events": []})
     assert "Macro Catalysts" in det_output
     assert "NONE PENDING" in det_output
+
+def test_get_sensitivity_profile_mocked():
+    fake_profile = {
+        "ticker": "SPY",
+        "beta_rates": -0.15,
+        "beta_oil": 0.05,
+        "beta_market": 1.0,
+        "thematic_tags": ["high-beta"],
+        "primary_catalysts": ["broad market sentiment"],
+        "query_expansion": "SPY macro catalysts, broad market sentiment",
+        "last_calculated_at": "2026-09-24T12:30:00+00:00"
+    }
+
+    with patch("common_lib.economic_events.sensitivities.get_or_compute_sensitivity") as mock_get:
+        mock_get.return_value = fake_profile
+        response = client.get("/api/economic-events/sensitivity?ticker=SPY")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["ticker"] == "SPY"
+    prof = data["sensitivity_profile"]
+    assert prof["beta_rates"] == -0.15
+    assert "high-beta" in prof["thematic_tags"]

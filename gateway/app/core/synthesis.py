@@ -240,31 +240,64 @@ class MacroEventsContextPoint(SynthesisPoint):
         super().__init__(point_id="macro_catalysts", title="Macro Catalysts")
 
     def extract_features(self, ticker: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        features = {}
         if "macro_events" in payload and isinstance(payload["macro_events"], list):
-            return {"events": payload["macro_events"]}
+            features["events"] = payload["macro_events"]
+        else:
+            try:
+                from common_lib.config.main_config import load_config
+                from common_lib.database.postgres import get_postgres_engine
+                from common_lib.economic_events.retrieval import retrieve_relevant_events
+                from app.config import settings
+                cfg = load_config()
+                engine = get_postgres_engine(cfg)
+                events = retrieve_relevant_events(
+                    engine=engine,
+                    ticker=ticker,
+                    api_key=settings.GEMINI_API_KEY,
+                    top_k=3
+                )
+                features["events"] = events
+            except Exception as e:
+                logger.debug(f"Could not retrieve macro events for {ticker}: {e}")
+                features["events"] = []
 
-        try:
-            from common_lib.config.main_config import load_config
-            from common_lib.database.postgres import get_postgres_engine
-            from common_lib.economic_events.retrieval import retrieve_relevant_events
-            from app.config import settings
-            cfg = load_config()
-            engine = get_postgres_engine(cfg)
-            events = retrieve_relevant_events(
-                engine=engine,
-                ticker=ticker,
-                api_key=settings.GEMINI_API_KEY,
-                top_k=3
-            )
-            return {"events": events}
-        except Exception as e:
-            logger.debug(f"Could not retrieve macro events for {ticker}: {e}")
-            return {"events": []}
+        if "sensitivity_profile" in payload:
+            features["sensitivity_profile"] = payload["sensitivity_profile"]
+        else:
+            try:
+                from common_lib.config.main_config import load_config
+                from common_lib.database.postgres import get_postgres_engine
+                from common_lib.economic_events.sensitivities import get_or_compute_sensitivity
+                cfg = load_config()
+                engine = get_postgres_engine(cfg)
+                features["sensitivity_profile"] = get_or_compute_sensitivity(engine, ticker)
+            except Exception as e:
+                logger.debug(f"Could not retrieve sensitivity for {ticker}: {e}")
+                features["sensitivity_profile"] = None
+
+        return features
 
     def get_prompt_instruction(self, ticker: str, features: Dict[str, Any]) -> str:
         events = features.get("events", [])
-        lines = [f"• **Macro Catalysts**:"]
+        sens = features.get("sensitivity_profile")
+        lines = [f"• **Macro Catalysts & Sensitivities**:"]
+        
+        if sens:
+            tags = ", ".join(sens.get("thematic_tags", []))
+            lines.append(f"  - Profile: {tags}")
+            betas = []
+            if sens.get("beta_rates") is not None: betas.append(f"Rates: {sens['beta_rates']:.2f}")
+            if sens.get("beta_oil") is not None: betas.append(f"Oil: {sens['beta_oil']:.2f}")
+            if sens.get("beta_market") is not None: betas.append(f"Market: {sens['beta_market']:.2f}")
+            if betas:
+                lines.append(f"  - Betas: {', '.join(betas)}")
+            cats = ", ".join(sens.get("primary_catalysts", []))
+            if cats:
+                lines.append(f"  - Key Catalysts: {cats}")
+                
         if events:
+            lines.append("  - Recent/Upcoming Events:")
             for ev in events[:3]:
                 ts_str = ev.get("event_timestamp", "")[:16].replace("T", " ")
                 status = ev.get("status", "UPCOMING")
@@ -278,7 +311,7 @@ class MacroEventsContextPoint(SynthesisPoint):
                     detail = f"Actual {actual} vs {forecast or 'N/A'} exp"
                 else:
                     detail = f"Exp {forecast or 'N/A'} (Prev {prev or 'N/A'})"
-                lines.append(f"  - [{country}] {title} ({tier}) | {ts_str} UTC: {detail}")
+                lines.append(f"    * [{country}] {title} ({tier}) | {ts_str} UTC: {detail}")
         else:
             lines.append("  - NONE PENDING (Active 7-day window clear)")
 

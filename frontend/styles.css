@@ -3150,3 +3150,150 @@ th.sort-desc .sort-icon::after {
   display: block;
 }
 
+/* Dynamic Macro Sensitivity Ribbon & Badges */
+.macro-sensitivity-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background-color: #0a0a0c;
+  border: 1px solid #1a1a24;
+  border-radius: 8px;
+  margin: 0 16px 16px 16px;
+  box-sizing: border-box;
+  max-width: 100%;
+  align-items: center;
+}
+
+.macro-sensitivity-ribbon.empty {
+  justify-content: space-between;
+}
+
+.ticker-badge {
+  color: #fff;
+  background-color: #141418;
+  border: 1px solid #1a1a24;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.sensitivity-placeholder {
+  color: #888;
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+}
+
+.sensitivity-pill {
+  color: #fff;
+  background-color: #141418;
+  border: 1px solid #1a1a24;
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  padding: 6px 12px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.sensitivity-pill.rate-high {
+  border-color: #f0b90b;
+  color: #f0b90b;
+}
+
+.sensitivity-pill.solvency-alert {
+  border-color: #ff5252;
+  color: #ff5252;
+}
+
+.sensitivity-pill.energy {
+  border-color: #00e676;
+  color: #00e676;
+}
+
+.catalyst-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalyst-chip {
+  background-color: #141418;
+  color: #888;
+  border: 1px solid #1a1a24;
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  transition: all 0.2s;
+}
+
+.catalyst-chip:hover {
+  background-color: #1a1a24;
+  color: #fff;
+}
+
+.catalyst-chip.active {
+  background-color: #f0b90b;
+  color: #0a0a0c;
+  border-color: #f0b90b;
+  font-weight: 700;
+}
+
+.cockpit-macro-badge {
+  display: inline-flex;
+  align-items: center;
+  background-color: #141418;
+  color: #f0b90b;
+  border: 1px solid #1a1a24;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 8px;
+  min-height: 24px;
+  box-sizing: border-box;
+}
+
+/* Responsiveness */
+@media (max-width: 1280px) {
+  .macro-sensitivity-ribbon {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .macro-sensitivity-ribbon {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .catalyst-tags {
+    justify-content: flex-start;
+  }
+  .ticker-badge, .sensitivity-pill, .catalyst-chip {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 375px) {
+  .macro-sensitivity-ribbon {
+    margin: 0 8px 12px 8px;
+  }
+}
