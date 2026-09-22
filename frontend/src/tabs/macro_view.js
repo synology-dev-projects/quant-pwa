@@ -29,6 +29,8 @@ export class MacroView {
           </div>
         </div>
 
+        <div id="macro-sensitivity-ribbon"></div>
+
         <!-- Filter Chips Bar -->
         <div class="macro-filter-bar">
           <button type="button" class="macro-filter-chip active" data-filter="ALL">All Currencies</button>
@@ -109,8 +111,92 @@ export class MacroView {
     }
   }
 
+  async loadData(ticker) {
+    if (!ticker) return;
+    this.currentTicker = ticker;
+    try {
+      const resp = await fetchWithAuth(`/api/economic-events/macro?ticker=${ticker}`);
+      let profile = null;
+      if (resp && resp.ok) {
+        const data = await resp.json();
+        profile = data.sensitivity_profile;
+      }
+      
+      if (!profile) {
+        const fallback = await fetchWithAuth(`/api/economic-events/sensitivity?ticker=${ticker}`);
+        if (fallback && fallback.ok) {
+          const fallbackData = await fallback.json();
+          profile = fallbackData.sensitivity_profile || fallbackData;
+        }
+      }
+      
+      this.renderSensitivityRibbon(profile, ticker);
+    } catch (err) {
+      console.error('Error loading macro sensitivity:', err);
+      this.renderSensitivityRibbon(null, ticker);
+    }
+  }
+
+  renderSensitivityRibbon(profile, ticker) {
+    const container = this.container?.querySelector('#macro-sensitivity-ribbon');
+    if (!container) return;
+
+    if (!profile) {
+      container.innerHTML = `
+        <div class="macro-sensitivity-ribbon empty">
+          <span class="ticker-badge">${ticker} MACRO PROFILE</span>
+          <span class="sensitivity-placeholder">Calculating sensitivity profile...</span>
+        </div>
+      `;
+      return;
+    }
+
+    const rateBeta = profile.rate_beta || 0;
+    const rateHigh = Math.abs(rateBeta) > 0.8 ? 'rate-high' : '';
+    const solvency = profile.solvency || profile.debt_equity || 'N/A';
+    const isSolvencyAlert = parseFloat(solvency) < 2.0 && parseFloat(solvency) !== NaN ? 'solvency-alert' : '';
+    const oilBeta = profile.oil_beta || 0;
+    
+    const catalysts = profile.primary_catalysts || [];
+
+    container.innerHTML = `
+      <div class="macro-sensitivity-ribbon">
+        <span class="ticker-badge">${ticker} MACRO PROFILE</span>
+        <div class="sensitivity-pill ${rateHigh}">⚡ Rate Beta: ${rateBeta > 0 ? '+' : ''}${rateBeta}</div>
+        <div class="sensitivity-pill ${isSolvencyAlert}">⚠️ Int Coverage: ${solvency}x</div>
+        <div class="sensitivity-pill energy">🛢️ Oil Beta: ${oilBeta > 0 ? '+' : ''}${oilBeta}</div>
+        <div class="catalyst-tags">
+          ${catalysts.map(c => `<button class="catalyst-chip" data-catalyst="${c}">[${c}]</button>`).join('')}
+        </div>
+      </div>
+    `;
+
+    const chips = container.querySelectorAll('.catalyst-chip');
+    chips.forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        const isActive = chip.classList.contains('active');
+        chips.forEach(c => c.classList.remove('active'));
+        if (!isActive) {
+          chip.classList.add('active');
+          this.activeFilter = `CATALYST:${chip.dataset.catalyst}`;
+        } else {
+          this.activeFilter = 'ALL';
+        }
+        this.renderEventCards();
+      });
+    });
+  }
+
   getFilteredEvents() {
     if (this.activeFilter === 'ALL') return this.currentEvents;
+    if (this.activeFilter.startsWith('CATALYST:')) {
+      const cat = this.activeFilter.split(':')[1].toLowerCase();
+      return this.currentEvents.filter(e => {
+        const title = (e.title || '').toLowerCase();
+        const summary = (e.synthetic_summary || '').toLowerCase();
+        return title.includes(cat) || summary.includes(cat);
+      });
+    }
     if (this.activeFilter === 'HIGH') {
       return this.currentEvents.filter(e => (e.impact_tier || '').toLowerCase() === 'high');
     }
