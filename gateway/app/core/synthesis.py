@@ -233,6 +233,81 @@ class InstitutionalFlowOutliersPoint(SynthesisPoint):
         return format_notable_flow_markdown(top_premium, notable_otm)
 
 
+class MacroEventsContextPoint(SynthesisPoint):
+    """Synthesis point for Macroeconomic Catalysts & Economic Calendar Events."""
+
+    def __init__(self):
+        super().__init__(point_id="macro_catalysts", title="Macro Catalysts")
+
+    def extract_features(self, ticker: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if "macro_events" in payload and isinstance(payload["macro_events"], list):
+            return {"events": payload["macro_events"]}
+
+        try:
+            from common_lib.config.main_config import load_config
+            from common_lib.database.postgres import get_postgres_engine
+            from common_lib.economic_events.retrieval import retrieve_relevant_events
+            from app.config import settings
+            cfg = load_config()
+            engine = get_postgres_engine(cfg)
+            events = retrieve_relevant_events(
+                engine=engine,
+                ticker=ticker,
+                api_key=settings.GEMINI_API_KEY,
+                top_k=3
+            )
+            return {"events": events}
+        except Exception as e:
+            logger.debug(f"Could not retrieve macro events for {ticker}: {e}")
+            return {"events": []}
+
+    def get_prompt_instruction(self, ticker: str, features: Dict[str, Any]) -> str:
+        events = features.get("events", [])
+        lines = [f"• **Macro Catalysts**:"]
+        if events:
+            for ev in events[:3]:
+                ts_str = ev.get("event_timestamp", "")[:16].replace("T", " ")
+                status = ev.get("status", "UPCOMING")
+                title = ev.get("title", "")
+                country = ev.get("country", "")
+                tier = ev.get("impact_tier", "")
+                actual = ev.get("actual")
+                forecast = ev.get("forecast")
+                prev = ev.get("previous")
+                if status == "RELEASED" and actual:
+                    detail = f"Actual {actual} vs {forecast or 'N/A'} exp"
+                else:
+                    detail = f"Exp {forecast or 'N/A'} (Prev {prev or 'N/A'})"
+                lines.append(f"  - [{country}] {title} ({tier}) | {ts_str} UTC: {detail}")
+        else:
+            lines.append("  - NONE PENDING (Active 7-day window clear)")
+
+        lines.append("TELEGRAPHIC, ZERO ADJECTIVES.")
+        return "\n".join(lines)
+
+    def generate_deterministic(self, ticker: str, features: Dict[str, Any]) -> str:
+        events = features.get("events", [])
+        lines = [f"• **Macro Catalysts**:"]
+        if events:
+            for ev in events[:3]:
+                ts_str = ev.get("event_timestamp", "")[:16].replace("T", " ")
+                status = ev.get("status", "UPCOMING")
+                title = ev.get("title", "")
+                country = ev.get("country", "")
+                tier = ev.get("impact_tier", "")
+                actual = ev.get("actual")
+                forecast = ev.get("forecast")
+                prev = ev.get("previous")
+                if status == "RELEASED" and actual:
+                    detail = f"Actual {actual} vs {forecast or 'N/A'} exp"
+                else:
+                    detail = f"Exp {forecast or 'N/A'} (Prev {prev or 'N/A'})"
+                lines.append(f"  - [{country}] {title} ({tier}) | {ts_str} UTC: {detail}")
+        else:
+            lines.append("  - NONE PENDING (Active 7-day window clear)")
+        return "\n".join(lines)
+
+
 class SynthesisRegistry:
     """
     Registry managing Cockpit Synergized Synthesis points.
@@ -244,6 +319,7 @@ class SynthesisRegistry:
             RegimeVolatilityPoint(),
             KeyStructuralWallsPoint(),
             InstitutionalFlowOutliersPoint(),
+            MacroEventsContextPoint(),
         ]
 
     @property

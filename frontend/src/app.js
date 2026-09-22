@@ -5,6 +5,7 @@ import { RadarView } from './tabs/radar_view.js?v=31';
 import { FlowView } from './tabs/flow_view.js?v=32';
 import { WatchlistView } from './tabs/watchlist_view.js?v=33';
 import { LevelsView } from './tabs/levels_view.js?v=34';
+import { MacroView } from './tabs/macro_view.js?v=35';
 import { Lightbox } from './components/lightbox.js?v=30';
 import { LockScreen } from './components/lock_screen.js?v=30';
 import { SettingsModal } from './components/settings_modal.js?v=30';
@@ -17,6 +18,7 @@ class App {
     this.flowView = new FlowView();
     this.watchlistView = new WatchlistView();
     this.levelsView = new LevelsView();
+    this.macroView = new MacroView();
     this.lightbox = new Lightbox();
     window.quantLightbox = this.lightbox;
 
@@ -92,6 +94,9 @@ class App {
     if (this.levelsView && AppState.getActiveTab() === 'levels') {
       this.levelsView.loadLevelsData();
     }
+    if (this.macroView && AppState.getActiveTab() === 'macro') {
+      this.macroView.loadEvents();
+    }
   }
 
   initTabs() {
@@ -114,6 +119,11 @@ class App {
       if (tabId === 'levels' && this.levelsView) {
         if (!this.levelsView.currentData) {
           this.levelsView.loadInitialData();
+        }
+      }
+      if (tabId === 'macro' && this.macroView) {
+        if (!this.macroView.currentEvents || this.macroView.currentEvents.length === 0) {
+          this.macroView.loadEvents();
         }
       }
       if (tabId === 'watchlists' && this.watchlistView) {
@@ -168,9 +178,17 @@ class App {
       render: (container) => this.levelsView.render(container)
     });
 
+    // 6. Macroeconomic Calendar & RAG Tab
+    this.tabManager.registerTab({
+      id: 'macro',
+      title: 'Macro',
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`,
+      render: (container) => this.macroView.render(container)
+    });
+
     // Activate initial tab from localStorage
     const savedTab = AppState.getActiveTab();
-    const validTabs = ['flow', 'cockpit', 'radar', 'watchlists', 'levels'];
+    const validTabs = ['flow', 'cockpit', 'radar', 'watchlists', 'levels', 'macro'];
     const activeTab = validTabs.includes(savedTab) ? savedTab : 'flow';
     this.tabManager.switchTab(activeTab);
   }
