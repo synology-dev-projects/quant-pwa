@@ -1,5 +1,7 @@
 import pytest
 from unittest.mock import patch, AsyncMock
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import pandas as pd
 from fastapi.testclient import TestClient
 
@@ -20,7 +22,8 @@ def test_reproduce_spx_spot_parity_prioritizes_gspc(mock_quotes, mock_config, mo
     If quotes contains both '^GSPC' (7735.98) and '^SPX' (7728.76),
     spot_price must be 7735.98, NOT 7728.76.
     """
-    mock_sql.return_value = pd.DataFrame([{"d": "2026-09-21"}])
+    today_ny = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+    mock_sql.return_value = pd.DataFrame([{"d": today_ny}])
     mock_get_levels.return_value = pd.DataFrame([
         {
             "START_LVL_PRICE": 7748.0,

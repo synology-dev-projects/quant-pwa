@@ -3,8 +3,8 @@ import subprocess
 import os
 import sys
 from datetime import datetime, date, timedelta, time
-from typing import Optional, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional, Any, List, Dict
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 
 from common_lib.config.main_config import load_config
@@ -191,3 +191,40 @@ async def trigger_flow_sync(current_user: str = Depends(get_current_user)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Pipeline execution failed: {str(ex)}"
         )
+
+
+@router.get("/thematic-clusters")
+async def get_thematic_clusters(
+    trade_date: Optional[str] = Query(None, description="Trade date YYYY-MM-DD (defaults to latest available session)"),
+    min_premium: float = Query(1000000.0, ge=0.0, description="Minimum combined cluster premium hurdle"),
+    max_distance: float = Query(0.25, ge=0.0, le=1.0, description="Maximum cosine distance for semantic clustering")
+):
+    """
+    Clusters options flow trades across tickers sharing 10-K business model risks.
+    Executes sub-5ms local vector distance join without external API calls.
+    """
+    try:
+        from common_lib.config.main_config import load_config
+        from common_lib.database.postgres import get_postgres_engine
+        from common_lib.flow.clustering import cluster_thematic_flow
+        config = load_config()
+        engine = get_postgres_engine(config)
+        clusters = cluster_thematic_flow(
+            engine=engine,
+            trade_date=trade_date,
+            min_cluster_premium=min_premium,
+            max_distance=max_distance
+        )
+        return {
+            "status": "ok",
+            "trade_date": trade_date,
+            "count": len(clusters),
+            "clusters": clusters
+        }
+    except Exception as ex:
+        logger.error(f"Error computing thematic flow clusters: {ex}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to compute thematic flow clusters: {str(ex)}"
+        )
+
