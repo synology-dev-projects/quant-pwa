@@ -6,6 +6,10 @@ export class FlowView {
     this.container = null;
     this.currentData = null;
     this.activeDuration = '3d'; // '3d' | '1w'
+    this.activeViewMode = 'rankings'; // 'rankings' | 'clusters'
+    this.activeHurdle = 500000;
+    this.clustersData = null;
+    this.isLoadingClusters = false;
     this.isLoading = false;
     this.isStreaming = false;
     this.streamAbortController = null;
@@ -27,6 +31,10 @@ export class FlowView {
           </div>
 
           <div class="flow-controls-group">
+            <div class="flow-mode-toggle" id="flowModeToggle">
+              <button type="button" class="flow-mode-btn active" data-mode="rankings">Rankings</button>
+              <button type="button" class="flow-mode-btn" data-mode="clusters">Thematic Clusters</button>
+            </div>
             <div class="flow-duration-toggle" id="flowDurationToggle">
               <button type="button" class="flow-duration-btn active" data-duration="3d">3 Days</button>
               <button type="button" class="flow-duration-btn" data-duration="1w">1 Week</button>
@@ -174,6 +182,27 @@ export class FlowView {
           </div>
 
         </div>
+
+        <!-- Thematic Semantic Flow Clusters Container -->
+        <div class="flow-clusters-container" id="flowClustersContainer" style="display: none;">
+          <div class="clusters-controls-bar">
+            <div class="clusters-title-group">
+              <span class="clusters-title-badge">10-K AI EMBEDDINGS</span>
+              <span class="clusters-subtitle">Institutional flow grouped by SEC Form 10-K business model & macro risk vectors</span>
+            </div>
+            <div class="clusters-hurdle-group">
+              <span class="clusters-hurdle-label">Min Premium:</span>
+              <div class="clusters-hurdle-toggle" id="clustersHurdleToggle">
+                <button type="button" class="clusters-hurdle-btn active" data-hurdle="500000">$500K</button>
+                <button type="button" class="clusters-hurdle-btn" data-hurdle="1000000">$1.0M</button>
+                <button type="button" class="clusters-hurdle-btn" data-hurdle="2500000">$2.5M</button>
+              </div>
+            </div>
+          </div>
+          <div class="clusters-cards-grid" id="clustersCardsGrid">
+            <div class="flow-empty-state">Loading thematic flow clusters...</div>
+          </div>
+        </div>
       </div>
     `;
 
@@ -183,6 +212,27 @@ export class FlowView {
 
   bindEvents() {
     if (!this.container) return;
+
+    // Mode Switcher (Rankings vs Thematic Clusters)
+    const modeBtns = this.container.querySelectorAll('#flowModeToggle .flow-mode-btn');
+    modeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        modeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.switchViewMode(btn.dataset.mode || 'rankings');
+      });
+    });
+
+    // Clusters Hurdle Switcher ($500K, $1M, $2.5M)
+    const hurdleBtns = this.container.querySelectorAll('#clustersHurdleToggle .clusters-hurdle-btn');
+    hurdleBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        hurdleBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.activeHurdle = parseFloat(btn.dataset.hurdle) || 500000;
+        this.loadThematicClusters();
+      });
+    });
 
     // Duration Switcher (3D vs 7D)
     const toggleBtns = this.container.querySelectorAll('#flowDurationToggle .flow-duration-btn');
@@ -199,7 +249,11 @@ export class FlowView {
     const refreshBtn = this.container.querySelector('#flowRefreshBtn');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => {
-        this.loadFlowData();
+        if (this.activeViewMode === 'clusters') {
+          this.loadThematicClusters();
+        } else {
+          this.loadFlowData();
+        }
       });
     }
 
@@ -221,6 +275,35 @@ export class FlowView {
         const row = e.target.closest ? e.target.closest('.notable-flow-row[data-ticker]') : null;
         if (row && row.dataset.ticker) {
           this.drillDownToCockpit(row.dataset.ticker);
+        }
+      });
+    }
+
+    // Clusters Card Accordion & Cockpit Drill-Down Delegation
+    const clustersContainer = this.container.querySelector('#flowClustersContainer');
+    if (clustersContainer) {
+      clustersContainer.addEventListener('click', (e) => {
+        const tickerBtn = e.target.closest ? e.target.closest('.cluster-ticker-btn, [data-ticker]') : null;
+        if (tickerBtn && tickerBtn.dataset.ticker) {
+          if (typeof e.stopPropagation === 'function') e.stopPropagation();
+          this.drillDownToCockpit(tickerBtn.dataset.ticker);
+          return;
+        }
+
+        const cardHeader = e.target.closest ? e.target.closest('.cluster-card-header') : null;
+        if (cardHeader) {
+          const card = cardHeader.closest('.cluster-card');
+          if (card) {
+            const body = card.querySelector('.cluster-card-body');
+            const chevron = card.querySelector('.cluster-chevron');
+            const isCollapsed = card.classList.toggle('collapsed');
+            if (body) {
+              body.style.display = isCollapsed ? 'none' : 'block';
+            }
+            if (chevron) {
+              chevron.textContent = isCollapsed ? '▼' : '▲';
+            }
+          }
         }
       });
     }
@@ -490,5 +573,172 @@ ${topPremLine}
         window.quantApp.cockpitView.searchTicker(ticker);
       }
     }
+  }
+
+  switchViewMode(mode) {
+    this.activeViewMode = mode;
+    if (!this.container) return;
+    const rankingsGrid = this.container.querySelector('#flowSectionsGrid');
+    const clustersContainer = this.container.querySelector('#flowClustersContainer');
+    const durationToggle = this.container.querySelector('#flowDurationToggle');
+
+    if (mode === 'clusters') {
+      if (rankingsGrid) rankingsGrid.style.display = 'none';
+      if (clustersContainer) clustersContainer.style.display = 'block';
+      if (durationToggle) durationToggle.style.display = 'none';
+      if (!this.clustersData) {
+        this.loadThematicClusters();
+      }
+    } else {
+      if (rankingsGrid) rankingsGrid.style.display = 'grid';
+      if (clustersContainer) clustersContainer.style.display = 'none';
+      if (durationToggle) durationToggle.style.display = 'flex';
+    }
+  }
+
+  async loadThematicClusters() {
+    if (!this.container) return;
+    this.isLoadingClusters = true;
+    const grid = this.container.querySelector('#clustersCardsGrid');
+    if (grid) {
+      grid.innerHTML = `
+        <div class="cockpit-loading-block">
+          <div class="typing-indicator"><span></span><span></span><span></span></div>
+          <span class="loading-label">Clustering institutional flow across 10-K risk vectors...</span>
+        </div>
+      `;
+    }
+
+    try {
+      const url = `/api/flow/thematic-clusters?min_premium=${encodeURIComponent(this.activeHurdle)}&max_distance=0.35`;
+      const res = await fetchWithAuth(url);
+      if (res && res.ok) {
+        const data = await res.json();
+        this.clustersData = data.clusters || [];
+        this.renderThematicClusters(this.clustersData);
+      } else {
+        throw new Error(`Server returned HTTP ${res?.status || 500}`);
+      }
+    } catch (err) {
+      console.error('Failed to load thematic flow clusters:', err);
+      if (grid) {
+        grid.innerHTML = `<div class="flow-empty-state error">Failed to load thematic clusters from gateway.</div>`;
+      }
+    } finally {
+      this.isLoadingClusters = false;
+    }
+  }
+
+  renderThematicClusters(clusters) {
+    if (!this.container) return;
+    const grid = this.container.querySelector('#clustersCardsGrid');
+    if (!grid) return;
+
+    if (!clusters || clusters.length === 0) {
+      grid.innerHTML = `
+        <div class="flow-empty-state">
+          No multi-ticker thematic clusters detected above the ${this.formatCurrency(this.activeHurdle)} capital hurdle.
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = clusters.map((c, idx) => {
+      const isExpanded = idx < 3;
+      const netSent = (c.net_sentiment || 'BULLISH').toUpperCase();
+      const callPrem = c.call_premium || 0;
+      const putPrem = c.put_premium || 0;
+      const totPrem = (callPrem + putPrem) || c.combined_premium || 1;
+      const callPct = Math.round((callPrem / totPrem) * 100);
+      const putPct = 100 - callPct;
+      const similarityPct = Math.round((c.avg_similarity != null ? c.avg_similarity : (1.0 - (c.avg_cosine_distance || 0))) * 100);
+
+      const tickerRows = (c.tickers || []).map(t => `
+        <tr class="cluster-ticker-row" data-ticker="${t.ticker}">
+          <td><span class="flow-ticker-btn cluster-ticker-btn" data-ticker="${t.ticker}">${t.ticker}</span></td>
+          <td class="cluster-company-cell">${t.company_name || t.ticker}</td>
+          <td><strong class="flow-metric-primary ${t.sentiment === 'BULLISH' ? 'metric-green' : 'metric-red'}">${this.formatCurrency(t.premium)}</strong></td>
+          <td><span class="flow-sentiment-tag tag-${(t.sentiment || '').toLowerCase()}">${t.sentiment}</span></td>
+          <td><span class="flow-metric-secondary">${t.call_put_ratio != null ? `${t.call_put_ratio}x` : '-'}</span></td>
+          <td><span class="flow-days-pill">${t.trade_count || 0} prints</span></td>
+          <td><button type="button" class="cluster-inspect-btn cluster-ticker-btn" data-ticker="${t.ticker}" title="Inspect in Cockpit">Cockpit ↗</button></td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="cluster-card ${isExpanded ? '' : 'collapsed'}" data-cluster-id="${c.cluster_id}">
+          <div class="cluster-card-header">
+            <div class="cluster-header-main">
+              <div class="cluster-title-line">
+                <span class="cluster-theme-icon">🔬</span>
+                <h3 class="cluster-theme-title">${c.theme_name}</h3>
+                <span class="cluster-sector-pill">${c.dominant_sector || 'Thematic Equities'}</span>
+              </div>
+              <div class="cluster-meta-line">
+                <span class="cluster-meta-item">
+                  <strong class="cluster-premium-val">${this.formatCurrency(c.combined_premium)}</strong>
+                  <span class="cluster-meta-label">Capital</span>
+                </span>
+                <span class="cluster-meta-separator">•</span>
+                <span class="cluster-meta-item">
+                  <strong class="cluster-similarity-val">${similarityPct}%</strong>
+                  <span class="cluster-meta-label">Similarity</span>
+                </span>
+                <span class="cluster-meta-separator">•</span>
+                <span class="cluster-meta-item">
+                  <strong class="cluster-count-val">${c.ticker_count}</strong>
+                  <span class="cluster-meta-label">Tickers</span>
+                </span>
+              </div>
+            </div>
+            <div class="cluster-header-actions">
+              <span class="cluster-sentiment-badge badge-${netSent.toLowerCase()}">${netSent}</span>
+              <button type="button" class="cluster-expand-btn" aria-label="Toggle cluster details">
+                <span class="cluster-chevron">${isExpanded ? '▲' : '▼'}</span>
+              </button>
+            </div>
+          </div>
+          <div class="cluster-card-body" style="${isExpanded ? 'display: block;' : 'display: none;'}">
+            <div class="cluster-breakdown-bar">
+              <div class="cluster-bar-label">Flow Split:</div>
+              <div class="cluster-bar-track">
+                <div class="cluster-bar-fill-call" style="width: ${callPct}%;" title="Calls: ${this.formatCurrency(callPrem)}"></div>
+                <div class="cluster-bar-fill-put" style="width: ${putPct}%;" title="Puts: ${this.formatCurrency(putPrem)}"></div>
+              </div>
+              <div class="cluster-bar-stats">
+                <span class="stat-calls">Calls: ${this.formatCurrency(callPrem)} (${callPct}%)</span>
+                <span class="stat-puts">Puts: ${this.formatCurrency(putPrem)} (${putPct}%)</span>
+              </div>
+            </div>
+            <div class="cluster-tickers-table-wrapper">
+              <table class="cluster-tickers-table">
+                <thead>
+                  <tr>
+                    <th>TICKER</th>
+                    <th>COMPANY</th>
+                    <th>PREMIUM</th>
+                    <th>SENTIMENT</th>
+                    <th>C/P RATIO</th>
+                    <th>SWEEPS</th>
+                    <th>ACTION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${tickerRows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  formatCurrency(val) {
+    if (typeof val !== 'number' || isNaN(val)) return '$0';
+    if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
+    if (val >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
+    if (val >= 1e3) return `$${(val / 1e3).toFixed(0)}K`;
+    return `$${Math.round(val).toLocaleString()}`;
   }
 }
