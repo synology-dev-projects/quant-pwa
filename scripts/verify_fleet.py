@@ -30,6 +30,7 @@ FLEET_REPOS = [
     "market-confluence-pipeline",
     "gexdex-snapshot-pipeline",
     "quant-pwa",
+    "sec-filings-pipeline",
 ]
 
 ORG_NAME = "synology-dev-projects"
