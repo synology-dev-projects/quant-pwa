@@ -145,9 +145,6 @@ def verify_fleet(branch: str = "develop2", wait: bool = False, timeout: int = 60
         if all_ci_success:
             print(f"\n🎉 [FLEET CI GATE PASSED] All {len(ci_active_statuses)} repositories finished successfully!")
             return 0
-        if all_success:
-            print(f"\n🎉 [FLEET CI GATE PASSED] All {len(target_repos)} repositories finished successfully!")
-            return 0
             
         if time.time() - start_time >= timeout:
             print(f"\n⏱️ [FLEET CI TIMEOUT] Verification timed out after {timeout} seconds.", file=sys.stderr)
