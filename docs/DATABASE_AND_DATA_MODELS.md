@@ -228,6 +228,19 @@ The engine maintains declarative DDL statements for all core relational tables a
    - Composite Index: `idx_chat_session_id (session_id)`
    - Stores multi-turn conversational session history, agent tool invocations, and JSONB metadata.
 
+5. **`economic_events`** (Pure Relational Microstructure):
+   - Primary Key: `(event_id, event_timestamp)`
+   - Indices: `idx_econ_ts (event_timestamp)`, `idx_econ_country_impact (country, impact_tier)`
+   - Stores macroeconomic release calendar data, impact tiers, forecasts, previous, actuals, and raw payloads. Debloated to sub-2ms pure relational SQL with zero vector embeddings or external AI dependencies.
+
+6. **`ticker_semantic_profiles`** (10-K Business Similarity Clustering):
+   - Primary Key: `ticker VARCHAR(16)`
+   - Vector Index: `idx_ticker_semantic_emb USING hnsw (embedding vector_cosine_ops)`
+   - Stores SEC EDGAR 10-K Item 1 business summaries and precomputed 768-dimensional embeddings (`VECTOR(768)`) enabling sub-5ms local cosine distance clustering across options flow prints.
+
+> [!NOTE]
+> **Decommissioned Tables:** `company_macro_sensitivities` was completely dropped and pruned from the system to eliminate AI hallucination risk and unnecessary background overhead.
+
 ### 5.3 Execution Semantics & Idempotency
 - **Atomic Transaction Wrapping:** Schema DDL blocks are executed inside an atomic transaction (`with engine.begin() as conn:`).
 - **Idempotency:** Utilizes `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` to ensure zero runtime impact or lock escalation during warm reboots.
