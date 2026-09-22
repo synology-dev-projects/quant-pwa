@@ -71,7 +71,6 @@ export class CockpitView {
                 <span class="panel-badge-icon">⚡</span>
                 <h2 class="panel-title">Synergized Synthesis</h2>
                 <span class="ticker-badge" id="heroTickerBadge">--</span>
-                <span class="cockpit-macro-badge" id="cockpitMacroBadge" style="display: none;"></span>
               </div>
               <span class="panel-live-tag" id="panelLiveTag"><span class="status-dot dot-live"></span><span class="tag-text">READY</span></span>
             </div>
@@ -602,21 +601,6 @@ ${notableFlowMd}
       const liveTag = this.container.querySelector('#panelLiveTag');
       if (liveTag) {
         liveTag.innerHTML = `<span class="status-dot dot-live"></span><span class="tag-text">LIVE</span>`;
-      }
-    }
-    
-    const macroBadge = this.container.querySelector('#cockpitMacroBadge');
-    if (macroBadge) {
-      const rateSensitivity = data.rate_sensitivity || data.metrics?.rate_beta || 0;
-      const primaryCatalyst = data.primary_catalyst || data.macro_catalyst || '';
-      if (primaryCatalyst) {
-        macroBadge.textContent = `[${primaryCatalyst}]`;
-        macroBadge.style.display = 'inline-flex';
-      } else if (Math.abs(rateSensitivity) > 0.8) {
-        macroBadge.textContent = `⚡ Rate Beta: ${rateSensitivity > 0 ? '+' : ''}${rateSensitivity}`;
-        macroBadge.style.display = 'inline-flex';
-      } else {
-        macroBadge.style.display = 'none';
       }
     }
 
