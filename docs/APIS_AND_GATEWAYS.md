@@ -247,6 +247,42 @@ sequenceDiagram
   }
   ```
 
+#### 3. Thematic Options Flow Clusters (`GET /api/flow/thematic-clusters`)
+* **Auth:** None (Public)
+* **Parameters:**
+  - `trade_date` (optional string): Format `YYYY-MM-DD` (defaults to latest active session in `unusual_option_flow_te`).
+  - `min_premium` (optional float): Minimum combined cluster premium hurdle (default `1,000,000.0`).
+  - `max_distance` (optional float): Maximum cosine distance between 10-K profile embeddings (default `0.25`).
+* **Purpose:** Clusters active institutional sweeps across tickers sharing underlying 10-K business model risk profiles. Executes sub-5ms local vector distance joins with zero external API calls.
+* **Response (`200 OK`):**
+  ```json
+  {
+    "status": "ok",
+    "trade_date": "2026-09-21",
+    "count": 1,
+    "clusters": [
+      {
+        "cluster_id": "cluster-2026-09-21-1",
+        "trade_date": "2026-09-21",
+        "theme_name": "Consumer Fintech Rotation (SOFI, AFRM)",
+        "dominant_sector": "Financial Technology & Digital Banking",
+        "tickers": [
+          {"ticker": "SOFI", "premium": 1500000.0, "sentiment": "BULLISH", "call_put_ratio": 4.0, "trade_count": 42},
+          {"ticker": "AFRM", "premium": 1200000.0, "sentiment": "BULLISH", "call_put_ratio": 5.0, "trade_count": 35}
+        ],
+        "ticker_count": 2,
+        "combined_premium": 2700000.0,
+        "net_sentiment": "BULLISH",
+        "call_premium": 2200000.0,
+        "put_premium": 500000.0,
+        "avg_cosine_distance": 0.12,
+        "max_cosine_distance": 0.15,
+        "avg_similarity": 0.88
+      }
+    ]
+  }
+  ```
+
 ### 3.4 Quant Levels Status & Ingestion Endpoints (`/api/quant-levels/*`)
 
 #### 1. Quant Levels Freshness Status (`GET /api/quant-levels/status`)
@@ -362,6 +398,17 @@ sequenceDiagram
   - `POST /api/quant-levels/alerts/test`: Synthetic test alert generation accepting `level_price_range`, `touched_boundary`, `level_type`, and `comments`.
 * **Push Notifications (NTFY):** Dispatches high-priority (Urgent / Max priority 5) push notifications to Synology NTFY (`https://richntfynotifier.synology.me/quant_alerts`) formatted with full range and touched boundary:
   `SPX Level Hit: BUY @ 7565.00 - 7575.00 (Touched 7575.00)`
+
+---
+
+### 3.8 Economic Events Microstructure API (`/api/economic-events/*`)
+
+#### 1. Economic Calendar Events (`GET /api/economic-events/macro`)
+* **Auth:** None (Public)
+* **Parameters:** `ticker` (optional, default `SPY`), `days_forward` (optional, default `7`), `days_back` (optional, default `1`).
+* **Purpose:** Queries macroeconomic event releases (CPI, FOMC, PPI, Non-Farm Payrolls) with sub-2ms relational execution directly from `economic_events`. Returns structured event cards with actual/forecast/previous deltas, impact tiering (`High`, `Medium`, `Low`), and countdown timers.
+* **Debloat Note:** Stripped of all vector embedding dependencies, LLM context expansion, and company macro sensitivity ribbons.
+* **Decommissioned Route:** `GET /api/economic-events/sensitivity` was completely pruned from the gateway (returns `404 Not Found`).
 
 ---
 
