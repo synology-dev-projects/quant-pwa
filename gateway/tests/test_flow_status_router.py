@@ -108,3 +108,41 @@ def test_trigger_flow_sync_authorized(mock_run, mock_clear_cache):
     assert data["status"] == "ok"
     assert data["rows_upserted"] == 51
     assert mock_clear_cache.call_count == 1
+
+
+@patch("common_lib.flow.clustering.cluster_thematic_flow")
+def test_get_thematic_clusters_mocked(mock_cluster):
+    mock_clusters = [
+        {
+            "cluster_id": "cluster-2026-09-21-1",
+            "trade_date": "2026-09-21",
+            "theme_name": "Consumer Fintech Rotation (SOFI, AFRM, UPST)",
+            "dominant_sector": "Consumer Fintech",
+            "tickers": [
+                {"ticker": "SOFI", "premium": 1500000.0, "sentiment": "BULLISH", "call_put_ratio": 4.0, "trade_count": 42},
+                {"ticker": "AFRM", "premium": 1200000.0, "sentiment": "BULLISH", "call_put_ratio": 5.0, "trade_count": 35},
+                {"ticker": "UPST", "premium": 800000.0, "sentiment": "BULLISH", "call_put_ratio": 3.0, "trade_count": 20},
+            ],
+            "ticker_count": 3,
+            "combined_premium": 3500000.0,
+            "net_sentiment": "BULLISH",
+            "call_premium": 2800000.0,
+            "put_premium": 700000.0,
+            "avg_cosine_distance": 0.12,
+            "max_cosine_distance": 0.18,
+            "avg_similarity": 0.88
+        }
+    ]
+    mock_cluster.return_value = mock_clusters
+
+    response = client.get("/api/flow/thematic-clusters?trade_date=2026-09-21")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["count"] == 1
+    assert len(data["clusters"]) == 1
+    c = data["clusters"][0]
+    assert c["dominant_sector"] == "Consumer Fintech"
+    assert c["combined_premium"] == 3500000.0
+    assert c["ticker_count"] == 3
+
