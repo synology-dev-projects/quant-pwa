@@ -230,4 +230,21 @@ The Settings Modal provides single-point management for application configuratio
 - **Persistent "Today's Level Hits" History Ribbon:** Dedicated `#levelsAlertHistoryRibbon` mounted above the price ladder displaying all triggered level hits for today with Eastern Time stamps, preventing visual loss during mobile browser sleep or highlight decay.
 - **Range & Boundary Matching:** Dynamically maps alert boundary hits to ladder rows and keeps visual hit indicators synchronized.
 
+---
+
+## 5. Thematic Semantic Flow Clusters UI (`FLOW-02`)
+
+### 5.1 Architecture & Vector-Clustered Options Flow
+The Thematic Flow Clusters interface bridges the options flow sweep engine with 768-dimensional SEC Form 10-K vector embeddings:
+
+- **Segmented View Mode Switcher:** Segmented control (`#flowModeToggle`) allows traders to toggle seamlessly between `Flow Rankings` (4-card top lists) and `Thematic Clusters` with zero page reload.
+- **Collapsible Terminal Dark Cards (`.cluster-card`):** High-density dark cards grouping co-moving institutional sweeps by shared Form 10-K business models and macro risks:
+  - **Dominant Sentiment Glowing Badges:** High-contrast glowing pills (`.badge-bullish` in `#00e676`, `.badge-bearish` in `#ff1744`).
+  - **Capital & Cohesion Metrics:** Formatted total dollar volume (e.g. `$38.4M Capital`), average cosine similarity percentage (e.g. `84% Similarity`), and ticker count.
+  - **Dual-Color Flow Split Track:** Proportional visual breakdown showing percentage and dollar premium of calls vs puts.
+  - **Accordion Interactivity:** Top clusters expanded by default; headers toggle expansion with animated chevrons (`▲` / `▼`).
+- **Deep Cockpit Drill-Down Navigation:** Clicking any constituent ticker symbol (`.cluster-ticker-btn`) or the `Cockpit ↗` action button automatically transitions the user to `CockpitView` and pre-populates that ticker's search input for instant microstructure inspection.
+- **Capital Hurdle Filters:** Segmented control toggling minimum combined capital hurdles (`$500K`, `$1.0M`, `$2.5M`), dynamically querying `/api/flow/thematic-clusters` with responsive layout down to 375px mobile displays.
+
+
 
