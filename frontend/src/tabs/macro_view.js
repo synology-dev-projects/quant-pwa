@@ -50,6 +50,7 @@ export class MacroView {
 
     this.bindEvents();
     this.loadEvents();
+    this.loadData(window.currentSymbol || 'SPY');
     this.startPolling();
   }
 
@@ -151,11 +152,13 @@ export class MacroView {
       return;
     }
 
-    const rateBeta = profile.rate_beta || 0;
+    const rateBeta = profile.beta_rates !== undefined ? profile.beta_rates : (profile.rate_beta || 0);
     const rateHigh = Math.abs(rateBeta) > 0.8 ? 'rate-high' : '';
-    const solvency = profile.solvency || profile.debt_equity || 'N/A';
-    const isSolvencyAlert = parseFloat(solvency) < 2.0 && parseFloat(solvency) !== NaN ? 'solvency-alert' : '';
-    const oilBeta = profile.oil_beta || 0;
+    const solvency = profile.interest_coverage !== undefined && profile.interest_coverage !== null
+      ? `${profile.interest_coverage}x`
+      : (profile.debt_to_equity !== undefined && profile.debt_to_equity !== null ? `${profile.debt_to_equity} D/E` : 'N/A');
+    const isSolvencyAlert = profile.interest_coverage !== undefined && profile.interest_coverage !== null && Number(profile.interest_coverage) < 2.5 ? 'solvency-alert' : '';
+    const oilBeta = profile.beta_oil !== undefined ? profile.beta_oil : (profile.oil_beta || 0);
     
     const catalysts = profile.primary_catalysts || [];
 
@@ -163,7 +166,7 @@ export class MacroView {
       <div class="macro-sensitivity-ribbon">
         <span class="ticker-badge">${ticker} MACRO PROFILE</span>
         <div class="sensitivity-pill ${rateHigh}">⚡ Rate Beta: ${rateBeta > 0 ? '+' : ''}${rateBeta}</div>
-        <div class="sensitivity-pill ${isSolvencyAlert}">⚠️ Int Coverage: ${solvency}x</div>
+        <div class="sensitivity-pill ${isSolvencyAlert}">⚠️ Int Coverage: ${solvency}</div>
         <div class="sensitivity-pill energy">🛢️ Oil Beta: ${oilBeta > 0 ? '+' : ''}${oilBeta}</div>
         <div class="catalyst-tags">
           ${catalysts.map(c => `<button class="catalyst-chip" data-catalyst="${c}">[${c}]</button>`).join('')}
