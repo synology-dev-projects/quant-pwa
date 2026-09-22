@@ -2784,3 +2784,369 @@ th.sort-desc .sort-icon::after {
 .notable-flow-empty .empty-bullet {
   color: #475569;
 }
+
+/* ==============================================================================
+   MACROECONOMIC EVENTS & RAG TAB (PWA MACRO VIEW)
+   ============================================================================== */
+
+.macro-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  overflow-x: hidden;
+}
+
+.macro-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 10px;
+}
+
+.macro-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.macro-badge-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.macro-title {
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.macro-session-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.macro-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.macro-refresh-btn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  border-radius: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.macro-refresh-btn:hover {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.macro-refresh-btn.spin {
+  animation: macroSpin 1s infinite linear;
+}
+
+@keyframes macroSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.macro-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.macro-filter-chip {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  border-radius: 6px;
+  padding: 0 12px;
+  min-height: 44px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.macro-filter-chip:hover {
+  border-color: #475569;
+  color: #f8fafc;
+}
+
+.macro-filter-chip.active {
+  background: #1e293b;
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.macro-filter-chip.filter-high.active {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.macro-events-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.macro-empty-state, .macro-error-state {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: #64748b;
+  text-align: center;
+  padding: 32px 16px;
+  background: #0f172a;
+  border: 1px dashed #334155;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.macro-error-state {
+  color: #ef4444;
+}
+
+.macro-event-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-left: 4px solid #64748b;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.macro-event-card.tier-high {
+  border-left-color: #ef4444;
+}
+
+.macro-event-card.tier-medium {
+  border-left-color: #f59e0b;
+}
+
+.macro-event-card.tier-low {
+  border-left-color: #3b82f6;
+}
+
+.macro-event-card.tier-holiday {
+  border-left-color: #64748b;
+}
+
+.macro-card-header {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  background: #111827;
+  border-bottom: 1px solid #1e293b;
+  gap: 8px;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.macro-card-header:hover {
+  background: #1f2937;
+}
+
+.macro-card-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.macro-flag {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.macro-info-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.macro-card-title {
+  font-family: var(--font-sans, sans-serif);
+  font-size: 13px;
+  font-weight: 700;
+  color: #f8fafc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.macro-card-ts {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: #64748b;
+}
+
+.macro-card-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.macro-tier-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.macro-tier-badge.tier-high {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.macro-tier-badge.tier-medium {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.macro-tier-badge.tier-low {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.macro-tier-badge.tier-holiday {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+}
+
+.macro-countdown-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  background: #1e293b;
+  color: #38bdf8;
+  border: 1px solid #334155;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.macro-countdown-badge.badge-released {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.macro-card-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  box-sizing: border-box;
+}
+
+.metric-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 4px 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.metric-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 8px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.05em;
+}
+
+.metric-val {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metric-val.val-highlight {
+  color: #22c55e;
+}
+
+.macro-card-body {
+  display: none;
+  padding: 10px 12px;
+  background: #0b1120;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  color: #cbd5e1;
+  box-sizing: border-box;
+}
+
+.macro-event-card.expanded .macro-card-body {
+  display: block;
+}
+

@@ -52,6 +52,37 @@ class EconomicEventsSyncResponse(BaseModel):
     result: Optional[Dict[str, Any]] = None
 
 
+class MacroEventCardItem(BaseModel):
+    event_id: str
+    event_timestamp: str
+    country: str
+    title: str
+    impact_tier: str
+    forecast: Optional[str] = None
+    previous: Optional[str] = None
+    actual: Optional[str] = None
+    synthetic_summary: str
+    status: str
+    countdown_seconds: int = Field(description="Seconds until event, negative if past")
+    similarity_score: Optional[float] = None
+
+
+class MacroEventsResponse(BaseModel):
+    status: str
+    ticker: str
+    country: str
+    count: int
+    events: List[MacroEventCardItem]
+
+
+class RagContextResponse(BaseModel):
+    status: str
+    ticker: str
+    count: int
+    context_block: str
+    events: List[Dict[str, Any]]
+
+
 
 def _clean_str_field(val: Any) -> Optional[str]:
     if val is None or pd.isna(val):
@@ -161,3 +192,118 @@ def sync_economic_events(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Economic events sync failed: {str(ex)}"
         )
+
+
+@router.get("/macro", response_model=MacroEventsResponse, summary="Get Macro Events Cards for UI")
+def get_macro_events_cards(
+    ticker: str = Query("SPY", description="Ticker symbol to query relevant macro events"),
+    query: Optional[str] = Query(None, description="Optional custom semantic risk query"),
+    limit: int = Query(20, ge=1, le=100, description="Max events to return")
+):
+    """
+    Returns upcoming events for a given ticker, enriched with countdown timers,
+    impact badges, and semantic relevance scores for the Macro PWA tab.
+    """
+    try:
+        from common_lib.database.postgres import get_postgres_engine
+        from common_lib.economic_events.retrieval import retrieve_relevant_events, get_ticker_currency
+
+        cfg = load_config()
+        engine = get_postgres_engine(cfg)
+        clean_ticker = ticker.strip().upper()
+        country = get_ticker_currency(clean_ticker)
+
+        raw_events = retrieve_relevant_events(
+            engine=engine,
+            ticker=clean_ticker,
+            semantic_query=query,
+            top_k=limit
+        )
+
+        now_utc = datetime.now(timezone.utc)
+        items = []
+        for ev in raw_events:
+            ts_val = ev.get("event_timestamp")
+            if isinstance(ts_val, str):
+                try:
+                    dt = datetime.fromisoformat(ts_val.replace("Z", "+00:00"))
+                except Exception:
+                    dt = now_utc
+            elif isinstance(ts_val, datetime):
+                dt = ts_val if ts_val.tzinfo else ts_val.replace(tzinfo=timezone.utc)
+            else:
+                dt = now_utc
+
+            countdown_sec = int((dt - now_utc).total_seconds())
+
+            items.append(MacroEventCardItem(
+                event_id=str(ev.get("event_id", "")),
+                event_timestamp=ev.get("event_timestamp", ""),
+                country=str(ev.get("country", country)),
+                title=str(ev.get("title", "")),
+                impact_tier=str(ev.get("impact_tier", "Low")),
+                forecast=_clean_str_field(ev.get("forecast")),
+                previous=_clean_str_field(ev.get("previous")),
+                actual=_clean_str_field(ev.get("actual")),
+                synthetic_summary=str(ev.get("synthetic_summary", "")),
+                status=str(ev.get("status", "UPCOMING")),
+                countdown_seconds=countdown_sec,
+                similarity_score=ev.get("similarity_score")
+            ))
+
+        return MacroEventsResponse(
+            status="ok",
+            ticker=clean_ticker,
+            country=country,
+            count=len(items),
+            events=items
+        )
+    except Exception as ex:
+        logger.error(f"Error fetching macro cards for {ticker}: {ex}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch macro events cards: {str(ex)}"
+        )
+
+
+@router.get("/rag-context", response_model=RagContextResponse, summary="Get Formatted RAG Context Block for LLM")
+def get_rag_context_block(
+    ticker: str = Query("SPY", description="Ticker symbol"),
+    query: Optional[str] = Query(None, description="Optional custom semantic risk query"),
+    top_k: int = Query(5, ge=1, le=20, description="Max events to retrieve")
+):
+    """
+    Returns the Top-K relevant macroeconomic context block formatted
+    specifically for AI prompt injection.
+    """
+    try:
+        from common_lib.database.postgres import get_postgres_engine
+        from common_lib.economic_events.retrieval import retrieve_relevant_events, format_rag_context_block
+
+        cfg = load_config()
+        engine = get_postgres_engine(cfg)
+        clean_ticker = ticker.strip().upper()
+
+        events = retrieve_relevant_events(
+            engine=engine,
+            ticker=clean_ticker,
+            semantic_query=query,
+            top_k=top_k
+        )
+
+        context_block = format_rag_context_block(events)
+
+        return RagContextResponse(
+            status="ok",
+            ticker=clean_ticker,
+            count=len(events),
+            context_block=context_block,
+            events=events
+        )
+    except Exception as ex:
+        logger.error(f"Error building RAG context for {ticker}: {ex}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to build RAG context: {str(ex)}"
+        )
+
