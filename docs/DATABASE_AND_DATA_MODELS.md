@@ -233,10 +233,11 @@ The engine maintains declarative DDL statements for all core relational tables a
    - Indices: `idx_econ_ts (event_timestamp)`, `idx_econ_country_impact (country, impact_tier)`
    - Stores macroeconomic release calendar data, impact tiers, forecasts, previous, actuals, and raw payloads. Debloated to sub-2ms pure relational SQL with zero vector embeddings or external AI dependencies.
 
-6. **`ticker_semantic_profiles`** (10-K Business Similarity Clustering):
+6. **`ticker_semantic_profiles`** (10-K Business Similarity Clustering & Sector Taxonomy):
    - Primary Key: `ticker VARCHAR(16)`
+   - Fields: `cik VARCHAR(16)`, `company_name VARCHAR(255)`, `sic VARCHAR(10)`, `sic_description VARCHAR(255)`, `sector VARCHAR(100)`, `fiscal_year INT`, `summary_text TEXT`, `embedding VECTOR(768)`, `updated_at TIMESTAMPTZ`
    - Vector Index: `idx_ticker_semantic_emb USING hnsw (embedding vector_cosine_ops)`
-   - Stores SEC EDGAR 10-K Item 1 business summaries and precomputed 768-dimensional embeddings (`VECTOR(768)`) enabling sub-5ms local cosine distance clustering across options flow prints.
+   - Stores SEC EDGAR 10-K Item 1 business summaries, official SEC SIC codes/descriptions, granular market sector classifications (derived via `derive_market_sector()` with zero `"Public Equities"` fallback), and precomputed 768-dimensional embeddings (`VECTOR(768)`) enabling sub-5ms local cosine distance clustering across options flow prints.
 
 > [!NOTE]
 > **Decommissioned Tables:** `company_macro_sensitivities` was completely dropped and pruned from the system to eliminate AI hallucination risk and unnecessary background overhead.
