@@ -224,7 +224,7 @@ jobs:
           
           echo "📡 Verifying Gateway & Frontend readiness on port ${{ env.FRONTEND_PORT }}..."
           HOST_IP=""
-          for i in {1..15}; do
+          for i in {1..30}; do
             for candidate in "192.168.1.68" "172.17.0.1" "127.0.0.1"; do
               if curl -s --connect-timeout 2 "http://${candidate}:${{ env.FRONTEND_PORT }}/api/health" | grep -q '"status":"ok"'; then
                 HOST_IP="$candidate"
@@ -232,7 +232,7 @@ jobs:
                 break 2
               fi
             done
-            echo "⏳ Waiting for Gateway to initialize on port ${{ env.FRONTEND_PORT }} (attempt $i/15)..."
+            echo "⏳ Waiting for Gateway to initialize on port ${{ env.FRONTEND_PORT }} (attempt $i/30)..."
             sleep 2
           done
           

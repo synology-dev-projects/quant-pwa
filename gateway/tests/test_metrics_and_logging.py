@@ -68,7 +68,8 @@ async def test_cache_metrics_instrumentation():
     hit_before = CACHE_HITS.labels(cache_name="quote_feed")._value.get()
     miss_before = CACHE_MISSES.labels(cache_name="quote_feed")._value.get()
 
-    with patch("app.core.quote_feed.fetch_single_quote", new_callable=AsyncMock) as mock_fetch:
+    with patch("app.core.quote_feed.fetch_single_quote", new_callable=AsyncMock) as mock_fetch, \
+         patch("app.core.quote_feed.time.time", return_value=1700000000.0):
         mock_fetch.return_value = {"ticker": "SPY", "price": 500.0, "updated_at": "2026-09-21T00:00:00Z"}
 
         # First fetch: cache miss
