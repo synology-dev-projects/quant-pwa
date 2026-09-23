@@ -238,6 +238,7 @@ The Settings Modal provides single-point management for application configuratio
 The Thematic Flow Clusters interface bridges the options flow sweep engine with 768-dimensional SEC Form 10-K vector embeddings:
 
 - **Segmented View Mode Switcher:** Segmented control (`#flowModeToggle`) allows traders to toggle seamlessly between `Flow Rankings` (4-card top lists) and `Thematic Clusters` with zero page reload.
+- **Hard Macro Sector Boundary Guards:** Automatically partitions institutional flow sweeps into isolated macro sector families (`SEMICONDUCTORS & HARDWARE`, `ENTERPRISE SOFTWARE & CLOUD`, `MEGA-CAP PLATFORMS & CONSUMER TECH`, `FINANCIAL TECHNOLOGY & CRYPTO`). Guarantees that enterprise software (e.g. `PLTR`, `CRWD`, `MSFT`) and physical semiconductors (e.g. `NVDA`, `AMD`, `MU`, `AVGO`) are strictly segregated into distinct thematic cards with zero cross-contamination.
 - **Collapsible Terminal Dark Cards (`.cluster-card`):** High-density dark cards grouping co-moving institutional sweeps by shared Form 10-K business models and macro risks:
   - **Dominant Sentiment Glowing Badges:** High-contrast glowing pills (`.badge-bullish` in `#00e676`, `.badge-bearish` in `#ff1744`).
   - **Capital & Cohesion Metrics:** Formatted total dollar volume (e.g. `$38.4M Capital`), average cosine similarity percentage (e.g. `84% Similarity`), and ticker count.
