@@ -58,6 +58,25 @@ class QuantLevelItem(BaseModel):
     is_immediate_resistance: bool = False
 
 
+class MacroItem(BaseModel):
+    symbol: str
+    label: str
+    price: float
+    change: float = 0.0
+    change_pct: float = 0.0
+    regime_tag: str
+    sentiment: str  # "BULLISH", "BEARISH", "NEUTRAL"
+    updated_at: Optional[str] = None
+
+
+class MacroCorrelationContext(BaseModel):
+    vix: Optional[MacroItem] = None
+    us10y: Optional[MacroItem] = None
+    composite_regime: str
+    spx_reaction: str  # "BULLISH_SUPPORTIVE", "BEARISH_PRESSURE", "NEUTRAL_CONSOLIDATION"
+    reaction_label: str  # "RISK-ON TAILWINDS", "VOL SPIKE / CAUTION", "RATE PRESSURE", etc.
+
+
 class QuantLevelSummary(BaseModel):
     ticker: str
     as_of_date: Optional[str] = None
@@ -82,6 +101,7 @@ class QuantLevelDataResponse(BaseModel):
     spot_label: str = "SPX Live Spot"
     summary: QuantLevelSummary
     levels: List[QuantLevelItem] = []
+    macro_context: Optional[MacroCorrelationContext] = None
     message: Optional[str] = None
 
 
@@ -348,6 +368,114 @@ async def get_quant_levels_dates(ticker: str = "SPX"):
         return []
 
 
+def compute_macro_correlation(quotes: Dict[str, Dict[str, Any]], spx_price: Optional[float] = None) -> MacroCorrelationContext:
+    """
+    Computes real-time cross-asset macro correlation context between SPX, VIX volatility,
+    and the 10-Year Treasury Yield (^TNX).
+    """
+    # 1. Parse VIX quote
+    vix_quote = quotes.get("^VIX") or quotes.get("VIX")
+    vix_item: Optional[MacroItem] = None
+    vix_sentiment = "NEUTRAL"
+    if vix_quote and vix_quote.get("price") is not None:
+        v_price = float(vix_quote["price"])
+        v_change = float(vix_quote.get("change", 0.0))
+        v_pct = float(vix_quote.get("change_pct", 0.0))
+
+        if v_price < 13.5:
+            regime = "EXTREME COMPRESSION"
+            vix_sentiment = "BULLISH"
+        elif v_price < 17.5:
+            regime = "SUBDUED / FAVORABLE"
+            vix_sentiment = "BULLISH" if v_change <= 0 else "NEUTRAL"
+        elif v_price < 22.0:
+            regime = "ELEVATED / CAUTION"
+            vix_sentiment = "BEARISH" if v_change > 0 else "NEUTRAL"
+        else:
+            regime = "HIGH VOLATILITY"
+            vix_sentiment = "BEARISH"
+
+        if v_pct >= 5.0:
+            regime += " (SPIKING)"
+        elif v_pct <= -5.0:
+            regime += " (CRUSHING)"
+
+        vix_item = MacroItem(
+            symbol="^VIX",
+            label="VIX",
+            price=round(v_price, 2),
+            change=round(v_change, 2),
+            change_pct=round(v_pct, 2),
+            regime_tag=regime,
+            sentiment=vix_sentiment,
+            updated_at=vix_quote.get("updated_at")
+        )
+
+    # 2. Parse 10-Year Treasury Yield (^TNX) quote
+    tnx_quote = quotes.get("^TNX") or quotes.get("TNX")
+    tnx_item: Optional[MacroItem] = None
+    yield_sentiment = "NEUTRAL"
+    if tnx_quote and tnx_quote.get("price") is not None:
+        y_val = float(tnx_quote["price"])
+        y_change = float(tnx_quote.get("change", 0.0))
+        y_pct = float(tnx_quote.get("change_pct", 0.0))
+
+        if y_change > 0.05:
+            regime = "YIELD SURGING / HEADWIND"
+            yield_sentiment = "BEARISH"
+        elif y_change < -0.05:
+            regime = "YIELD EASING / TAILWIND"
+            yield_sentiment = "BULLISH"
+        else:
+            regime = "YIELD STABLE / NEUTRAL"
+            yield_sentiment = "NEUTRAL"
+
+        tnx_item = MacroItem(
+            symbol="^TNX",
+            label="10Y YIELD",
+            price=round(y_val, 3),
+            change=round(y_change, 3),
+            change_pct=round(y_pct, 2),
+            regime_tag=regime,
+            sentiment=yield_sentiment,
+            updated_at=tnx_quote.get("updated_at")
+        )
+
+    # 3. Composite SPX Cross-Asset Reaction
+    if vix_sentiment == "BULLISH" and yield_sentiment in ("BULLISH", "NEUTRAL"):
+        spx_reaction = "BULLISH_SUPPORTIVE"
+        reaction_label = "RISK-ON TAILWINDS"
+        composite = "Vol compressed & yields supportive; favorable for equity expansion"
+    elif vix_sentiment == "BEARISH" and yield_sentiment == "BEARISH":
+        spx_reaction = "BEARISH_PRESSURE"
+        reaction_label = "CROSS-ASSET HEADWINDS"
+        composite = "Vol expanding with surging yields; dual cross-asset headwind"
+    elif vix_sentiment == "BEARISH":
+        spx_reaction = "BEARISH_PRESSURE"
+        reaction_label = "VOL SPIKE / HEDGING"
+        composite = "Vol expanding; options hedging pressure capping upside"
+    elif yield_sentiment == "BEARISH":
+        spx_reaction = "BEARISH_PRESSURE"
+        reaction_label = "RATE PRESSURE"
+        composite = "Yield spike putting valuation multiple pressure on equities"
+    elif yield_sentiment == "BULLISH":
+        spx_reaction = "BULLISH_SUPPORTIVE"
+        reaction_label = "YIELD RELAXATION"
+        composite = "Easing Treasury yields providing multiple relief for equities"
+    else:
+        spx_reaction = "NEUTRAL_CONSOLIDATION"
+        reaction_label = "BALANCED REGIME"
+        composite = "Macro volatility and yields in equilibrium; range-bound flow"
+
+    return MacroCorrelationContext(
+        vix=vix_item,
+        us10y=tnx_item,
+        composite_regime=composite,
+        spx_reaction=spx_reaction,
+        reaction_label=reaction_label
+    )
+
+
 @router.get("/data", response_model=QuantLevelDataResponse)
 async def get_quant_levels_data(
     ticker: str = "SPX",
@@ -421,6 +549,7 @@ async def get_quant_levels_data(
     is_historical = (target_date is not None and target_date < now_eastern.date())
 
     spot_price: Optional[float] = None
+    macro_context: Optional[MacroCorrelationContext] = None
     if is_historical:
         spot_type = "HISTORICAL_CLOSE"
         spot_label = "SPX Session Close"
@@ -439,14 +568,18 @@ async def get_quant_levels_data(
         else:
             quote_syms.append(clean_ticker)
 
+        # Include macro assets in single batch fetch
+        quote_syms.extend(["^VIX", "^TNX"])
+
         try:
             quotes = await get_batch_quotes(quote_syms)
             for sym in quote_syms:
-                if sym in quotes and quotes[sym].get("price"):
+                if sym not in ("^VIX", "^TNX") and sym in quotes and quotes[sym].get("price"):
                     spot_price = float(quotes[sym]["price"])
                     break
+            macro_context = compute_macro_correlation(quotes, spot_price)
         except Exception as ex:
-            logger.warning(f"Failed fetching spot price for {clean_ticker}: {ex}")
+            logger.warning(f"Failed fetching quotes for {clean_ticker}: {ex}")
 
         # If live quote feed failed, fallback to latest intraday candle close
         if spot_price is None and clean_ticker == "SPX":
@@ -457,6 +590,14 @@ async def get_quant_levels_data(
                     spot_price = bars[-1].close
             except Exception as ex:
                 logger.warning(f"Failed falling back to latest candle close for {clean_ticker}: {ex}")
+
+    # 4. Cross-Asset Macro Correlation Context (^VIX & ^TNX) fallback if historical
+    if macro_context is None:
+        try:
+            macro_quotes = await get_batch_quotes(["^VIX", "^TNX"])
+            macro_context = compute_macro_correlation(macro_quotes, spot_price)
+        except Exception as ex:
+            logger.warning(f"Failed resolving macro correlation context: {ex}")
 
     if df_levels.empty:
         summary = QuantLevelSummary(
@@ -482,6 +623,7 @@ async def get_quant_levels_data(
             spot_label=spot_label,
             summary=summary,
             levels=[],
+            macro_context=macro_context,
             message=f"No quant levels found for {clean_ticker} as of {target_date or 'latest'}."
         )
 
@@ -606,7 +748,8 @@ async def get_quant_levels_data(
         spot_type=spot_type,
         spot_label=spot_label,
         summary=summary,
-        levels=items
+        levels=items,
+        macro_context=macro_context
     )
 
 

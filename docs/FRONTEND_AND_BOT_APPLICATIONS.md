@@ -228,6 +228,7 @@ The Settings Modal provides single-point management for application configuratio
 - **Interactive Candlestick Chart:** Lightweight Canvas-based candlestick chart with custom corridor overlays and full-screen lightbox inspection.
 - **Dynamic Proximity Audio & Toast Notifications:** Web Audio API harmonic chime triggers alongside high-contrast floating toast banners indicating range spans and touched boundaries.
 - **Persistent "Today's Level Hits" History Ribbon:** Dedicated `#levelsAlertHistoryRibbon` mounted above the price ladder displaying all triggered level hits for today with Eastern Time stamps, preventing visual loss during mobile browser sleep or highlight decay.
+- **Cross-Asset Macro Correlation Ribbon (`#levelsMacroRibbon`):** Compact, high-density terminal ribbon mounted directly beneath the session controls. Displays real-time CBOE Volatility Index (`^VIX`) and 10-Year Treasury Yield (`^TNX`) alongside live values, intraday change percent, quantitative microstructure regime badges (`EXTREME COMPRESSION`, `SUBDUED / FAVORABLE`, `YIELD SURGING / HEADWIND`), and a composite SPX impact chip (`RISK-ON TAILWINDS`, `CROSS-ASSET HEADWINDS`). Automatically refreshed during 30s live market polling.
 - **Range & Boundary Matching:** Dynamically maps alert boundary hits to ladder rows and keeps visual hit indicators synchronized.
 
 ---

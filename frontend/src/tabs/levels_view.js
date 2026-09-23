@@ -117,6 +117,9 @@ export class LevelsView {
         <!-- Persistent Alert Hits History Ribbon -->
         <div class="levels-alert-history-ribbon" id="levelsAlertHistoryRibbon"></div>
 
+        <!-- Cross-Asset Macro Correlation Ribbon (VIX & 10Y Yield) -->
+        <div class="levels-macro-ribbon" id="levelsMacroRibbon" style="display: none;"></div>
+
         <!-- Content Mount Target -->
         <div id="levelsContentMount">
           <div class="levels-empty-state">
@@ -443,6 +446,75 @@ export class LevelsView {
     `;
   }
 
+  renderMacroRibbon(macro) {
+    const ribbon = this.container ? this.container.querySelector('#levelsMacroRibbon') : null;
+    if (!ribbon) return;
+
+    if (!macro || (!macro.vix && !macro.us10y)) {
+      ribbon.style.display = 'none';
+      ribbon.innerHTML = '';
+      return;
+    }
+
+    ribbon.style.display = 'flex';
+
+    // 1. VIX Pill
+    let vixHtml = '';
+    if (macro.vix) {
+      const v = macro.vix;
+      const chgSign = v.change >= 0 ? '+' : '';
+      const chgClass = v.change > 0 ? 'negative' : (v.change < 0 ? 'positive' : 'neutral');
+      const sentClass = (v.sentiment || 'neutral').toLowerCase();
+      vixHtml = `
+        <div class="macro-stat-pill" id="macroVixPill" title="CBOE Volatility Index (${v.regime_tag})">
+          <span class="macro-stat-label">VIX</span>
+          <span class="macro-stat-val">${v.price.toFixed(2)}</span>
+          <span class="macro-stat-change ${chgClass}">${chgSign}${v.change.toFixed(2)} (${chgSign}${v.change_pct.toFixed(1)}%)</span>
+          <span class="macro-regime-badge ${sentClass}">${v.regime_tag}</span>
+        </div>
+      `;
+    }
+
+    // 2. 10Y Yield Pill
+    let us10yHtml = '';
+    if (macro.us10y) {
+      const y = macro.us10y;
+      const chgSign = y.change >= 0 ? '+' : '';
+      const chgClass = y.change > 0 ? 'negative' : (y.change < 0 ? 'positive' : 'neutral');
+      const sentClass = (y.sentiment || 'neutral').toLowerCase();
+      us10yHtml = `
+        <div class="macro-stat-pill" id="macro10yPill" title="US 10-Year Treasury Yield (${y.regime_tag})">
+          <span class="macro-stat-label">10Y</span>
+          <span class="macro-stat-val">${y.price.toFixed(3)}%</span>
+          <span class="macro-stat-change ${chgClass}">${chgSign}${y.change.toFixed(3)}</span>
+          <span class="macro-regime-badge ${sentClass}">${y.regime_tag}</span>
+        </div>
+      `;
+    }
+
+    // 3. Composite SPX Reaction Chip
+    let reactionHtml = '';
+    if (macro.reaction_label) {
+      const reactionClass = (macro.spx_reaction || 'neutral').toLowerCase().includes('bullish')
+        ? 'bullish'
+        : ((macro.spx_reaction || 'neutral').toLowerCase().includes('bearish') ? 'bearish' : 'neutral');
+      reactionHtml = `
+        <div class="macro-reaction-chip ${reactionClass}" id="macroReactionChip" title="${macro.composite_regime || ''}">
+          <span class="reaction-title">SPX IMPACT:</span>
+          <span class="reaction-label">${macro.reaction_label}</span>
+        </div>
+      `;
+    }
+
+    ribbon.innerHTML = `
+      <div class="macro-ribbon-pills">
+        ${vixHtml}
+        ${us10yHtml}
+      </div>
+      ${reactionHtml}
+    `;
+  }
+
   async checkRecentAlerts() {
     try {
       const resp = await fetchWithAuth('/api/quant-levels/alerts/recent');
@@ -724,6 +796,7 @@ export class LevelsView {
       }
       const data = await resp.json();
       this.currentData = data;
+      this.renderMacroRibbon(data.macro_context);
 
       if (data.status === 'empty' || !data.levels || data.levels.length === 0) {
         this.renderEmptyState(mount, data.message || 'No SPX quant levels recorded for this date.');
@@ -885,6 +958,7 @@ export class LevelsView {
     if (!data || data.status === 'empty' || !data.levels) return;
 
     this.currentData = data;
+    this.renderMacroRibbon(data.macro_context);
     const spot = data.spot_price;
     const isHistorical = data.spot_type === 'HISTORICAL_CLOSE';
 
