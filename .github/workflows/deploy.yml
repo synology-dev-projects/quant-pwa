@@ -53,6 +53,7 @@ jobs:
           "$NODE_BIN" frontend/tests/test_watchlist_view.js
           "$NODE_BIN" frontend/tests/test_levels_view.js
           "$NODE_BIN" frontend/tests/test_levels_macro_ribbon.js
+          "$NODE_BIN" frontend/tests/test_levels_conviction_cards.js
           "$NODE_BIN" frontend/tests/test_vertical_table_ui.js
           "$NODE_BIN" frontend/tests/test_auth_guard.js
           "$NODE_BIN" frontend/tests/audit_layout.js

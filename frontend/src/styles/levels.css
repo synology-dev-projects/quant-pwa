@@ -1449,4 +1449,249 @@
   }
 }
 
+/* ==========================================================================
+   4-Card Move Conviction & Microstructure Section
+   ========================================================================== */
+.levels-conviction-section {
+  background: #0b1120;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.75rem;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.conviction-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.conviction-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.conviction-title-icon {
+  font-size: 0.95rem;
+}
+
+.conviction-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.conviction-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.conviction-score-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+}
+
+.conviction-score-pill .score-label {
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.65rem;
+}
+
+.conviction-score-pill .score-val {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.conviction-verdict-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.conviction-verdict-badge.bullish {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.conviction-verdict-badge.bearish {
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  color: #fb7185;
+}
+
+.conviction-verdict-badge.caution {
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  color: #facc15;
+}
+
+.conviction-verdict-badge.neutral {
+  background: rgba(148, 163, 184, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #cbd5e1;
+}
+
+.conviction-explanation-bar {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-bottom: 0.65rem;
+  line-height: 1.3;
+}
+
+.conviction-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.conviction-card {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+.conviction-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.conviction-card-header .card-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #cbd5e1;
+}
+
+.card-status-pill {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.card-status-pill.bullish {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.card-status-pill.bearish {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+}
+
+.card-status-pill.neutral {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+}
+
+.conviction-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.conviction-metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+}
+
+.conviction-metric-row .metric-label {
+  color: #64748b;
+}
+
+.conviction-metric-row .metric-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.conviction-metric-row .metric-value.bullish {
+  color: #34d399;
+}
+
+.conviction-metric-row .metric-value.bearish {
+  color: #fb7185;
+}
+
+.conviction-metric-row .dist-sub {
+  font-size: 0.65rem;
+  color: #94a3b8;
+}
+
+.conviction-card-footer {
+  margin-top: 0.45rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.conviction-card-footer.bullish {
+  color: #34d399;
+}
+
+.conviction-card-footer.bearish {
+  color: #fb7185;
+}
+
+.conviction-card-footer.neutral {
+  color: #94a3b8;
+}
+
+@media (max-width: 768px) {
+  .conviction-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .conviction-header-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .conviction-header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
 

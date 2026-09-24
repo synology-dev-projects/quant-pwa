@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time as time_module
 from datetime import datetime, date, timedelta, time, timezone
@@ -77,6 +78,55 @@ class MacroCorrelationContext(BaseModel):
     reaction_label: str  # "RISK-ON TAILWINDS", "VOL SPIKE / CAUTION", "RATE PRESSURE", etc.
 
 
+class GammaConvictionItem(BaseModel):
+    spot_price: float
+    zero_gex_level: float
+    net_gex: float
+    flip_distance_pts: float
+    regime_type: str  # "POSITIVE_GAMMA", "NEGATIVE_GAMMA", "NEUTRAL"
+    regime_label: str  # "VOL DAMPENED / MEAN REVERTING", "VOL ACCELERATION / EXPANSION", etc.
+    call_wall: Optional[float] = None
+    put_wall: Optional[float] = None
+    call_put_ratio: Optional[float] = None
+
+
+class MarketInternalsItem(BaseModel):
+    rsp_change_pct: float = 0.0
+    spy_change_pct: float = 0.0
+    breadth_spread: float = 0.0  # rsp_change_pct - spy_change_pct
+    nya_change_pct: float = 0.0
+    breadth_regime: str  # "BROAD_PARTICIPATION", "MEGA_CAP_DIVERGENCE", "BROAD_SELLING", "NEUTRAL"
+    breadth_label: str
+
+
+class NetDeltaFlowItem(BaseModel):
+    call_premium: float = 0.0
+    put_premium: float = 0.0
+    net_delta_flow: float = 0.0
+    net_delta_bias: str  # "BULLISH_FLOW", "BEARISH_FLOW", "NEUTRAL"
+    aggressor_sweep_pct: float = 0.0
+    whale_count: int = 0
+    flow_label: str
+
+
+class VolTermStructureItem(BaseModel):
+    vix_price: float = 0.0
+    vix9d_price: float = 0.0
+    ratio: float = 0.0  # vix9d_price / vix_price
+    term_regime: str  # "CONTANGO", "BACKWARDATION", "NEUTRAL"
+    term_label: str  # "CONTANGO (STABLE TREND)", "BACKWARDATION (LIQUIDATION PANIC)", etc.
+
+
+class MoveConvictionContext(BaseModel):
+    gamma: GammaConvictionItem
+    internals: MarketInternalsItem
+    flow: NetDeltaFlowItem
+    term_structure: VolTermStructureItem
+    composite_score: int  # 0 to 100
+    verdict_badge: str
+    verdict_explanation: str
+
+
 class QuantLevelSummary(BaseModel):
     ticker: str
     as_of_date: Optional[str] = None
@@ -102,6 +152,7 @@ class QuantLevelDataResponse(BaseModel):
     summary: QuantLevelSummary
     levels: List[QuantLevelItem] = []
     macro_context: Optional[MacroCorrelationContext] = None
+    conviction_context: Optional[MoveConvictionContext] = None
     message: Optional[str] = None
 
 
@@ -400,6 +451,9 @@ def compute_macro_correlation(quotes: Dict[str, Dict[str, Any]], spx_price: Opti
         elif v_pct <= -5.0:
             regime += " (CRUSHING)"
 
+        vix_updated = vix_quote.get("updated_at") if isinstance(vix_quote, dict) else getattr(vix_quote, "updated_at", None)
+        vix_updated_str = str(vix_updated) if isinstance(vix_updated, str) else None
+
         vix_item = MacroItem(
             symbol="^VIX",
             label="VIX",
@@ -408,7 +462,7 @@ def compute_macro_correlation(quotes: Dict[str, Dict[str, Any]], spx_price: Opti
             change_pct=round(v_pct, 2),
             regime_tag=regime,
             sentiment=vix_sentiment,
-            updated_at=vix_quote.get("updated_at")
+            updated_at=vix_updated_str
         )
 
     # 2. Parse 10-Year Treasury Yield (^TNX) quote
@@ -430,6 +484,9 @@ def compute_macro_correlation(quotes: Dict[str, Dict[str, Any]], spx_price: Opti
             regime = "YIELD STABLE / NEUTRAL"
             yield_sentiment = "NEUTRAL"
 
+        tnx_updated = tnx_quote.get("updated_at") if isinstance(tnx_quote, dict) else getattr(tnx_quote, "updated_at", None)
+        tnx_updated_str = str(tnx_updated) if isinstance(tnx_updated, str) else None
+
         tnx_item = MacroItem(
             symbol="^TNX",
             label="10Y YIELD",
@@ -438,7 +495,7 @@ def compute_macro_correlation(quotes: Dict[str, Dict[str, Any]], spx_price: Opti
             change_pct=round(y_pct, 2),
             regime_tag=regime,
             sentiment=yield_sentiment,
-            updated_at=tnx_quote.get("updated_at")
+            updated_at=tnx_updated_str
         )
 
     # 3. Composite SPX Cross-Asset Reaction
@@ -473,6 +530,277 @@ def compute_macro_correlation(quotes: Dict[str, Dict[str, Any]], spx_price: Opti
         composite_regime=composite,
         spx_reaction=spx_reaction,
         reaction_label=reaction_label
+    )
+
+
+def _fetch_spx_gex_sync() -> Dict[str, Any]:
+    try:
+        from app.engine.service import get_strike_distribution
+        dist = get_strike_distribution("SPX", max_dte=30, strike_range=25)
+        if dist:
+            if hasattr(dist, "model_dump"):
+                return dist.model_dump()
+            elif hasattr(dist, "dict"):
+                return dist.dict()
+            elif isinstance(dist, dict):
+                return dist
+        return {}
+    except Exception as ex:
+        logger.warning(f"Error fetching SPX GEX distribution: {ex}")
+        return {}
+
+
+def _fetch_spx_flow_sync() -> pd.DataFrame:
+    try:
+        from common_lib.config.main_config import load_config
+        config = load_config()
+        from common_lib.connectors.postgres import get_unusual_flow as pg_get_flow
+        df = pg_get_flow(config=config, symbol="SPX", lookback_days=5, limit=200)
+        if df.empty:
+            df = pg_get_flow(config=config, symbol="SPY", lookback_days=5, limit=200)
+        return df
+    except Exception as ex:
+        logger.warning(f"Error fetching SPX flow for conviction cards: {ex}")
+        return pd.DataFrame()
+
+
+def compute_move_conviction(
+    spot_price: Optional[float] = None,
+    quotes: Optional[Dict[str, Any]] = None,
+    gex_data: Optional[Dict[str, Any]] = None,
+    flow_df: Optional[pd.DataFrame] = None
+) -> MoveConvictionContext:
+    """
+    Synthesizes the 4-factor institutional confirmation cards:
+    1. GEX Accelerator & Flip Level
+    2. Market Internals Breadth (RSP vs SPY & ^NYA)
+    3. Institutional Options Net Delta & Urgency
+    4. Vol Term Structure (VIX9D / VIX Contango vs Backwardation)
+    """
+    quotes = quotes or {}
+    gex_data = gex_data or {}
+
+    def _val(q: Any, attr: str, default: float = 0.0) -> float:
+        if not q:
+            return default
+        if hasattr(q, attr):
+            v = getattr(q, attr)
+            return float(v) if v is not None else default
+        if isinstance(q, dict):
+            v = q.get(attr)
+            return float(v) if v is not None else default
+        return default
+
+    # 1. Spot Price & Gamma Conviction
+    effective_spot = spot_price or _val(quotes.get("^GSPC") or quotes.get("SPX") or quotes.get("^SPX"), "price", 0.0)
+    if effective_spot == 0.0 and gex_data:
+        effective_spot = float(gex_data.get("spot_price", 0.0) or 0.0)
+
+    zero_gex = float(gex_data.get("zero_gex_level", 0.0) or gex_data.get("zero_gamma_flip", 0.0) or (effective_spot if effective_spot else 0.0)) if gex_data else effective_spot
+    net_gex = float(gex_data.get("net_gex", 0.0) or 0.0) if gex_data else 0.0
+    call_wall = float(gex_data.get("call_wall", 0.0) or 0.0) if gex_data else None
+    put_wall = float(gex_data.get("put_wall", 0.0) or 0.0) if gex_data else None
+    call_put_ratio = float(gex_data.get("call_put_ratio", 0.0) or 0.0) if gex_data else None
+
+    flip_dist = round(effective_spot - zero_gex, 2) if (effective_spot and zero_gex) else 0.0
+
+    if net_gex > 0 and effective_spot >= zero_gex:
+        gamma_type = "POSITIVE_GAMMA"
+        gamma_label = "VOL DAMPENED / MEAN REVERTING"
+    elif net_gex < 0 and effective_spot <= zero_gex:
+        gamma_type = "NEGATIVE_GAMMA"
+        gamma_label = "VOL ACCELERATION / EXPANSION"
+    elif net_gex > 0:
+        gamma_type = "POSITIVE_GAMMA"
+        gamma_label = "LONG GAMMA (PIN RISK)"
+    elif net_gex < 0:
+        gamma_type = "NEGATIVE_GAMMA"
+        gamma_label = "SHORT GAMMA (ACCELERATION)"
+    else:
+        gamma_type = "NEUTRAL"
+        gamma_label = "NEUTRAL / TRANSITION"
+
+    gamma_item = GammaConvictionItem(
+        spot_price=round(effective_spot, 2),
+        zero_gex_level=round(zero_gex, 2),
+        net_gex=round(net_gex, 2),
+        flip_distance_pts=flip_dist,
+        regime_type=gamma_type,
+        regime_label=gamma_label,
+        call_wall=round(call_wall, 2) if call_wall else None,
+        put_wall=round(put_wall, 2) if put_wall else None,
+        call_put_ratio=round(call_put_ratio, 2) if call_put_ratio else None
+    )
+
+    # 2. Market Internals & Breadth
+    rsp_pct = _val(quotes.get("RSP"), "change_pct", 0.0)
+    spy_pct = _val(quotes.get("SPY"), "change_pct", 0.0)
+    nya_pct = _val(quotes.get("^NYA") or quotes.get("NYA"), "change_pct", 0.0)
+    spread = round(rsp_pct - spy_pct, 2)
+
+    if rsp_pct > 0 and spy_pct > 0 and spread >= -0.15:
+        breadth_type = "BROAD_PARTICIPATION"
+        breadth_label = "BROAD MARKET EXPANSION"
+    elif spy_pct > 0 and spread < -0.20:
+        breadth_type = "MEGA_CAP_DIVERGENCE"
+        breadth_label = "MEGA-CAP DIVERGENCE (HOLLOW)"
+    elif rsp_pct < 0 and spy_pct < 0:
+        breadth_type = "BROAD_SELLING"
+        breadth_label = "BROAD MARKET SELLING"
+    elif rsp_pct > 0 and spy_pct <= 0:
+        breadth_type = "DEFENSIVE_ROTATION"
+        breadth_label = "ROTATION TO VALUE / EQUAL WEIGHT"
+    else:
+        breadth_type = "NEUTRAL"
+        breadth_label = "MIXED BREADTH"
+
+    internals_item = MarketInternalsItem(
+        rsp_change_pct=round(rsp_pct, 2),
+        spy_change_pct=round(spy_pct, 2),
+        breadth_spread=spread,
+        nya_change_pct=round(nya_pct, 2),
+        breadth_regime=breadth_type,
+        breadth_label=breadth_label
+    )
+
+    # 3. Institutional Options Net Delta & Urgency
+    call_prem = 0.0
+    put_prem = 0.0
+    whale_count = 0
+    sweep_pct = 0.0
+    if flow_df is not None and isinstance(flow_df, pd.DataFrame) and not flow_df.empty:
+        order_col = None
+        for c in ["ORDER_TYPE", "order_type"]:
+            if c in flow_df.columns:
+                order_col = c
+                break
+        prem_col = None
+        for c in ["PREMIUM", "premium"]:
+            if c in flow_df.columns:
+                prem_col = c
+                break
+
+        if order_col and prem_col:
+            orders = flow_df[order_col].astype(str).str.upper()
+            prems = pd.to_numeric(flow_df[prem_col], errors="coerce").fillna(0.0)
+
+            is_call = orders.str.contains("CALL")
+            is_put = orders.str.contains("PUT")
+            is_ask = orders.str.contains("ASK")
+            is_sweep = orders.str.contains("SWEEP")
+
+            call_prem = float(prems[is_call].sum())
+            put_prem = float(prems[is_put].sum())
+            total_p = call_prem + put_prem
+            ask_sweep_p = float(prems[is_ask & (is_sweep | orders.str.contains("TRADE"))].sum())
+            sweep_pct = round((ask_sweep_p / total_p * 100.0), 1) if total_p > 0 else 0.0
+            whale_count = int((prems >= 1_000_000.0).sum())
+
+    net_delta = call_prem - put_prem
+    if net_delta > 500_000.0 or (call_prem > put_prem * 1.3 and call_prem > 1_000_000):
+        flow_bias = "BULLISH_FLOW"
+        flow_label = "AGGRESSIVE CALL ACCUMULATION"
+    elif net_delta < -500_000.0 or (put_prem > call_prem * 1.3 and put_prem > 1_000_000):
+        flow_bias = "BEARISH_FLOW"
+        flow_label = "HEAVY PUT ACCUMULATION"
+    else:
+        flow_bias = "NEUTRAL"
+        flow_label = "BALANCED 2-WAY FLOW"
+
+    flow_item = NetDeltaFlowItem(
+        call_premium=round(call_prem, 2),
+        put_premium=round(put_prem, 2),
+        net_delta_flow=round(net_delta, 2),
+        net_delta_bias=flow_bias,
+        aggressor_sweep_pct=sweep_pct,
+        whale_count=whale_count,
+        flow_label=flow_label
+    )
+
+    # 4. Vol Term Structure
+    vix_p = _val(quotes.get("^VIX") or quotes.get("VIX"), "price", 0.0)
+    vix9d_p = _val(quotes.get("^VIX9D") or quotes.get("VIX9D"), "price", 0.0)
+    vix_ratio = round(vix9d_p / vix_p, 3) if vix_p > 0 and vix9d_p > 0 else 0.0
+
+    if vix_ratio > 0 and vix_ratio < 0.98:
+        term_regime = "CONTANGO"
+        term_label = "CONTANGO (STABLE TREND)"
+    elif vix_ratio >= 1.0:
+        term_regime = "BACKWARDATION"
+        term_label = "BACKWARDATION (LIQUIDATION PANIC)"
+    else:
+        term_regime = "NEUTRAL"
+        term_label = "EQUILIBRIUM TERM STRUCTURE"
+
+    term_item = VolTermStructureItem(
+        vix_price=round(vix_p, 2),
+        vix9d_price=round(vix9d_p, 2),
+        ratio=vix_ratio,
+        term_regime=term_regime,
+        term_label=term_label
+    )
+
+    # 5. Composite Score & Verdict Synthesis
+    score = 50
+    spx_chg_pct = _val(quotes.get("^GSPC") or quotes.get("SPX") or quotes.get("SPY"), "change_pct", 0.0)
+
+    if spx_chg_pct >= 0:
+        if breadth_type == "BROAD_PARTICIPATION":
+            score += 15
+        elif breadth_type == "MEGA_CAP_DIVERGENCE":
+            score -= 20
+
+        if term_regime == "CONTANGO":
+            score += 15
+        elif term_regime == "BACKWARDATION":
+            score -= 25
+
+        if flow_bias == "BULLISH_FLOW":
+            score += 15
+        elif flow_bias == "BEARISH_FLOW":
+            score -= 15
+
+        if gamma_type == "POSITIVE_GAMMA":
+            score += 5
+    else:
+        if gamma_type == "NEGATIVE_GAMMA":
+            score += 25
+        if term_regime == "BACKWARDATION":
+            score += 20
+        if breadth_type == "BROAD_SELLING":
+            score += 15
+        if flow_bias == "BEARISH_FLOW":
+            score += 15
+
+    score = max(5, min(95, score))
+
+    if spx_chg_pct < 0 and gamma_type == "NEGATIVE_GAMMA" and term_regime == "BACKWARDATION":
+        verdict_badge = "HIGH ACCELERATION TREND"
+        explanation = "Negative gamma accelerating sell-off with backwardation and broad institutional selling"
+    elif spx_chg_pct >= 0 and breadth_type == "BROAD_PARTICIPATION" and term_regime == "CONTANGO":
+        verdict_badge = "HIGH CONVICTION EXPANSION"
+        explanation = "Broad market participation supported by contango and institutional call urgency"
+    elif spx_chg_pct >= 0 and breadth_type == "MEGA_CAP_DIVERGENCE":
+        verdict_badge = "ABSORPTION / MEAN REVERSION TRAP"
+        explanation = "Hollow breadth divergence into positive gamma resistance; high risk of stall/fade"
+    elif term_regime == "BACKWARDATION" and spx_chg_pct >= 0:
+        verdict_badge = "VOL INVERSION HEADWIND"
+        explanation = "Short-term vol inversion (VIX9D > VIX) warning of hedging pressure"
+    elif gamma_type == "POSITIVE_GAMMA" and term_regime == "CONTANGO":
+        verdict_badge = "VOL DAMPENED / STABLE DRIFT"
+        explanation = "Positive gamma dampening volatility with contango term structure"
+    else:
+        verdict_badge = "BALANCED / CHOP"
+        explanation = "Mixed breadth and equilibrium term structure; range-bound conditions"
+
+    return MoveConvictionContext(
+        gamma=gamma_item,
+        internals=internals_item,
+        flow=flow_item,
+        term_structure=term_item,
+        composite_score=score,
+        verdict_badge=verdict_badge,
+        verdict_explanation=explanation
     )
 
 
@@ -568,13 +896,14 @@ async def get_quant_levels_data(
         else:
             quote_syms.append(clean_ticker)
 
-        # Include macro assets in single batch fetch
-        quote_syms.extend(["^VIX", "^TNX"])
+        # Include macro and breadth conviction assets in single batch fetch
+        quote_syms.extend(["^VIX", "^TNX", "^VIX9D", "RSP", "SPY", "^NYA"])
 
+        quotes: Dict[str, Any] = {}
         try:
             quotes = await get_batch_quotes(quote_syms)
             for sym in quote_syms:
-                if sym not in ("^VIX", "^TNX") and sym in quotes and quotes[sym].get("price"):
+                if sym not in ("^VIX", "^TNX", "^VIX9D", "RSP", "SPY", "^NYA") and sym in quotes and quotes[sym].get("price"):
                     spot_price = float(quotes[sym]["price"])
                     break
             macro_context = compute_macro_correlation(quotes, spot_price)
@@ -594,10 +923,23 @@ async def get_quant_levels_data(
     # 4. Cross-Asset Macro Correlation Context (^VIX & ^TNX) fallback if historical
     if macro_context is None:
         try:
-            macro_quotes = await get_batch_quotes(["^VIX", "^TNX"])
-            macro_context = compute_macro_correlation(macro_quotes, spot_price)
+            quotes = await get_batch_quotes(["^VIX", "^TNX", "^VIX9D", "RSP", "SPY", "^NYA"])
+            macro_context = compute_macro_correlation(quotes, spot_price)
         except Exception as ex:
             logger.warning(f"Failed resolving macro correlation context: {ex}")
+
+    # 5. Move Conviction Context (4-card confirmation suite)
+    conviction_context: Optional[MoveConvictionContext] = None
+    try:
+        gex_task = asyncio.create_task(asyncio.to_thread(_fetch_spx_gex_sync))
+        flow_task = asyncio.create_task(asyncio.to_thread(_fetch_spx_flow_sync))
+        gex_res, flow_res = await asyncio.gather(gex_task, flow_task, return_exceptions=True)
+        gex_data = gex_res if (gex_res and not isinstance(gex_res, Exception) and isinstance(gex_res, dict)) else {}
+        flow_df = flow_res if (flow_res is not None and not isinstance(flow_res, Exception) and isinstance(flow_res, pd.DataFrame)) else pd.DataFrame()
+        active_quotes = quotes if 'quotes' in locals() and quotes else {}
+        conviction_context = compute_move_conviction(spot_price, active_quotes, gex_data, flow_df)
+    except Exception as ex:
+        logger.warning(f"Failed computing conviction context for {clean_ticker}: {ex}")
 
     if df_levels.empty:
         summary = QuantLevelSummary(
@@ -624,6 +966,7 @@ async def get_quant_levels_data(
             summary=summary,
             levels=[],
             macro_context=macro_context,
+            conviction_context=conviction_context,
             message=f"No quant levels found for {clean_ticker} as of {target_date or 'latest'}."
         )
 
@@ -749,7 +1092,8 @@ async def get_quant_levels_data(
         spot_label=spot_label,
         summary=summary,
         levels=items,
-        macro_context=macro_context
+        macro_context=macro_context,
+        conviction_context=conviction_context
     )
 
 
