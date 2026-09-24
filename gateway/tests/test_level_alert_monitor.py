@@ -20,19 +20,20 @@ import asyncio
 # ==============================================================================
 
 def test_hit_detection_within_threshold():
-    """Spot 6020.85 vs Level 6020.00 (|0.85| <= 1.50) triggers alert."""
+    """Spot 6020.85 vs Level 6020.00 (|0.85| <= 1.50) triggers alert during market hours."""
     monitor = LevelAlertMonitor()
+    market_dt = datetime(2026, 9, 23, 10, 30, tzinfo=NY_TZ)
     levels = [{
         "start_lvl_price": 6020.00,
         "end_lvl_price": None,
         "buy_sell_ind": "BUY",
         "comments": "Daily bounce shelf",
-        "session_date": monitor.get_expected_session_date().strftime("%Y-%m-%d")
+        "session_date": "2026-09-23"
     }]
 
     with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
         mock_dispatch.return_value = True
-        alerts = asyncio.run(monitor.check_proximity(spot=6020.85, levels=levels))
+        alerts = asyncio.run(monitor.check_proximity(spot=6020.85, levels=levels, now=market_dt))
 
     assert len(alerts) == 1
     alert = alerts[0]
@@ -49,15 +50,17 @@ def test_hit_detection_within_threshold():
 def test_miss_detection_outside_threshold():
     """Spot 6025.00 vs Level 6020.00 (|5.00| > 1.50) does not trigger."""
     monitor = LevelAlertMonitor()
+    market_dt = datetime(2026, 9, 23, 10, 30, tzinfo=NY_TZ)
     levels = [{
         "start_lvl_price": 6020.00,
         "end_lvl_price": None,
         "buy_sell_ind": "BUY",
         "comments": "Support level",
+        "session_date": "2026-09-23"
     }]
 
     with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
-        alerts = asyncio.run(monitor.check_proximity(spot=6025.00, levels=levels))
+        alerts = asyncio.run(monitor.check_proximity(spot=6025.00, levels=levels, now=market_dt))
 
     assert len(alerts) == 0
     assert len(monitor.recent_alerts) == 0
@@ -68,15 +71,17 @@ def test_miss_detection_outside_threshold():
 def test_range_level_proximity_detection():
     """Range level 6010 to 6020: spot 6021.20 is within 1.5 pts of upper bound."""
     monitor = LevelAlertMonitor()
+    market_dt = datetime(2026, 9, 23, 10, 30, tzinfo=NY_TZ)
     levels = [{
         "start_lvl_price": 6010.00,
         "end_lvl_price": 6020.00,
         "buy_sell_ind": "SELL",
         "comments": "Supply band",
+        "session_date": "2026-09-23"
     }]
 
     with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
-        alerts = asyncio.run(monitor.check_proximity(spot=6021.20, levels=levels))
+        alerts = asyncio.run(monitor.check_proximity(spot=6021.20, levels=levels, now=market_dt))
 
     assert len(alerts) == 1
     assert alerts[0]["level_price"] == 6010.00
@@ -91,26 +96,27 @@ def test_15_minute_cooldown_suppression():
         "start_lvl_price": 6020.00,
         "buy_sell_ind": "BUY",
         "comments": "Key level",
+        "session_date": "2026-09-23"
     }]
 
-    start_time = 1000000.0
+    # Wednesday 10:00:00 ET (timestamp 1790172000)
+    market_dt1 = datetime(2026, 9, 23, 10, 0, 0, tzinfo=NY_TZ)
+    market_dt2 = datetime(2026, 9, 23, 10, 5, 0, tzinfo=NY_TZ)
+    market_dt3 = datetime(2026, 9, 23, 10, 16, 0, tzinfo=NY_TZ)
 
-    with patch("time.time", return_value=start_time):
-        with patch.object(monitor, "dispatch_ntfy_alert"):
-            alerts1 = asyncio.run(monitor.check_proximity(spot=6020.50, levels=levels))
+    with patch.object(monitor, "dispatch_ntfy_alert"):
+        alerts1 = asyncio.run(monitor.check_proximity(spot=6020.50, levels=levels, now=market_dt1))
     assert len(alerts1) == 1
 
     # Second hit at minute 5 (300s later) -> should be suppressed
-    with patch("time.time", return_value=start_time + 300.0):
-        with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
-            alerts2 = asyncio.run(monitor.check_proximity(spot=6020.80, levels=levels))
+    with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
+        alerts2 = asyncio.run(monitor.check_proximity(spot=6020.80, levels=levels, now=market_dt2))
     assert len(alerts2) == 0
     mock_dispatch.assert_not_called()
 
     # Third hit at minute 16 (960s later) -> should trigger!
-    with patch("time.time", return_value=start_time + 960.0):
-        with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
-            alerts3 = asyncio.run(monitor.check_proximity(spot=6020.20, levels=levels))
+    with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
+        alerts3 = asyncio.run(monitor.check_proximity(spot=6020.20, levels=levels, now=market_dt3))
     assert len(alerts3) == 1
     mock_dispatch.assert_called_once()
 
@@ -119,22 +125,21 @@ def test_multi_level_independence():
     """Hits on 6020.00 and 6035.00 both fire without blocking each other."""
     monitor = LevelAlertMonitor()
     levels = [
-        {"start_lvl_price": 6020.00, "buy_sell_ind": "BUY", "comments": "Level 1"},
-        {"start_lvl_price": 6035.00, "buy_sell_ind": "SELL", "comments": "Level 2"}
+        {"start_lvl_price": 6020.00, "buy_sell_ind": "BUY", "comments": "Level 1", "session_date": "2026-09-23"},
+        {"start_lvl_price": 6035.00, "buy_sell_ind": "SELL", "comments": "Level 2", "session_date": "2026-09-23"}
     ]
 
-    t0 = 1000000.0
+    t0 = datetime(2026, 9, 23, 10, 0, 0, tzinfo=NY_TZ)
     # First hit level 1
-    with patch("time.time", return_value=t0):
-        with patch.object(monitor, "dispatch_ntfy_alert"):
-            alerts1 = asyncio.run(monitor.check_proximity(spot=6020.50, levels=levels))
+    with patch.object(monitor, "dispatch_ntfy_alert"):
+        alerts1 = asyncio.run(monitor.check_proximity(spot=6020.50, levels=levels, now=t0))
     assert len(alerts1) == 1
     assert alerts1[0]["level_price"] == 6020.00
 
     # 2 minutes later, price moves to 6035.20 -> level 2 triggers independently
-    with patch("time.time", return_value=t0 + 120.0):
-        with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
-            alerts2 = asyncio.run(monitor.check_proximity(spot=6035.20, levels=levels))
+    t1 = datetime(2026, 9, 23, 10, 2, 0, tzinfo=NY_TZ)
+    with patch.object(monitor, "dispatch_ntfy_alert") as mock_dispatch:
+        alerts2 = asyncio.run(monitor.check_proximity(spot=6035.20, levels=levels, now=t1))
     assert len(alerts2) == 1
     assert alerts2[0]["level_price"] == 6035.00
     mock_dispatch.assert_called_once()

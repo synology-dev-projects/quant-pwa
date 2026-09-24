@@ -147,18 +147,35 @@ class LevelAlertMonitor:
             logger.warning(f"Failed to dispatch NTFY alert for SPX level {lvl_price:.2f}: {ex}")
             return False
 
-    async def check_proximity(self, spot: float, levels: List[Dict[str, Any]], enforce_session_freshness: bool = True) -> List[Dict[str, Any]]:
+    async def check_proximity(
+        self,
+        spot: float,
+        levels: List[Dict[str, Any]],
+        enforce_session_freshness: bool = True,
+        enforce_market_hours: bool = False,
+        now: Optional[datetime] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Evaluates spot price against active levels.
         Proximity condition: |spot - level_price| <= 1.50 points.
         Supports range levels: (start_lvl_price - 1.50) <= spot <= (end_lvl_price + 1.50).
         Enforces 15-minute (900s) cooldown per level price.
         Suppresses alerts on stale levels from prior sessions when enforce_session_freshness=True.
+        Suppresses alerts outside regular market hours (09:30-16:15 ET Mon-Fri) when enforce_market_hours=True.
         Returns newly triggered alerts.
         """
         triggered_alerts: List[Dict[str, Any]] = []
-        now_epoch = time.time()
-        now_ny = datetime.now(NY_TZ)
+        if now is None:
+            now_ny = datetime.now(NY_TZ)
+            now_epoch = time.time()
+        else:
+            now_ny = now.astimezone(NY_TZ) if now.tzinfo else now.replace(tzinfo=NY_TZ)
+            now_epoch = now_ny.timestamp()
+
+        if enforce_market_hours and not self.is_market_hours(now_ny):
+            logger.debug("Suppressing SPX level proximity check: outside regular market hours.")
+            return []
+
         expected_session_date = self.get_expected_session_date(now_ny)
         expected_date_str = expected_session_date.strftime("%Y-%m-%d")
 
@@ -363,8 +380,8 @@ class LevelAlertMonitor:
                     self.last_spot_price = spot
                     self.monitored_levels_count = len(levels)
                     self.last_check_time = datetime.now(NY_TZ)
-                    if levels:
-                        await self.check_proximity(spot, levels)
+                    if in_market and levels:
+                        await self.check_proximity(spot, levels, enforce_market_hours=True)
 
                 # Evict cooldowns older than 24 hours (86400s)
                 now_epoch = time.time()
