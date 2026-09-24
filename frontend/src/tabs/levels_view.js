@@ -120,6 +120,9 @@ export class LevelsView {
         <!-- Cross-Asset Macro Correlation Ribbon (VIX & 10Y Yield) -->
         <div class="levels-macro-ribbon" id="levelsMacroRibbon" style="display: none;"></div>
 
+        <!-- 4-Card Move Conviction Suite (GEX, Breadth, Flow, Vol Term Structure) -->
+        <div class="levels-conviction-section" id="levelsConvictionSection" style="display: none;"></div>
+
         <!-- Content Mount Target -->
         <div id="levelsContentMount">
           <div class="levels-empty-state">
@@ -515,6 +518,190 @@ export class LevelsView {
     `;
   }
 
+  renderConvictionSection(conviction) {
+    const section = this.container ? this.container.querySelector('#levelsConvictionSection') : null;
+    if (!section) return;
+
+    if (!conviction || !conviction.gamma) {
+      section.style.display = 'none';
+      section.innerHTML = '';
+      return;
+    }
+
+    section.style.display = 'block';
+
+    const gamma = conviction.gamma || {};
+    const internals = conviction.internals || {};
+    const flow = conviction.flow || {};
+    const term = conviction.term_structure || {};
+
+    const formatDollar = (val) => {
+      if (val == null || isNaN(val)) return '$0';
+      const absVal = Math.abs(val);
+      const sign = val < 0 ? '-' : '+';
+      if (absVal >= 1e9) return `${sign}$${(absVal / 1e9).toFixed(2)}B`;
+      if (absVal >= 1e6) return `${sign}$${(absVal / 1e6).toFixed(1)}M`;
+      if (absVal >= 1e3) return `${sign}$${(absVal / 1e3).toFixed(0)}K`;
+      return `${sign}$${absVal.toFixed(0)}`;
+    };
+
+    // 1. Verdict badge styling
+    const badgeText = conviction.verdict_badge || 'BALANCED / CHOP';
+    let badgeClass = 'neutral';
+    if (badgeText.includes('EXPANSION') || badgeText.includes('ACCELERATION') || badgeText.includes('CONFLUENCE')) {
+      badgeClass = badgeText.includes('EXPANSION') ? 'bullish' : 'caution';
+    } else if (badgeText.includes('TRAP') || badgeText.includes('HEADWIND') || badgeText.includes('SELLING')) {
+      badgeClass = 'bearish';
+    }
+
+    // 2. Card 1 - GEX
+    const isPosGamma = gamma.regime_type === 'POSITIVE_GAMMA';
+    const isNegGamma = gamma.regime_type === 'NEGATIVE_GAMMA';
+    const gammaPillClass = isPosGamma ? 'bullish' : (isNegGamma ? 'bearish' : 'neutral');
+    const gammaPillLabel = isPosGamma ? 'LONG GAMMA' : (isNegGamma ? 'SHORT GAMMA' : 'TRANSITION');
+    const flipDistPts = gamma.flip_distance_pts != null ? Number(gamma.flip_distance_pts) : 0;
+    const flipDistSign = flipDistPts >= 0 ? '+' : '';
+    const netGexClass = (gamma.net_gex || 0) >= 0 ? 'bullish' : 'bearish';
+
+    // 3. Card 2 - Internals
+    const rspPct = internals.rsp_change_pct != null ? Number(internals.rsp_change_pct) : 0;
+    const spyPct = internals.spy_change_pct != null ? Number(internals.spy_change_pct) : 0;
+    const nyaPct = internals.nya_change_pct != null ? Number(internals.nya_change_pct) : 0;
+    const spreadVal = internals.breadth_spread != null ? Number(internals.breadth_spread) : 0;
+    const spreadSign = spreadVal >= 0 ? '+' : '';
+    const spreadClass = spreadVal > 0.15 ? 'bullish' : (spreadVal < -0.2 ? 'bearish' : 'neutral');
+    const breadthClass = (internals.breadth_regime || '').includes('BROAD_PARTICIPATION') ? 'bullish' :
+                         ((internals.breadth_regime || '').includes('DIVERGENCE') || (internals.breadth_regime || '').includes('SELLING') ? 'bearish' : 'neutral');
+
+    // 4. Card 3 - Flow
+    const flowBias = flow.net_delta_bias || 'NEUTRAL';
+    const flowClass = flowBias === 'BULLISH_FLOW' ? 'bullish' : (flowBias === 'BEARISH_FLOW' ? 'bearish' : 'neutral');
+    const flowNetClass = (flow.net_delta_flow || 0) >= 0 ? 'bullish' : 'bearish';
+
+    // 5. Card 4 - Vol Term Structure
+    const termRegime = term.term_regime || 'NEUTRAL';
+    const termClass = termRegime === 'CONTANGO' ? 'bullish' : (termRegime === 'BACKWARDATION' ? 'bearish' : 'neutral');
+    const ratioVal = term.ratio != null ? Number(term.ratio).toFixed(3) : '—';
+
+    section.innerHTML = `
+      <div class="conviction-header-bar">
+        <div class="conviction-header-left">
+          <span class="conviction-title-icon">🧭</span>
+          <span class="conviction-title">MOVE CONVICTION &amp; MICROSTRUCTURE</span>
+        </div>
+        <div class="conviction-header-right">
+          <span class="conviction-score-pill">
+            <span class="score-label">CONVICTION:</span>
+            <span class="score-val">${conviction.composite_score || 50}%</span>
+          </span>
+          <span class="conviction-verdict-badge ${badgeClass}" id="convictionVerdictBadge">${badgeText}</span>
+        </div>
+      </div>
+      <div class="conviction-explanation-bar">${conviction.verdict_explanation || ''}</div>
+      <div class="conviction-cards-grid" id="convictionCardsGrid">
+        <!-- Card 1: GEX Accelerator -->
+        <div class="conviction-card" id="cardGexConviction">
+          <div class="conviction-card-header">
+            <span class="card-tag">🧮 GEX ACCELERATOR</span>
+            <span class="card-status-pill ${gammaPillClass}">${gammaPillLabel}</span>
+          </div>
+          <div class="conviction-card-body">
+            <div class="conviction-metric-row">
+              <span class="metric-label">Zero-Flip Level:</span>
+              <span class="metric-value">${gamma.zero_gex_level != null ? Number(gamma.zero_gex_level).toFixed(2) : '—'} <span class="dist-sub">(${flipDistSign}${flipDistPts.toFixed(1)} pt)</span></span>
+            </div>
+            <div class="conviction-metric-row">
+              <span class="metric-label">Net GEX:</span>
+              <span class="metric-value ${netGexClass}">${formatDollar(gamma.net_gex)}</span>
+            </div>
+            <div class="conviction-metric-row">
+              <span class="metric-label">Call / Put Wall:</span>
+              <span class="metric-value">${gamma.call_wall ? Number(gamma.call_wall).toFixed(0) : '—'} / ${gamma.put_wall ? Number(gamma.put_wall).toFixed(0) : '—'}</span>
+            </div>
+            <div class="conviction-card-footer ${gammaPillClass}">
+              ${gamma.regime_label || 'NEUTRAL REGIME'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Market Internals & Breadth -->
+        <div class="conviction-card" id="cardBreadthConviction">
+          <div class="conviction-card-header">
+            <span class="card-tag">🏛️ MARKET INTERNALS</span>
+            <span class="card-status-pill ${breadthClass}">${internals.breadth_regime || 'NEUTRAL'}</span>
+          </div>
+          <div class="conviction-card-body">
+            <div class="conviction-metric-row">
+              <span class="metric-label">RSP (Eq Wt) / SPY:</span>
+              <span class="metric-value">${rspPct >= 0 ? '+' : ''}${rspPct.toFixed(2)}% / ${spyPct >= 0 ? '+' : ''}${spyPct.toFixed(2)}%</span>
+            </div>
+            <div class="conviction-metric-row">
+              <span class="metric-label">Breadth Spread:</span>
+              <span class="metric-value ${spreadClass}">${spreadSign}${spreadVal.toFixed(2)}%</span>
+            </div>
+            <div class="conviction-metric-row">
+              <span class="metric-label">NYSE Comp (^NYA):</span>
+              <span class="metric-value ${nyaPct >= 0 ? 'bullish' : 'bearish'}">${nyaPct >= 0 ? '+' : ''}${nyaPct.toFixed(2)}%</span>
+            </div>
+            <div class="conviction-card-footer ${breadthClass}">
+              ${internals.breadth_label || 'MIXED BREADTH'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Institutional Options Net Delta & Urgency -->
+        <div class="conviction-card" id="cardFlowConviction">
+          <div class="conviction-card-header">
+            <span class="card-tag">🌊 INSTITUTIONAL FLOW</span>
+            <span class="card-status-pill ${flowClass}">${flowBias.replace('_', ' ')}</span>
+          </div>
+          <div class="conviction-card-body">
+            <div class="conviction-metric-row">
+              <span class="metric-label">Net Delta Flow:</span>
+              <span class="metric-value ${flowNetClass}">${formatDollar(flow.net_delta_flow)}</span>
+            </div>
+            <div class="conviction-metric-row">
+              <span class="metric-label">Aggressor Sweep:</span>
+              <span class="metric-value">${flow.aggressor_sweep_pct != null ? flow.aggressor_sweep_pct.toFixed(1) : 0}% Ask Urgency</span>
+            </div>
+            <div class="conviction-metric-row">
+              <span class="metric-label">Whale Orders ($1M+):</span>
+              <span class="metric-value ${(flow.whale_count || 0) > 0 ? 'bullish' : ''}">${flow.whale_count || 0} Prints</span>
+            </div>
+            <div class="conviction-card-footer ${flowClass}">
+              ${flow.flow_label || 'BALANCED FLOW'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Vol Term Structure -->
+        <div class="conviction-card" id="cardTermStructureConviction">
+          <div class="conviction-card-header">
+            <span class="card-tag">⚡ VOL TERM STRUCTURE</span>
+            <span class="card-status-pill ${termClass}">${termRegime}</span>
+          </div>
+          <div class="conviction-card-body">
+            <div class="conviction-metric-row">
+              <span class="metric-label">VIX9D / VIX Ratio:</span>
+              <span class="metric-value ${termClass}">${ratioVal}</span>
+            </div>
+            <div class="conviction-metric-row">
+              <span class="metric-label">9D vs 30D Vol:</span>
+              <span class="metric-value">${term.vix9d_price ? term.vix9d_price.toFixed(2) : '—'} vs ${term.vix_price ? term.vix_price.toFixed(2) : '—'}</span>
+            </div>
+            <div class="conviction-metric-row">
+              <span class="metric-label">Curve Structure:</span>
+              <span class="metric-value ${termClass}">${termRegime === 'CONTANGO' ? 'Normal Contango' : (termRegime === 'BACKWARDATION' ? 'Inverted (Panic)' : 'Equilibrium')}</span>
+            </div>
+            <div class="conviction-card-footer ${termClass}">
+              ${term.term_label || 'EQUILIBRIUM'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   async checkRecentAlerts() {
     try {
       const resp = await fetchWithAuth('/api/quant-levels/alerts/recent');
@@ -797,6 +984,7 @@ export class LevelsView {
       const data = await resp.json();
       this.currentData = data;
       this.renderMacroRibbon(data.macro_context);
+      this.renderConvictionSection(data.conviction_context);
 
       if (data.status === 'empty' || !data.levels || data.levels.length === 0) {
         this.renderEmptyState(mount, data.message || 'No SPX quant levels recorded for this date.');
@@ -959,6 +1147,7 @@ export class LevelsView {
 
     this.currentData = data;
     this.renderMacroRibbon(data.macro_context);
+    this.renderConvictionSection(data.conviction_context);
     const spot = data.spot_price;
     const isHistorical = data.spot_type === 'HISTORICAL_CLOSE';
 
