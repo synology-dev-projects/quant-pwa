@@ -90,11 +90,22 @@ export class CockpitView {
                 <span class="panel-badge-icon">📊</span>
                 <h2 class="panel-title">Interactive Options Exposure</h2>
               </div>
-              <!-- Both | Net GEX | Net DEX Toggle Switch -->
-              <div class="gex-dex-toggle" id="gexDexToggle">
-                <button type="button" class="toggle-btn ${this.chartMode === 'both' ? 'active' : ''}" data-mode="both">Both</button>
-                <button type="button" class="toggle-btn ${this.chartMode === 'gex' ? 'active' : ''}" data-mode="gex">Net GEX</button>
-                <button type="button" class="toggle-btn ${this.chartMode === 'dex' ? 'active' : ''}" data-mode="dex">Net DEX</button>
+              <div class="chart-controls-group">
+                <!-- Both | Net GEX | Net DEX Toggle Switch -->
+                <div class="gex-dex-toggle" id="gexDexToggle">
+                  <button type="button" class="toggle-btn ${this.chartMode === 'both' ? 'active' : ''}" data-mode="both">Both</button>
+                  <button type="button" class="toggle-btn ${this.chartMode === 'gex' ? 'active' : ''}" data-mode="gex">Net GEX</button>
+                  <button type="button" class="toggle-btn ${this.chartMode === 'dex' ? 'active' : ''}" data-mode="dex">Net DEX</button>
+                </div>
+                <!-- Force Refresh Chart Button -->
+                <button type="button" class="cockpit-chart-refresh-btn" id="cockpitChartRefreshBtn" title="Force Refresh Options &amp; Chart Cache (15m)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6"></path>
+                    <path d="M1 20v-6h6"></path>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                  </svg>
+                  <span>Refresh</span>
+                </button>
               </div>
             </div>
 
@@ -264,6 +275,18 @@ export class CockpitView {
             if (clearBtn) clearBtn.style.display = 'block';
           }
           this.searchTicker(sym);
+        }
+        return;
+      }
+
+      // Chart Refresh Button Click
+      const chartRefreshBtn = e.target.closest ? e.target.closest('#cockpitChartRefreshBtn') : null;
+      if (chartRefreshBtn && this.container.contains(chartRefreshBtn)) {
+        if (this.currentTicker) {
+          chartRefreshBtn.classList.add('loading');
+          this.searchTicker(this.currentTicker, true).finally(() => {
+            chartRefreshBtn.classList.remove('loading');
+          });
         }
         return;
       }

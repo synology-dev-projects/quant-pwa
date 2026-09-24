@@ -639,9 +639,13 @@ function buildAuditDomTree() {
   panelChart.className = 'cockpit-panel cockpit-panel-chart';
   dashboard.appendChild(panelChart);
 
+  const chartControlsGroup = new MockElement('div');
+  chartControlsGroup.className = 'chart-controls-group';
+  panelChart.appendChild(chartControlsGroup);
+
   const toggleContainer = new MockElement('div', 'gexDexToggle');
   toggleContainer.className = 'gex-dex-toggle';
-  panelChart.appendChild(toggleContainer);
+  chartControlsGroup.appendChild(toggleContainer);
 
   for (const mode of ['both', 'gex', 'dex']) {
     const toggleBtn = new MockElement('button');
@@ -649,6 +653,10 @@ function buildAuditDomTree() {
     toggleBtn.setAttribute('data-mode', mode);
     toggleContainer.appendChild(toggleBtn);
   }
+
+  const chartRefreshBtn = new MockElement('button', 'cockpitChartRefreshBtn');
+  chartRefreshBtn.className = 'cockpit-chart-refresh-btn';
+  chartControlsGroup.appendChild(chartRefreshBtn);
 
   const keyLevelsStrip = new MockElement('div');
   keyLevelsStrip.className = 'cockpit-key-levels';
@@ -1076,6 +1084,7 @@ const interactiveAuditTargets = [
   { name: 'Cockpit Search Button', selector: '#cockpitSearchBtn', minTap: 44, requiresContainer: false },
   { name: 'Quick Suggestion Chip', selector: '.suggestion-chip', minTap: 36, requiresContainer: true },
   { name: 'GEX/DEX Toggle Button', selector: '.gex-dex-toggle .toggle-btn', minTap: 36, requiresContainer: true },
+  { name: 'Cockpit Chart Refresh Button', selector: '#cockpitChartRefreshBtn', minTap: 44, requiresContainer: false },
   { name: 'Options Flow Filter Chip', selector: '.flow-chip', minTap: 36, requiresContainer: true },
   { name: 'Bloomberg Page Prev Button', selector: '.bb-page-btn.btn-prev', minTap: 36, requiresContainer: true },
   { name: 'Bloomberg Page Next Button', selector: '.bb-page-btn.btn-next', minTap: 36, requiresContainer: true },

@@ -317,7 +317,7 @@ def calculate_metrics_from_raw(ticker: str, raw_data: dict) -> Optional[GexDexTi
 
 _RAW_CACHE: Dict[str, tuple[float, dict]] = {}
 _CHART_CACHE: Dict[str, tuple[float, bytes]] = {}
-CACHE_TTL_SECONDS = 3600.0
+CACHE_TTL_SECONDS = 900.0  # 15 minutes TTL for options chain raw data & rendered chart images
 
 _SHARED_CONFIG = None
 _SHARED_SESSION: Optional[requests.Session] = None
