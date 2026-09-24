@@ -492,6 +492,25 @@ def cmd_audit(args):
             res_staged = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(WORKSPACE_ROOT), capture_output=True, text=True)
             all_diff = (res.stdout or "") + "\n" + (res_staged.stdout or "")
             modified_files = [f.strip() for f in (res.stdout or "").splitlines() if f.strip()]
+
+            # Also check diff in the repo containing the reproduction test if outside WORKSPACE_ROOT
+            repro_test = state.get("reproduction_test")
+            if repro_test:
+                repro_path = Path(repro_test)
+                # Find enclosing git repo for repro_test
+                curr = repro_path.parent
+                repro_repo = None
+                while curr != curr.parent:
+                    if (curr / ".git").exists():
+                        repro_repo = curr
+                        break
+                    curr = curr.parent
+                if repro_repo and repro_repo != WORKSPACE_ROOT:
+                    r_diff = subprocess.run(["git", "diff", "--name-only"], cwd=str(repro_repo), capture_output=True, text=True)
+                    r_staged = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(repro_repo), capture_output=True, text=True)
+                    r_all = (r_diff.stdout or "") + "\n" + (r_staged.stdout or "")
+                    all_diff += "\n" + r_all
+                    modified_files.extend([f.strip() for f in (r_diff.stdout or "").splitlines() if f.strip()])
         except Exception:
             all_diff = ""
             modified_files = []
