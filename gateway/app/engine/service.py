@@ -52,7 +52,8 @@ try:
         convert_raw_to_df,
         generate_gexdex_chart
     )
-except ImportError:
+except ImportError as err:
+    logger.warning(f"Error importing common_lib dexgex connector: {err}")
     MainConfig = None
     load_config = None
     get_authenticated_session = None
