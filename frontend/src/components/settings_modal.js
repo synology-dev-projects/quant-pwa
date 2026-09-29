@@ -33,6 +33,10 @@ export class SettingsModal {
     this.diagnosticsToggle = document.getElementById('diagnosticsToggle');
     this.levelAlertsToggle = document.getElementById('levelAlertsToggle');
     this.ntfyTopicInput = document.getElementById('ntfyTopicInput');
+    this.dynamicPipelineList = document.getElementById('dynamicPipelineList');
+    this.runAllPipelinesBtn = document.getElementById('runAllPipelinesBtn');
+    this.pipelinePollingTimer = null;
+    this.isPipelineRunning = false;
 
     this.init();
   }
@@ -45,6 +49,7 @@ export class SettingsModal {
     this.syncFlowBtn?.addEventListener('click', () => this.handleSyncFlow());
     this.syncLevelsBtn?.addEventListener('click', () => this.handleSyncQuantLevels());
     this.syncSnapshotBtn?.addEventListener('click', () => this.handleSyncSnapshot());
+    this.runAllPipelinesBtn?.addEventListener('click', () => this.handleRunAllPipelines());
 
     // Toggle default state from AppState (defaults to true)
     if (this.diagnosticsToggle) {
@@ -115,6 +120,7 @@ export class SettingsModal {
       this.ntfyTopicInput.value = AppState.getNtfyTopic();
     }
     this.checkVersionStatus();
+    this.checkPipelinesStatus();
     this.checkFlowStatus();
     this.checkQuantLevelsStatus();
     this.checkSnapshotStatus();
@@ -452,7 +458,252 @@ export class SettingsModal {
     }, 3500);
   }
 
+  async checkPipelinesStatus() {
+    if (!this.dynamicPipelineList) return;
+
+    try {
+      const token = AppState.getSessionToken();
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch('/api/pipelines/status', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const pipelines = data.pipelines || {};
+        const order = data.topological_order || Object.keys(pipelines);
+
+        let hasActiveRun = false;
+        const fragment = document.createDocumentFragment();
+
+        order.forEach((pipeName) => {
+          const p = pipelines[pipeName];
+          if (!p) return;
+
+          const pStatus = (p.status || 'NOT_STARTED').toUpperCase();
+          const isSuccess = pStatus === 'SUCCESS';
+          const isRunning = pStatus === 'RUNNING';
+          const isFailed = pStatus === 'FAILED';
+
+          if (isRunning) hasActiveRun = true;
+
+          const row = document.createElement('div');
+          row.className = 'pipeline-compact-row';
+          row.dataset.pipeline = pipeName;
+
+          let dotClass = 'status-dot dot-stale';
+          let statusText = 'Not Run';
+          if (isSuccess) {
+            dotClass = 'status-dot dot-live';
+            statusText = 'In Sync';
+          } else if (isRunning) {
+            dotClass = 'status-dot dot-fast';
+            statusText = 'Running';
+          } else if (isFailed) {
+            dotClass = 'status-dot dot-stale';
+            statusText = 'Failed';
+          }
+
+          const sessionDate = p.session_date || data.session_date || '';
+          const rows = p.rows_affected !== undefined ? Number(p.rows_affected).toLocaleString() : '0';
+          const durSec = p.metadata?.duration_sec !== undefined ? `${p.metadata.duration_sec}s` : '';
+          const metaParts = [];
+          if (sessionDate) metaParts.push(sessionDate);
+          if (rows && rows !== '0') metaParts.push(`${rows} rows`);
+          if (durSec) metaParts.push(durSec);
+          const metaText = metaParts.join(' · ') || statusText;
+
+          const infoCol = document.createElement('div');
+          infoCol.className = 'pipeline-compact-info';
+          infoCol.innerHTML = `
+            <div class="pipeline-compact-name">
+              <span class="${dotClass}"></span>
+              <span>${p.display_name || pipeName}</span>
+            </div>
+            <div class="pipeline-compact-meta">${metaText}</div>
+          `;
+
+          const actionsCol = document.createElement('div');
+          actionsCol.className = 'pipeline-compact-actions';
+
+          const runBtn = document.createElement('button');
+          runBtn.type = 'button';
+          if (isRunning) {
+            runBtn.className = 'btn-pipe-action btn-pipe-running';
+            runBtn.innerHTML = '⏳ Running...';
+            runBtn.disabled = true;
+          } else if (isSuccess) {
+            runBtn.className = 'btn-pipe-action btn-pipe-synced';
+            runBtn.innerHTML = '✓ Synced';
+            runBtn.title = 'Click to force rerun this pipeline';
+            runBtn.addEventListener('click', () => this.handleRunPipeline(pipeName, true));
+          } else {
+            runBtn.className = 'btn-pipe-action btn-pipe-stale';
+            runBtn.innerHTML = '⚡ Run';
+            runBtn.title = 'Execute pipeline for latest market session';
+            runBtn.addEventListener('click', () => this.handleRunPipeline(pipeName, true));
+          }
+          actionsCol.appendChild(runBtn);
+
+          const cascadeBtn = document.createElement('button');
+          cascadeBtn.type = 'button';
+          cascadeBtn.className = 'btn-pipe-action btn-pipe-cascade';
+          cascadeBtn.innerHTML = '⚡↓';
+          cascadeBtn.title = `Rerun ${p.display_name || pipeName} and all downstream pipelines`;
+          cascadeBtn.disabled = isRunning;
+          cascadeBtn.addEventListener('click', () => this.handleRunPipelineCascade(pipeName));
+          actionsCol.appendChild(cascadeBtn);
+
+          row.appendChild(infoCol);
+          row.appendChild(actionsCol);
+          fragment.appendChild(row);
+        });
+
+        this.dynamicPipelineList.innerHTML = '';
+        this.dynamicPipelineList.appendChild(fragment);
+
+        if (this.runAllPipelinesBtn) {
+          if (hasActiveRun) {
+            this.runAllPipelinesBtn.disabled = true;
+            this.runAllPipelinesBtn.innerHTML = '⏳ Running...';
+          } else {
+            this.runAllPipelinesBtn.disabled = false;
+            this.runAllPipelinesBtn.innerHTML = '⚡ Run All';
+          }
+        }
+
+        if (hasActiveRun) {
+          if (this.pipelinePollingTimer) clearTimeout(this.pipelinePollingTimer);
+          this.pipelinePollingTimer = setTimeout(() => this.checkPipelinesStatus(), 2000);
+        } else if (this.isPipelineRunning) {
+          this.isPipelineRunning = false;
+          this.showToast('✓ Pipeline DAG Execution Cycle Completed!');
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to query pipeline statuses:', err);
+    }
+  }
+
+  async handleRunPipeline(pipelineName, forceAll = true) {
+    try {
+      const token = AppState.getSessionToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      this.isPipelineRunning = true;
+      this.showToast(`⚡ Dispatched run for ${pipelineName}...`);
+
+      const res = await fetch('/api/pipelines/run', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          pipeline_name: pipelineName,
+          force_all: forceAll,
+          async_exec: true
+        })
+      });
+
+      if (res.ok) {
+        await this.checkPipelinesStatus();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Failed to trigger pipeline: ${errData.detail || 'Error executing run'}`);
+        this.isPipelineRunning = false;
+        await this.checkPipelinesStatus();
+      }
+    } catch (e) {
+      console.error('Pipeline run error:', e);
+      alert(`Network error: ${e.message}`);
+      this.isPipelineRunning = false;
+    }
+  }
+
+  async handleRunPipelineCascade(fromPipeline) {
+    try {
+      const token = AppState.getSessionToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      this.isPipelineRunning = true;
+      this.showToast(`⚡ Dispatched cascade run starting from ${fromPipeline}...`);
+
+      const res = await fetch('/api/pipelines/run', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          from_pipeline: fromPipeline,
+          force_all: true,
+          async_exec: true
+        })
+      });
+
+      if (res.ok) {
+        await this.checkPipelinesStatus();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Failed to trigger cascade: ${errData.detail || 'Error'}`);
+        this.isPipelineRunning = false;
+        await this.checkPipelinesStatus();
+      }
+    } catch (e) {
+      console.error('Pipeline cascade error:', e);
+      alert(`Network error: ${e.message}`);
+      this.isPipelineRunning = false;
+    }
+  }
+
+  async handleRunAllPipelines() {
+    try {
+      const token = AppState.getSessionToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      if (this.runAllPipelinesBtn) {
+        this.runAllPipelinesBtn.disabled = true;
+        this.runAllPipelinesBtn.innerHTML = '⏳ Dispatched...';
+      }
+
+      this.isPipelineRunning = true;
+      this.showToast('⚡ Triggering Full Pipeline DAG Cycle...');
+
+      const res = await fetch('/api/pipelines/run', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          force_all: true,
+          async_exec: true
+        })
+      });
+
+      if (res.ok) {
+        await this.checkPipelinesStatus();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Failed to trigger DAG cycle: ${errData.detail || 'Error'}`);
+        this.isPipelineRunning = false;
+        await this.checkPipelinesStatus();
+      }
+    } catch (e) {
+      console.error('Run all pipelines error:', e);
+      alert(`Network error: ${e.message}`);
+      this.isPipelineRunning = false;
+    }
+  }
+
   close() {
+    if (this.pipelinePollingTimer) {
+      clearTimeout(this.pipelinePollingTimer);
+      this.pipelinePollingTimer = null;
+    }
     this.modal?.classList.remove('open');
   }
 
