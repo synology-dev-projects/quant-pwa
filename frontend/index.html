@@ -97,25 +97,39 @@
             <span class="version-label">App Status</span>
             <span class="version-status"><span class="status-dot dot-live" id="appSyncDot"></span> <span id="syncStatusText">Synchronized (v1.1.41)</span></span>
           </div>
-          <div class="version-row flow-status-row">
-            <span class="version-label">Options Flow</span>
-            <span class="version-status" id="flowStatusBadge"><span class="status-dot dot-live" id="flowSyncDot"></span> <span id="flowStatusText">Checking...</span></span>
+        </div>
+
+        <!-- Dynamic Pipelines & DAG Orchestrator Section -->
+        <div class="pipeline-section-card" id="pipelineSectionCard">
+          <div class="pipeline-section-header">
+            <div class="pipeline-section-title">
+              <span class="status-dot dot-live"></span>
+              <span>Data Pipelines (DAG)</span>
+            </div>
+            <button type="button" id="runAllPipelinesBtn" class="btn btn-xs btn-primary" title="Trigger full DAG cycle in dependency order">⚡ Run All</button>
           </div>
-          <div class="version-row quant-levels-status-row">
-            <span class="version-label">Quant Levels</span>
-            <span class="version-status" id="levelsStatusBadge"><span class="status-dot dot-live" id="levelsSyncDot"></span> <span id="levelsStatusText">Checking...</span></span>
-          </div>
-          <div class="version-row snapshot-status-row">
-            <span class="version-label">GEX/DEX Snapshot</span>
-            <span class="version-status" id="snapshotStatusBadge"><span class="status-dot dot-live" id="snapshotSyncDot"></span> <span id="snapshotStatusText">Checking...</span></span>
+          
+          <div id="dynamicPipelineList" class="pipeline-compact-list">
+            <div class="pipeline-compact-row">
+              <div class="pipeline-compact-info">
+                <span class="pipeline-compact-name"><span class="status-dot dot-fast"></span> Discovering pipelines...</span>
+              </div>
+            </div>
           </div>
         </div>
+
         <div class="update-action-container settings-actions">
           <button type="button" id="forceUpdateBtn" class="btn btn-synced" disabled>✓ App Up to Date (v1.1.41)</button>
           <div id="manualResyncLink" class="manual-resync-link" title="Wipe local storage and re-download fresh server build">Force manual re-sync</div>
-          <button type="button" id="syncFlowBtn" class="btn btn-synced" disabled>✓ Flow Up to Date</button>
-          <button type="button" id="syncLevelsBtn" class="btn btn-synced" disabled>✓ Quant Levels Up to Date</button>
-          <button type="button" id="syncSnapshotBtn" class="btn btn-synced" disabled>✓ Snapshot Up to Date</button>
+          <!-- Hidden compatibility elements for legacy scripts -->
+          <div style="display: none;" aria-hidden="true">
+            <span id="flowStatusBadge"><span id="flowSyncDot"></span><span id="flowStatusText"></span></span>
+            <span id="levelsStatusBadge"><span id="levelsSyncDot"></span><span id="levelsStatusText"></span></span>
+            <span id="snapshotStatusBadge"><span id="snapshotSyncDot"></span><span id="snapshotStatusText"></span></span>
+            <button type="button" id="syncFlowBtn"></button>
+            <button type="button" id="syncLevelsBtn"></button>
+            <button type="button" id="syncSnapshotBtn"></button>
+          </div>
           <button type="button" id="lockAppBtn" class="btn btn-warning">Lock App</button>
           <button type="button" id="settingsSave" class="btn btn-primary">Save Settings</button>
         </div>

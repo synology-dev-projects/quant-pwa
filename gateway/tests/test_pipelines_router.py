@@ -95,3 +95,17 @@ def test_trigger_pipeline_run_dry_run_authorized(client, auth_headers):
         assert data["status"] == "ok"
         assert data["execution"]["dry_run"] is True
         assert len(data["execution"]["plan"]) == 2
+
+
+def test_trigger_pipeline_run_background_dispatch(client, auth_headers):
+    response = client.post(
+        "/api/pipelines/run",
+        json={"pipeline_name": "unusual_option_flow", "async_exec": True},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["dispatched"] is True
+    assert "session_date" in data
+
