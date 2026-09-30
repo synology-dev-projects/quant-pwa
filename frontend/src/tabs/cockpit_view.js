@@ -661,7 +661,7 @@ ${notableFlowMd}
     const chartSlot = this.container.querySelector('#cockpitChartSlot');
     if (!chartSlot) return;
 
-    const strikes = (gex.strikes && Array.isArray(gex.strikes)) ? gex.strikes : (data.strikes || []);
+    let strikes = (gex.strikes && Array.isArray(gex.strikes)) ? gex.strikes : (data.strikes || []);
     const ticker = data.ticker || gex.ticker || this.currentTicker || 'QUANT';
 
     if (strikes.length === 0) {
@@ -847,6 +847,43 @@ ${notableFlowMd}
     const putWall = Math.round(spot * 0.93 * 100) / 100;
     const zeroFlip = Math.round(spot * 0.99 * 100) / 100;
 
+    const step = spot >= 2000 ? 25 : spot >= 500 ? 10 : spot >= 200 ? 5 : spot >= 50 ? 2.5 : 1.0;
+    const centerStk = Math.round(spot / step) * step;
+    const expList = ['Front Expiry', 'Next Weekly', 'Monthly OPEX'];
+    const strikes = [];
+    for (let i = -10; i <= 10; i++) {
+      const stk = Math.round((centerStk + i * step) * 100) / 100;
+      const distCw = (stk - callWall) / spot;
+      const distPw = (stk - putWall) / spot;
+      const distSp = (stk - spot) / spot;
+      const callW = Math.max(0.05, Math.exp(-Math.pow(distCw * 8, 2)) * 0.8 + Math.exp(-Math.pow(distSp * 6, 2)) * 0.4);
+      const putW = Math.max(0.05, Math.exp(-Math.pow(distPw * 8, 2)) * 0.8 + Math.exp(-Math.pow(distSp * 6, 2)) * 0.4);
+      const baseMag = spot * 10000;
+      const cg = Math.round(callW * baseMag);
+      const pg = Math.round(putW * baseMag);
+      const cd = Math.round(cg * 0.5);
+      const pd = Math.round(pg * 0.5);
+      strikes.push({
+        strike: stk,
+        call_gex: cg,
+        put_gex: pg,
+        call_dex: cd,
+        put_dex: pd,
+        net_gex: cg - pg,
+        net_dex: cd - pd,
+        exp_gex: {
+          'Front Expiry': { call: Math.round(cg * 0.5), put: Math.round(pg * 0.5) },
+          'Next Weekly': { call: Math.round(cg * 0.3), put: Math.round(pg * 0.3) },
+          'Monthly OPEX': { call: Math.round(cg * 0.2), put: Math.round(pg * 0.2) }
+        },
+        exp_dex: {
+          'Front Expiry': { call: Math.round(cd * 0.5), put: Math.round(pd * 0.5) },
+          'Next Weekly': { call: Math.round(cd * 0.3), put: Math.round(pd * 0.3) },
+          'Monthly OPEX': { call: Math.round(cd * 0.2), put: Math.round(pd * 0.2) }
+        }
+      });
+    }
+
     return {
       ticker: sym,
       status: 'ok',
@@ -858,8 +895,8 @@ ${notableFlowMd}
         put_wall: putWall,
         call_put_ratio: 1.45,
         gamma_regime: 'LONG GAMMA (+GEX)',
-        expirations: [],
-        strikes: []
+        expirations: expList,
+        strikes: strikes
       },
       flow: {
         records: this.generateMockFlowPrints(sym, spot),
