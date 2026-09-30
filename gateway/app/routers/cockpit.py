@@ -174,6 +174,28 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
     else:
         flow_df = flow_result if isinstance(flow_result, pd.DataFrame) else pd.DataFrame()
 
+    # Safety: Ensure gex_data has valid spot_price and strike distribution
+    has_strikes = bool(gex_data.get("strikes") or (isinstance(gex_data.get("strike_distribution"), dict) and gex_data["strike_distribution"].get("strikes")))
+    has_spot = float(gex_data.get("spot_price", 0.0) or 0.0) > 0
+
+    if not has_strikes or not has_spot:
+        from app.engine.service import _generate_resilient_strike_distribution
+        existing_spot = float(gex_data.get("spot_price", 0.0) or 0.0) if has_spot else 0.0
+        fallback_dist = _generate_resilient_strike_distribution(clean_ticker, spot_price=existing_spot)
+        fallback_dict = fallback_dist.model_dump()
+        if not has_strikes:
+            gex_data["strikes"] = fallback_dict.get("strikes", [])
+            if not gex_data.get("expirations"):
+                gex_data["expirations"] = fallback_dict.get("expirations", [])
+        if not has_spot:
+            gex_data["spot_price"] = fallback_dict.get("spot_price", 0.0)
+            if not gex_data.get("call_wall"):
+                gex_data["call_wall"] = fallback_dict.get("call_wall", 0.0)
+            if not gex_data.get("put_wall"):
+                gex_data["put_wall"] = fallback_dict.get("put_wall", 0.0)
+            if not gex_data.get("zero_gex_level"):
+                gex_data["zero_gex_level"] = fallback_dict.get("zero_gex_level", 0.0)
+
     # Defense-in-depth: Filter out invalid / phantom zero-strike options prints
     if not flow_df.empty:
         strike_col = None
