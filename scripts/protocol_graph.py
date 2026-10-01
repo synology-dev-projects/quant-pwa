@@ -629,6 +629,63 @@ def cmd_prod_authorize(args):
     append_audit(state, "PROD_AUTHORIZED", "Human authorized promotion to production")
     save_state(state)
     print("[OK] Production Promotion Authorized by Engineering Director.")
+    print("   To execute automated topological promotion, run:")
+    print("     python scripts/protocol_graph.py promote-prod")
+
+
+def cmd_promote_prod(args):
+    state = get_current_state()
+    if not state:
+        print("[ERROR] No active workflow.", file=sys.stderr)
+        sys.exit(1)
+
+    if not state["guards"].get("production_authorized"):
+        print("\n[STOP] [PROMOTION BLOCKED BY RULE 3]", file=sys.stderr)
+        print("   Production promotion requires explicit human authorization.", file=sys.stderr)
+        print("   Run: python scripts/protocol_graph.py prod-authorize", file=sys.stderr)
+        sys.exit(1)
+
+    # Merge develop2 into master across active repos
+    repos_to_sync = ["common-lib", "quant-pwa"]
+    for r in repos_to_sync:
+        rpath = WORKSPACE_ROOT / r
+        if not rpath.is_dir():
+            continue
+        print(f"🔀 Merging develop2 into master for [{r}]...")
+        res_cur = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=rpath, capture_output=True, text=True)
+        cur_br = res_cur.stdout.strip()
+        
+        cmds = [
+            ["git", "checkout", "master"],
+            ["git", "pull", "origin", "master"],
+            ["git", "merge", "develop2", "--no-edit"],
+            ["git", "checkout", cur_br]
+        ]
+        for c in cmds:
+            res = subprocess.run(c, cwd=rpath, capture_output=True, text=True)
+            if res.returncode != 0:
+                print(f"❌ Git step failed for {r} ({' '.join(c)}):\n{res.stderr}", file=sys.stderr)
+                sys.exit(1)
+        print(f"✅ [{r}] master merged cleanly with develop2.")
+
+    push_script = WORKSPACE_ROOT / "scripts" / "push_fleet.py"
+    if not push_script.exists():
+        print(f"[ERROR] push_fleet.py not found at {push_script}", file=sys.stderr)
+        sys.exit(1)
+
+    print("\n🚀 Executing Automated Fleet Promotion to Production (master)...")
+    env = os.environ.copy()
+    env["QUANT_FLEET_ORCHESTRATED"] = "1"
+    cmd = [sys.executable, str(push_script), "--branch", "master"]
+    res = subprocess.run(cmd, cwd=str(WORKSPACE_ROOT), env=env)
+    if res.returncode != 0:
+        print("\n🛑 [PROD PROMOTION FAILED] Fleet push or CI verification failed on master.", file=sys.stderr)
+        sys.exit(res.returncode)
+
+    append_audit(state, "PROD_PROMOTED", "Fleet successfully deployed and verified green on production (master)")
+    save_state(state)
+    print("\n🎉 PRODUCTION DEPLOYMENT & CI VALIDATION 100% GREEN ACROSS FLEET!")
+    print("   To conclude this workflow, run: python scripts/protocol_graph.py reset")
 
 
 def cmd_check_commit(args):
@@ -724,6 +781,7 @@ def main():
     subparsers.add_parser("audit")
     subparsers.add_parser("staging-verify")
     subparsers.add_parser("prod-authorize")
+    subparsers.add_parser("promote-prod", help="Topologically merge and deploy fleet to production (master)")
 
     p_fver = subparsers.add_parser("fleet-verify", help="Verify all multi-repo fleet CI runs")
     p_fver.add_argument("--branch", default="develop2", help="Branch to verify (default: develop2)")
@@ -751,6 +809,7 @@ def main():
         "audit": cmd_audit,
         "staging-verify": cmd_staging_verify,
         "prod-authorize": cmd_prod_authorize,
+        "promote-prod": cmd_promote_prod,
         "fleet-verify": cmd_fleet_verify,
         "check-commit": cmd_check_commit,
         "reset": cmd_reset

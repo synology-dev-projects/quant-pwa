@@ -59,6 +59,20 @@ jobs:
           "$NODE_BIN" frontend/tests/audit_layout.js
           echo "✅ Stage 1 Pre-Flight Validation Gate Passed Successfully!"
 
+      - name: "Stage 1.5: Upstream Fleet Synchronization Gate"
+        if: github.ref_name == 'master'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔒 Verifying upstream common-lib is not actively deploying on master..."
+          UPSTREAM_STATUS=$(gh run list --repo synology-dev-projects/common-lib --branch master --limit 1 --json status --jq '.[0].status' 2>/dev/null || echo "completed")
+          if [ "$UPSTREAM_STATUS" == "in_progress" ] || [ "$UPSTREAM_STATUS" == "queued" ]; then
+            echo "⏳ Upstream common-lib is currently deploying. Pausing until completed..."
+            RUN_ID=$(gh run list --repo synology-dev-projects/common-lib --branch master --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)
+            [ -n "$RUN_ID" ] && gh run watch "$RUN_ID" --repo synology-dev-projects/common-lib || sleep 30
+          fi
+          echo "✅ Upstream common-lib synchronized."
+
       # ========================================================================
       # STAGE 2: Prepare Synology Deployment Directory & Secrets
       # ========================================================================
@@ -162,6 +176,19 @@ jobs:
       - name: "Stage 3: Docker Build & Containerized Pytest Gate"
         run: |
           cd "${{ env.DEPLOY_DIR }}"
+          # Clean Up Ephemeral Develop Container early on Master Deploy to free NAS compute
+          if [ "${{ github.ref_name }}" == "master" ]; then
+            echo "🧹 Master deploy detected: Pre-emptively tearing down old develop containers to free Synology NAS compute..."
+            docker rm -f quant-db-dev quant-gateway-dev quant-frontend-dev quant-cloudflared-dev 2>/dev/null || true
+            DEV_DIR="/volume2/homes/rachardv/git-repos/develop2/quant-pwa"
+            if [ -d "$DEV_DIR" ]; then
+              cd "$DEV_DIR"
+              docker compose -p quant-pwa-dev down --remove-orphans 2>/dev/null || true
+              cd "${{ env.DEPLOY_DIR }}"
+            fi
+            echo "✨ Ephemeral develop containers cleanly removed."
+          fi
+
           echo "🐳 Force-removing any conflicting containers for prefix ${{ env.CONTAINER_PREFIX }}..."
           docker rm -f quant-db-${{ env.CONTAINER_PREFIX }} quant-gateway-${{ env.CONTAINER_PREFIX }} quant-frontend-${{ env.CONTAINER_PREFIX }} quant-cloudflared-${{ env.CONTAINER_PREFIX }} 2>/dev/null || true
           
@@ -189,8 +216,8 @@ jobs:
           trigger_rollback() {
             local REASON="$1"
             echo "❌ $REASON"
-            docker logs quant-gateway-${{ env.CONTAINER_PREFIX }} --tail 50 2>/dev/null || true
-            docker logs quant-frontend-${{ env.CONTAINER_PREFIX }} --tail 30 2>/dev/null || true
+            docker logs quant-gateway-${{ env.CONTAINER_PREFIX }} --tail 100 2>&1 || true
+            docker logs quant-frontend-${{ env.CONTAINER_PREFIX }} --tail 50 2>&1 || true
             
             echo "🔄 Initiating automated rollback to previous stable images..."
             ROLLED_BACK=false
@@ -226,7 +253,7 @@ jobs:
           
           echo "📡 Verifying Gateway & Frontend readiness on port ${{ env.FRONTEND_PORT }}..."
           HOST_IP=""
-          for i in {1..30}; do
+          for i in {1..60}; do
             for candidate in "192.168.1.68" "172.17.0.1" "127.0.0.1"; do
               if curl -s --connect-timeout 2 "http://${candidate}:${{ env.FRONTEND_PORT }}/api/health" | grep -q '"status":"ok"'; then
                 HOST_IP="$candidate"
@@ -234,7 +261,7 @@ jobs:
                 break 2
               fi
             done
-            echo "⏳ Waiting for Gateway to initialize on port ${{ env.FRONTEND_PORT }} (attempt $i/30)..."
+            echo "⏳ Waiting for Gateway to initialize on port ${{ env.FRONTEND_PORT }} (attempt $i/60)..."
             sleep 2
           done
           
@@ -251,18 +278,6 @@ jobs:
           fi
 
           echo "✅ All 14 Live Smoke Probes Passed Successfully on $HOST_IP:${{ env.FRONTEND_PORT }}!"
-
-          # Clean Up Ephemeral Develop Container on Master Deploy
-          if [ "${{ github.ref_name }}" == "master" ]; then
-            echo "🧹 Master deploy detected: Tearing down old develop containers to free Synology NAS compute..."
-            docker rm -f quant-db-dev quant-gateway-dev quant-frontend-dev quant-cloudflared-dev 2>/dev/null || true
-            DEV_DIR="/volume2/homes/rachardv/git-repos/develop2/quant-pwa"
-            if [ -d "$DEV_DIR" ]; then
-              cd "$DEV_DIR"
-              docker compose -p quant-pwa-dev down --remove-orphans 2>/dev/null || true
-            fi
-            echo "✨ Ephemeral develop containers cleanly removed."
-          fi
           
           echo "🎉 Stage 4 Launch & Smoke Probing Complete for ${{ github.ref_name }}!"
 
