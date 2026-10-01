@@ -72,4 +72,12 @@ Whenever the user requests a new feature, architecture capability, or functional
 1. **HALT.** Never push directly to `master`.
 2. Present a concise verification report to the user.
 3. Prompt for explicit approval (`"approved"`, `"push to prod"`).
-4. Only upon explicit human confirmation, merge `develop2` into `master`, update living docs (`walkthrough.md`, `quant-architecture`), and push.
+4. Only upon explicit human confirmation, authorize promotion:
+   ```bash
+   python scripts/protocol_graph.py prod-authorize
+   ```
+5. Execute automated topological promotion across the fleet:
+   ```bash
+   python scripts/protocol_graph.py promote-prod
+   ```
+   *(Enforces `QUANT_FLEET_ORCHESTRATED=1`, Tier 1 -> Tier 3 serialization, and waits for green CI before resetting).*

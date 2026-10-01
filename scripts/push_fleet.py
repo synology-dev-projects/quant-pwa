@@ -176,7 +176,9 @@ def push_repo(repo_name: str, branch: str, repo_path: Path) -> bool:
     if branch == "master":
         cmd.append("--no-verify")
     try:
-        res = subprocess.run(cmd, cwd=repo_path, capture_output=True, text=True)
+        env = os.environ.copy()
+        env["QUANT_FLEET_ORCHESTRATED"] = "1"
+        res = subprocess.run(cmd, cwd=repo_path, env=env, capture_output=True, text=True)
         if res.returncode != 0:
             print(f"❌ Failed to push {repo_name}:\n{res.stderr}", file=sys.stderr)
             return False
