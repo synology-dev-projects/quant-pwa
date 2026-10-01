@@ -22,8 +22,8 @@ from typing import Dict, List, Optional, Tuple
 # Ensure UTF-8 output on Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
     try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     except Exception:
         pass
 
@@ -258,7 +258,7 @@ def run_fleet_push(branch: str = "develop2", dry_run: bool = False, timeout: int
         expected_shas = {}
         for r in pushed_in_tier:
             p, _ = repos_to_push[r]
-            res_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=p, capture_output=True, text=True)
+            res_sha = subprocess.run(["git", "rev-parse", branch], cwd=p, capture_output=True, text=True)
             if res_sha.returncode == 0:
                 expected_shas[r] = res_sha.stdout.strip()
 
