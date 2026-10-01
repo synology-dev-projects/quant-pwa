@@ -65,16 +65,16 @@ def get_repo_path(repo_name: str) -> Optional[Path]:
 def check_unpushed_commits(repo_path: Path, branch: str) -> Tuple[bool, str]:
     """Checks if the local branch has commits not yet on origin."""
     try:
-        # Check current branch
-        res_br = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_path, capture_output=True, text=True)
-        curr_branch = res_br.stdout.strip()
+        # Check if local target branch exists
+        res_target = subprocess.run(["git", "rev-parse", "--verify", branch], cwd=repo_path, capture_output=True, text=True)
+        target_ref = branch if res_target.returncode == 0 else "HEAD"
         
         # Check if remote tracking exists
         res_fetch = subprocess.run(["git", "rev-parse", "--verify", f"origin/{branch}"], cwd=repo_path, capture_output=True, text=True)
         if res_fetch.returncode != 0:
-            return True, f"Local branch '{curr_branch}' (no remote origin/{branch})"
+            return True, f"Local branch '{target_ref}' (no remote origin/{branch})"
 
-        res_diff = subprocess.run(["git", "log", f"origin/{branch}..{curr_branch}", "--oneline"], cwd=repo_path, capture_output=True, text=True)
+        res_diff = subprocess.run(["git", "log", f"origin/{branch}..{target_ref}", "--oneline"], cwd=repo_path, capture_output=True, text=True)
         lines = [l for l in res_diff.stdout.splitlines() if l.strip()]
         if lines:
             return True, f"{len(lines)} unpushed commit(s)"
@@ -88,6 +88,7 @@ def get_latest_run_for_repo(repo: str, branch: str) -> Optional[Dict]:
     cmd = [
         "gh", "run", "list",
         "--repo", f"{ORG_NAME}/{repo}",
+        "--workflow", "deploy.yml",
         "--branch", branch,
         "--limit", "1",
         "--json", "databaseId,status,conclusion,name,url,headSha,createdAt"
@@ -136,7 +137,7 @@ def wait_for_tier_ci(pushed_repos: List[str], branch: str, timeout: int = 600, p
                 run_sha = run.get("headSha", "")
                 if run_sha and not run_sha.startswith(expected_sha[:7]) and not expected_sha.startswith(run_sha[:7]):
                     all_passed = False
-                    still_running.append(f"{repo} (registering webhook...)")
+                    still_running.append(f"{repo} (registering webhook... expected {expected_sha[:7]}, got {run_sha[:7]})")
                     continue
 
             st = run.get("status")
