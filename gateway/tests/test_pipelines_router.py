@@ -42,7 +42,10 @@ def test_get_pipeline_dag(client):
 
 
 def test_get_pipeline_status_endpoint(client):
-    with patch("app.routers.pipelines_router.get_all_pipeline_statuses") as mock_statuses:
+    with patch("app.routers.pipelines_router.load_config"), \
+         patch("app.routers.pipelines_router.get_postgres_engine"), \
+         patch("app.routers.pipelines_router.ensure_pipeline_runs_table"), \
+         patch("app.routers.pipelines_router.get_all_pipeline_statuses") as mock_statuses:
         mock_statuses.return_value = {
             "unusual_option_flow": {
                 "pipeline_name": "unusual_option_flow",
@@ -74,7 +77,10 @@ def test_trigger_pipeline_run_unauthorized(client):
 
 
 def test_trigger_pipeline_run_dry_run_authorized(client, auth_headers):
-    with patch("app.routers.pipelines_router.run_dag_cycle") as mock_cycle:
+    with patch("app.routers.pipelines_router.load_config"), \
+         patch("app.routers.pipelines_router.get_postgres_engine"), \
+         patch("app.routers.pipelines_router.ensure_pipeline_runs_table"), \
+         patch("app.routers.pipelines_router.run_dag_cycle") as mock_cycle:
         mock_cycle.return_value = {
             "dry_run": True,
             "session_date": "2026-09-08",
@@ -108,4 +114,15 @@ def test_trigger_pipeline_run_background_dispatch(client, auth_headers):
     assert data["status"] == "ok"
     assert data["dispatched"] is True
     assert "session_date" in data
+
+
+def test_trigger_pipeline_run_inactive_rejected(client, auth_headers):
+    response = client.post(
+        "/api/pipelines/run",
+        json={"pipeline_name": "gexdex_snapshot", "dry_run": False},
+        headers=auth_headers,
+    )
+    assert response.status_code == 400
+    data = response.json()
+    assert "INACTIVE" in data["detail"]
 

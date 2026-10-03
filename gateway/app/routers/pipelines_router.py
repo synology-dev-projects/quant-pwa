@@ -112,6 +112,7 @@ def get_pipelines_status(
                     "error_message": None,
                     "metadata": {},
                 }
+            full_status_map[p_name]["is_active"] = p_name in ("quant_levels", "unusual_options_flow", "unusual_option_flow")
 
         all_success = all(
             full_status_map[p]["status"] == "SUCCESS" for p in order
@@ -160,6 +161,12 @@ def trigger_pipeline_run(
     Supports asynchronous non-blocking background dispatch.
     """
     try:
+        if req.pipeline_name in ("gexdex_snapshot", "market_confluence") and not req.dry_run:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Pipeline '{req.pipeline_name}' is currently INACTIVE. Only Quant Levels and Options Flow are active.",
+            )
+
         config = load_config()
         engine = get_postgres_engine(config)
         ensure_pipeline_runs_table(engine)
@@ -231,9 +238,10 @@ def trigger_pipeline_run(
             "session_date": str(target_date),
             "execution": result,
         }
-
     except HTTPException:
         raise
+    except KeyError as ke:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ke))
     except Exception as e:
         logger.error(f"Pipeline trigger failed: {e}")
         raise HTTPException(
