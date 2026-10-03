@@ -104,16 +104,19 @@ def test_trigger_pipeline_run_dry_run_authorized(client, auth_headers):
 
 
 def test_trigger_pipeline_run_background_dispatch(client, auth_headers):
-    response = client.post(
-        "/api/pipelines/run",
-        json={"pipeline_name": "unusual_option_flow", "async_exec": True},
-        headers=auth_headers,
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["dispatched"] is True
-    assert "session_date" in data
+    with patch("app.routers.pipelines_router.load_config"), \
+         patch("app.routers.pipelines_router.get_postgres_engine"), \
+         patch("app.routers.pipelines_router.ensure_pipeline_runs_table"):
+        response = client.post(
+            "/api/pipelines/run",
+            json={"pipeline_name": "unusual_option_flow", "async_exec": True},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["dispatched"] is True
+        assert "session_date" in data
 
 
 def test_trigger_pipeline_run_inactive_rejected(client, auth_headers):
