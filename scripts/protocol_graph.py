@@ -648,25 +648,33 @@ def cmd_promote_prod(args):
     # Merge develop2 into master across active repos
     repos_to_sync = ["common-lib", "quant-pwa"]
     for r in repos_to_sync:
-        rpath = WORKSPACE_ROOT / r
-        if not rpath.is_dir():
+        if (WORKSPACE_ROOT / r).is_dir():
+            rpaths = [WORKSPACE_ROOT / r]
+        elif (Path("C:/Coding/VSCode/Quant System") / r).is_dir():
+            rpaths = [Path("C:/Coding/VSCode/Quant System") / r]
+            if WORKSPACE_ROOT.name == r and WORKSPACE_ROOT != rpaths[0]:
+                rpaths.append(WORKSPACE_ROOT)
+        elif WORKSPACE_ROOT.name == r:
+            rpaths = [WORKSPACE_ROOT]
+        else:
             continue
-        print(f"🔀 Merging develop2 into master for [{r}]...")
-        res_cur = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=rpath, capture_output=True, text=True)
-        cur_br = res_cur.stdout.strip()
-        
-        cmds = [
-            ["git", "checkout", "master"],
-            ["git", "pull", "origin", "master"],
-            ["git", "merge", "develop2", "--no-edit"],
-            ["git", "checkout", cur_br]
-        ]
-        for c in cmds:
-            res = subprocess.run(c, cwd=rpath, capture_output=True, text=True)
-            if res.returncode != 0:
-                print(f"❌ Git step failed for {r} ({' '.join(c)}):\n{res.stderr}", file=sys.stderr)
-                sys.exit(1)
-        print(f"✅ [{r}] master merged cleanly with develop2.")
+        for rpath in rpaths:
+            print(f"🔀 Merging develop2 into master for [{r}] at {rpath}...")
+            res_cur = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=rpath, capture_output=True, text=True)
+            cur_br = res_cur.stdout.strip()
+            
+            cmds = [
+                ["git", "checkout", "master"],
+                ["git", "pull", "origin", "master"],
+                ["git", "merge", "develop2", "--no-edit"],
+                ["git", "checkout", cur_br]
+            ]
+            for c in cmds:
+                res = subprocess.run(c, cwd=rpath, capture_output=True, text=True)
+                if res.returncode != 0:
+                    print(f"❌ Git step failed for {r} ({' '.join(c)}):\n{res.stderr}", file=sys.stderr)
+                    sys.exit(1)
+            print(f"✅ [{r}] master merged cleanly with develop2 at {rpath}.")
 
     push_script = WORKSPACE_ROOT / "scripts" / "push_fleet.py"
     if not push_script.exists():
