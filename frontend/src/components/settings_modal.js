@@ -480,6 +480,8 @@ export class SettingsModal {
         order.forEach((pipeName) => {
           const p = pipelines[pipeName];
           if (!p) return;
+          // Filter out disabled or inactive pipelines
+          if (p.is_active === false || p.status === 'DISABLED' || p.status === 'INACTIVE') return;
 
           const pStatus = (p.status || 'NOT_STARTED').toUpperCase();
           const isSuccess = pStatus === 'SUCCESS';

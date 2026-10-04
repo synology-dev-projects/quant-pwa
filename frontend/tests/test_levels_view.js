@@ -445,14 +445,10 @@ Promise.all([
   console.log('  ✓ PASS: Price ladder renders clean table with binary types (BUY/SELL) and dynamic spot row');
 
   console.log('\n--- TEST 5: Structured Levels Table & Column Cleanliness ---');
-  assert(mount.innerHTML.includes('levels-ladder-table'), 'Clean ladder table wrapper present');
-  assert(mount.innerHTML.includes('>Type</th>'), 'Type column header present');
-  assert(mount.innerHTML.includes('>Level / Range</th>'), 'Level / Range column header present');
-  assert(mount.innerHTML.includes('>Commentary</th>'), 'Commentary column header present');
-  assert(!mount.innerHTML.includes('>Source</th>'), 'Source column completely removed');
-  assert(!mount.innerHTML.includes('>Delta vs Spot</th>'), 'Delta vs Spot column completely removed');
-  assert(mount.innerHTML.includes('Major overhead supply'), 'Commentary rendered in table');
-  console.log('  ✓ PASS: Ladder table renders strict 3 columns (Type | Level / Range | Commentary) with zero duplicate tables');
+  assert(!mount.innerHTML.includes('levels-ladder-table'), 'Price ladder table is removed from SPX levels view');
+  assert(!mount.innerHTML.includes('levels-ladder-section'), 'Price ladder section is removed');
+  assert(mount.innerHTML.includes('levelsCandlestickMount'), 'Candlestick chart section is preserved');
+  console.log('  ✓ PASS: Ladder table completely removed from SPX Levels view while preserving candlestick chart');
 
   console.log('\n--- TEST 6: Empty & Error State Handling ---');
   const emptyMount = { innerHTML: '', querySelector: () => null };
@@ -606,10 +602,9 @@ Promise.all([
       spot_label: 'SPX Session Close'
     }
   });
-  assert(histMount.innerHTML.includes('ladder-table-spot-row historical'), 'Ladder table includes historical spot marker class');
-  assert(histMount.innerHTML.includes('SPX SESSION CLOSE'), 'Ladder spot marker text displays SPX SESSION CLOSE');
-  assert(histMount.innerHTML.includes('$5,482.50'), 'Ladder spot row displays historical close price');
-  console.log('  ✓ PASS: Historical spot price anchoring correctly labels SPX Session Close in Ladder Table');
+  assert(!histMount.innerHTML.includes('levels-ladder-section'), 'Historical rendering omits ladder section');
+  assert(histMount.innerHTML.includes('levelsCandlestickMount'), 'Historical rendering preserves candlestick mount');
+  console.log('  ✓ PASS: Historical spot price anchoring correctly labels SPX Session Close in Spot Marker');
 
   console.log('\n--- TEST 13: Empty State On-Demand Extraction Button ---');
   levelsView.selectedDate = '2026-09-05';

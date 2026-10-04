@@ -115,7 +115,7 @@ def get_pipelines_status(
             full_status_map[p_name]["is_active"] = p_name in ("quant_levels", "unusual_options_flow", "unusual_option_flow")
 
         all_success = all(
-            full_status_map[p]["status"] == "SUCCESS" for p in order
+            full_status_map[p]["status"] == "SUCCESS" for p in order if full_status_map[p].get("is_active", True)
         )
 
         return {

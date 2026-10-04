@@ -91,7 +91,13 @@ export class LevelsView {
           <div class="levels-title-group">
             <span class="levels-ticker-badge">SPX 500</span>
             <div>
-              <h2 class="levels-main-title">Quant Levels Terminal</h2>
+              <div class="levels-title-row" style="display: flex; align-items: center; gap: 8px;">
+                <h2 class="levels-main-title">Quant Levels Terminal</h2>
+                <div class="levels-live-pill" id="levelsLivePill">
+                  <span class="live-indicator-dot"></span>
+                  <span class="live-text">LIVE 30S</span>
+                </div>
+              </div>
               <p class="levels-subtitle">S&P 500 Daily Pivot &amp; Structure Sheet</p>
             </div>
           </div>
@@ -1012,36 +1018,6 @@ export class LevelsView {
     }
 
     mount.innerHTML = `
-      <!-- Price Ladder Table Section -->
-      <div class="levels-ladder-section">
-        <div class="levels-ladder-header">
-          <div class="levels-ladder-title-group">
-            <h3 class="levels-ladder-title">Interactive Price Ladder</h3>
-            <span class="levels-subtitle">Top-to-Bottom Structure</span>
-          </div>
-          <div class="levels-ladder-header-right" id="levelsHeaderRightMount">
-            <div class="levels-live-pill" id="levelsLivePill">
-              <span class="live-indicator-dot"></span>
-              <span class="live-text">LIVE 30S</span>
-            </div>
-          </div>
-        </div>
-        <div class="levels-table-wrapper">
-          <table class="levels-table levels-ladder-table">
-            <thead>
-              <tr>
-                <th style="width: 90px;">Type</th>
-                <th style="width: 200px;">Level / Range</th>
-                <th>Commentary</th>
-              </tr>
-            </thead>
-            <tbody id="priceLadderMount">
-              ${this.buildLadderHtml(data.levels, spot, isHistorical)}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       <!-- Candlestick Chart Section -->
       <div class="levels-candlestick-section" id="levelsCandlestickMount">
         <div class="candlestick-loading-placeholder">

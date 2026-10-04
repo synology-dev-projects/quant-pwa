@@ -5,6 +5,8 @@ export class FlowView {
   constructor() {
     this.container = null;
     this.currentData = null;
+    this.selectedDate = null;
+    this.availableDates = [];
     this.activeDuration = '3d'; // '3d' | '1w'
     this.activeViewMode = 'rankings'; // 'rankings' | 'clusters'
     this.activeHurdle = 500000;
@@ -31,6 +33,15 @@ export class FlowView {
           </div>
 
           <div class="flow-controls-group">
+            <!-- Session Stepper & Date Select -->
+            <div class="flow-session-stepper" id="flowSessionStepper">
+              <button type="button" class="flow-step-btn" id="flowPrevBtn" title="Previous Session (Older)">◄ Prev</button>
+              <select class="flow-date-select" id="flowDateSelect" aria-label="Select Flow Session">
+                <option value="">Latest Session</option>
+              </select>
+              <button type="button" class="flow-step-btn" id="flowNextBtn" title="Next Session (Newer)" disabled>Next ►</button>
+            </div>
+
             <div class="flow-mode-toggle" id="flowModeToggle">
               <button type="button" class="flow-mode-btn active" data-mode="rankings">Rankings</button>
               <button type="button" class="flow-mode-btn" data-mode="clusters">Thematic Clusters</button>
@@ -213,6 +224,30 @@ export class FlowView {
   bindEvents() {
     if (!this.container) return;
 
+    // Session Stepper Controls (◄ Prev / Next ►)
+    const prevBtn = this.container.querySelector('#flowPrevBtn');
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        this.stepSession(-1);
+      });
+    }
+
+    const nextBtn = this.container.querySelector('#flowNextBtn');
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        this.stepSession(1);
+      });
+    }
+
+    // Session Date Select Dropdown
+    const dateSelect = this.container.querySelector('#flowDateSelect');
+    if (dateSelect) {
+      dateSelect.addEventListener('change', (e) => {
+        const val = e.target.value;
+        this.onDateSelectChange(val);
+      });
+    }
+
     // Mode Switcher (Rankings vs Thematic Clusters)
     const modeBtns = this.container.querySelectorAll('#flowModeToggle .flow-mode-btn');
     modeBtns.forEach(btn => {
@@ -252,7 +287,7 @@ export class FlowView {
         if (this.activeViewMode === 'clusters') {
           this.loadThematicClusters();
         } else {
-          this.loadFlowData();
+          this.loadFlowData(this.selectedDate);
         }
       });
     }
@@ -309,15 +344,109 @@ export class FlowView {
     }
   }
 
-  async loadFlowData() {
+  stepSession(direction) {
+    if (!this.availableDates || this.availableDates.length === 0) return;
+
+    const currDate = this.selectedDate || this.availableDates[0];
+    const currIdx = this.availableDates.indexOf(currDate);
+
+    if (direction < 0) {
+      // ◄ Prev (older date -> higher index in DESC list)
+      if (currIdx !== -1 && currIdx < this.availableDates.length - 1) {
+        this.selectedDate = this.availableDates[currIdx + 1];
+      } else if (currIdx === -1) {
+        const older = this.availableDates.find(d => d < currDate);
+        this.selectedDate = older || this.availableDates[this.availableDates.length - 1];
+      } else {
+        return; // At oldest session
+      }
+    } else if (direction > 0) {
+      // Next ► (newer date -> lower index in DESC list)
+      if (currIdx > 0) {
+        this.selectedDate = this.availableDates[currIdx - 1];
+      } else {
+        return; // Already at latest session
+      }
+    }
+
+    this.updateDateControls();
+    if (this.activeViewMode === 'clusters') {
+      this.loadThematicClusters();
+    } else {
+      this.loadFlowData(this.selectedDate);
+    }
+  }
+
+  onDateSelectChange(targetDate) {
+    this.selectedDate = targetDate || null;
+    this.updateDateControls();
+    if (this.activeViewMode === 'clusters') {
+      this.loadThematicClusters();
+    } else {
+      this.loadFlowData(this.selectedDate);
+    }
+  }
+
+  updateDateControls() {
+    if (!this.container) return;
+    const dateSelect = this.container.querySelector('#flowDateSelect');
+    if (dateSelect && this.availableDates.length > 0) {
+      dateSelect.value = this.selectedDate || this.availableDates[0] || '';
+    }
+
+    const prevBtn = this.container.querySelector('#flowPrevBtn');
+    const nextBtn = this.container.querySelector('#flowNextBtn');
+
+    if (this.availableDates.length > 0) {
+      const activeDate = this.selectedDate || this.availableDates[0];
+      const idx = this.availableDates.indexOf(activeDate);
+
+      if (prevBtn) {
+        prevBtn.disabled = (idx >= this.availableDates.length - 1);
+      }
+      if (nextBtn) {
+        nextBtn.disabled = (idx <= 0);
+      }
+    }
+  }
+
+  renderDateSelect() {
+    if (!this.container) return;
+    const select = this.container.querySelector('#flowDateSelect');
+    if (!select) return;
+
+    if (!this.availableDates || this.availableDates.length === 0) {
+      select.innerHTML = '<option value="">Latest Session</option>';
+      return;
+    }
+
+    const activeDate = this.selectedDate || this.availableDates[0];
+    select.innerHTML = this.availableDates.map((d, i) => {
+      const label = (i === 0) ? `${d} (LATEST)` : d;
+      const isSelected = d === activeDate;
+      return `<option value="${d}" ${isSelected ? 'selected' : ''}>${label}</option>`;
+    }).join('');
+  }
+
+  async loadFlowData(targetDate = null) {
     if (this.isLoading) return;
     this.isLoading = true;
 
     try {
-      const res = await fetchWithAuth('/api/flow/aggregate');
+      const dateParam = targetDate || this.selectedDate;
+      const url = dateParam ? `/api/flow/aggregate?as_of_date=${encodeURIComponent(dateParam)}` : '/api/flow/aggregate';
+      const res = await fetchWithAuth(url);
       if (res && res.ok) {
         const data = await res.json();
         this.currentData = data;
+        if (data.available_dates && Array.isArray(data.available_dates) && data.available_dates.length > 0) {
+          this.availableDates = data.available_dates;
+        }
+        if (data.as_of_date) {
+          this.selectedDate = data.as_of_date;
+        }
+        this.renderDateSelect();
+        this.updateDateControls();
         this.renderSessionHeader();
         this.renderActiveTables();
         if (data && data.synthesis_markdown) {
@@ -326,10 +455,9 @@ export class FlowView {
             synthBox.innerHTML = renderMarkdown(data.synthesis_markdown);
           }
         } else {
-          this.streamFlowSynthesis();
+          this.streamFlowSynthesis(this.selectedDate);
         }
       } else {
-
         throw new Error(`Server returned HTTP ${res?.status || 500}`);
       }
     } catch (e) {
@@ -343,9 +471,17 @@ export class FlowView {
   renderSessionHeader() {
     if (!this.container || !this.currentData) return;
     const asOf = this.currentData.as_of_date || this.currentData.latest_market_day || 'CURRENT';
+    const isLatest = this.availableDates.length > 0 && asOf === this.availableDates[0];
     const sessionText = this.container.querySelector('#flowSessionText');
     if (sessionText) {
-      sessionText.textContent = `AS OF ${asOf}`;
+      sessionText.textContent = isLatest ? `LIVE AS OF ${asOf}` : `HISTORICAL AS OF ${asOf}`;
+    }
+    const sessionTag = this.container.querySelector('#flowSessionTag');
+    if (sessionTag) {
+      const dot = sessionTag.querySelector('.status-dot');
+      if (dot) {
+        dot.className = isLatest ? 'status-dot dot-live' : 'status-dot dot-stale';
+      }
     }
     const heroDate = this.container.querySelector('#flowHeroDate');
     if (heroDate) {
@@ -353,7 +489,7 @@ export class FlowView {
     }
   }
 
-  async streamFlowSynthesis() {
+  async streamFlowSynthesis(targetDate = null) {
     if (!this.container) return;
     const synthBox = this.container.querySelector('#flowSynthesisMarkdown');
     if (!synthBox) return;
@@ -372,7 +508,7 @@ export class FlowView {
     `;
 
     try {
-      const asOf = this.currentData?.as_of_date || '';
+      const asOf = targetDate || this.selectedDate || this.currentData?.as_of_date || '';
       const url = asOf ? `/api/flow/synthesis/stream?as_of_date=${encodeURIComponent(asOf)}` : '/api/flow/synthesis/stream';
       const response = await fetchWithAuth(url, {
         method: 'POST',
@@ -610,7 +746,10 @@ ${topPremLine}
     }
 
     try {
-      const url = `/api/flow/thematic-clusters?min_premium=${encodeURIComponent(this.activeHurdle)}&max_distance=0.35`;
+      let url = `/api/flow/thematic-clusters?min_premium=${encodeURIComponent(this.activeHurdle)}&max_distance=0.35`;
+      if (this.selectedDate) {
+        url += `&trade_date=${encodeURIComponent(this.selectedDate)}`;
+      }
       const res = await fetchWithAuth(url);
       if (res && res.ok) {
         const data = await res.json();

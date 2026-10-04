@@ -39,6 +39,7 @@ class MockElement {
     this.disabled = false;
     this.style = {};
     this.listeners = {};
+    this.dataset = {};
   }
   get className() { return this._className; }
   set className(val) {
@@ -55,6 +56,14 @@ class MockElement {
     }
   }
   appendChild(child) {
+    if (child.tagName === 'FRAGMENT') {
+      child.children.forEach(c => {
+        c.parentNode = this;
+        this.children.push(c);
+      });
+      child.children = [];
+      return child;
+    }
     child.parentNode = this;
     this.children.push(child);
     return child;
@@ -66,6 +75,9 @@ class MockElement {
     }
   }
 }
+
+const dynamicPipelineList = new MockElement('div', 'dynamicPipelineList');
+const runAllPipelinesBtn = new MockElement('button', 'runAllPipelinesBtn');
 
 const elements = {
   settingsModal: new MockElement('div', 'settingsModal'),
@@ -92,7 +104,9 @@ const elements = {
   snapshotStatusBadge: new MockElement('span', 'snapshotStatusBadge'),
   passcodeInput: new MockElement('input', 'passcodeInput'),
   gatewayUrlInput: new MockElement('input', 'gatewayUrlInput'),
-  diagnosticsToggle: new MockElement('input', 'diagnosticsToggle')
+  diagnosticsToggle: new MockElement('input', 'diagnosticsToggle'),
+  dynamicPipelineList: dynamicPipelineList,
+  runAllPipelinesBtn: runAllPipelinesBtn
 };
 
 global.document = {
@@ -100,6 +114,7 @@ global.document = {
   querySelector: () => null,
   querySelectorAll: () => [],
   createElement: (tag) => new MockElement(tag),
+  createDocumentFragment: () => new MockElement('fragment'),
   body: new MockElement('body'),
   addEventListener: () => {}
 };
@@ -445,6 +460,54 @@ assert.strictEqual(snapshotAuthHeader, 'Bearer mock-jwt-token-12345', 'Bearer se
 assert.strictEqual(syncSnapshotBtn.disabled, true, 'Sync snapshot button re-disabled after completion');
 assert.strictEqual(snapshotStatusText.textContent, 'In Sync (2026-09-08)', 'Snapshot status flips to In Sync post-run');
 console.log('  ✓ PASS: Clicking sync snapshot button triggers backend sync and flips status to In Sync');
+
+// TEST 11: Inactive Pipelines are excluded from Dynamic Pipelines list
+global.fetch = async (url) => {
+  if (url === '/api/pipelines/status') {
+    return {
+      ok: true,
+      json: async () => ({
+        status: 'ok',
+        topological_order: ['quant_levels', 'unusual_options_flow', 'gexdex_snapshot', 'market_confluence'],
+        pipelines: {
+          quant_levels: {
+            pipeline_name: 'quant_levels',
+            display_name: 'Quant Levels',
+            status: 'SUCCESS',
+            is_active: true
+          },
+          unusual_options_flow: {
+            pipeline_name: 'unusual_options_flow',
+            display_name: 'Options Flow',
+            status: 'SUCCESS',
+            is_active: true
+          },
+          gexdex_snapshot: {
+            pipeline_name: 'gexdex_snapshot',
+            display_name: 'GEX/DEX Snapshot',
+            status: 'NOT_STARTED',
+            is_active: false
+          },
+          market_confluence: {
+            pipeline_name: 'market_confluence',
+            display_name: 'Market Confluence',
+            status: 'NOT_STARTED',
+            is_active: false
+          }
+        }
+      })
+    };
+  }
+  return { ok: false };
+};
+
+await modal.checkPipelinesStatus();
+const renderedPipelines = dynamicPipelineList.children.map(c => c.dataset?.pipeline);
+assert.strictEqual(renderedPipelines.includes('quant_levels'), true, 'Active pipeline quant_levels is rendered');
+assert.strictEqual(renderedPipelines.includes('unusual_options_flow'), true, 'Active pipeline unusual_options_flow is rendered');
+assert.strictEqual(renderedPipelines.includes('gexdex_snapshot'), false, 'Disabled pipeline gexdex_snapshot is NOT rendered');
+assert.strictEqual(renderedPipelines.includes('market_confluence'), false, 'Disabled pipeline market_confluence is NOT rendered');
+console.log('  ✓ PASS: Disabled pipelines (gexdex_snapshot, market_confluence) do NOT show up in settings menu');
 
 console.log('\n==================================================================');
 console.log('  SETTINGS MODAL TESTS PASSED (100% COVERAGE)                     ');

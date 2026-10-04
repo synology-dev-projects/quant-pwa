@@ -169,6 +169,26 @@ def _fetch_window_aggregates(conn: sa.Connection, dates: List[str]) -> Dict[str,
     }
 
 
+@router.get("/dates", response_model=List[str])
+def get_flow_dates(_: str = Depends(get_current_user)) -> List[str]:
+    """Returns list of distinct trade dates available in unusual_option_flow_te."""
+    try:
+        engine = _get_engine()
+        with engine.connect() as conn:
+            q = sa.text("""
+                SELECT DISTINCT trade_date
+                FROM unusual_option_flow_te
+                WHERE strike_price > 0
+                ORDER BY trade_date DESC
+                LIMIT 60
+            """)
+            rows = conn.execute(q).scalars().all()
+            return [str(r) for r in rows]
+    except Exception as ex:
+        logger.error(f"Failed to query flow available dates: {ex}")
+        return []
+
+
 @router.get("/aggregate")
 def get_flow_aggregate(
     as_of_date: Optional[str] = Query(None, description="Anchor trade date (YYYY-MM-DD). Defaults to latest completed market session."),
@@ -222,6 +242,16 @@ def get_flow_aggregate(
             distinct_dates_str = [str(d) for d in distinct_dates]
             resolved_as_of = distinct_dates_str[0] if distinct_dates_str else None
 
+            # Discover all recent available session dates for UI stepping/selection
+            avail_query = sa.text("""
+                SELECT DISTINCT trade_date
+                FROM unusual_option_flow_te
+                WHERE strike_price > 0
+                ORDER BY trade_date DESC
+                LIMIT 60
+            """)
+            available_dates_str = [str(d) for d in conn.execute(avail_query).scalars().all()]
+
             dates_3d = distinct_dates_str[:3]
             dates_1w = distinct_dates_str[:5]
 
@@ -239,6 +269,7 @@ def get_flow_aggregate(
             return {
                 "as_of_date": resolved_as_of,
                 "latest_market_day": str(get_last_market_day()),
+                "available_dates": available_dates_str,
                 "synthesis_markdown": synthesis_markdown,
                 "window_3d": window_3d,
                 "window_1w": window_1w,
