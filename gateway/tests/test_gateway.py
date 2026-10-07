@@ -92,8 +92,7 @@ def test_lifespan_invokes_ensure_all_schemas():
         mock_app = MagicMock()
         with patch("common_lib.database.schemas.ensure_all_schemas") as mock_ensure, \
              patch("app.main.mcp_client_manager.initialize", new_callable=AsyncMock), \
-             patch("app.main.mcp_client_manager.close", new_callable=AsyncMock), \
-             patch("app.main.run_cache_warmer_loop", new_callable=AsyncMock):
+             patch("app.main.mcp_client_manager.close", new_callable=AsyncMock):
 
             mock_ensure.return_value = {
                 "unusual_whales_flow_te": "verified",
@@ -121,8 +120,7 @@ def test_lifespan_gracefully_handles_schema_verification_failure():
         mock_app = MagicMock()
         with patch("common_lib.database.schemas.ensure_all_schemas", side_effect=Exception("Database connection timeout")), \
              patch("app.main.mcp_client_manager.initialize", new_callable=AsyncMock), \
-             patch("app.main.mcp_client_manager.close", new_callable=AsyncMock), \
-             patch("app.main.run_cache_warmer_loop", new_callable=AsyncMock):
+             patch("app.main.mcp_client_manager.close", new_callable=AsyncMock):
 
             # Should not raise exception
             async with lifespan(mock_app):

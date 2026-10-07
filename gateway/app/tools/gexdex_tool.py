@@ -9,8 +9,6 @@ from app.engine.service import (
     gexdex_service,
     _GEXDEX_MEMORY_CACHE,
     _get_cache_key,
-    BENCHMARK_WARM_TICKERS,
-    is_market_warmer_window,
     CACHE_TTL_SECONDS,
     get_strike_distribution as get_in_process_strikes
 )
@@ -319,13 +317,3 @@ def get_strike_distribution(
     except Exception as e:
         logger.error(f"Failed to calculate in-process strike distribution for {symbol}: {e}")
         return {"error": str(e), "ticker": symbol}
-
-
-async def warm_benchmark_cache(force_refresh: bool = False) -> int:
-    """Pre-warms in-memory cache for all benchmark tickers via gexdex_service."""
-    return await gexdex_service.warm_benchmark_cache(force_refresh=force_refresh)
-
-
-async def run_cache_warmer_loop(interval_seconds: int = 180):
-    """Background market hours pre-cache warmer loop via gexdex_service."""
-    return await gexdex_service.run_cache_warmer_loop(interval_seconds=interval_seconds)

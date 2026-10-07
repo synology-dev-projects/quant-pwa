@@ -864,30 +864,8 @@ def get_strike_distribution(
 _GEXDEX_MEMORY_CACHE: Dict[str, Dict[str, Any]] = {}
 GEXDEX_CACHE_TTL = 300.0
 
-BENCHMARK_WARM_TICKERS = [
-    "SPY", "QQQ", "IWM", "NVDA", "AAPL", "TSLA", "META", "AMZN", "GOOGL", "MSFT",
-    "AMD", "PLTR", "TSM", "SMCI", "COIN", "CRWD", "NFLX", "SPX", "NDX", "RUT"
-]
-
-
 def _get_cache_key(tickers: str, max_dte: int, strike_range: int) -> str:
     return f"{tickers}:{max_dte}:{strike_range}"
-
-
-def is_market_warmer_window(dt: Optional[datetime] = None) -> bool:
-    """Checks if current Eastern Time is within market pre-cache window (Mon-Fri 08:30 - 16:15 ET)."""
-    if dt is None:
-        dt = datetime.now(NY_TZ)
-    elif dt.tzinfo is None:
-        dt = NY_TZ.localize(dt)
-    else:
-        dt = dt.astimezone(NY_TZ)
-
-    weekday = dt.weekday()  # 0 = Mon, 4 = Fri, 5 = Sat, 6 = Sun
-    if weekday > 4:
-        return False
-    curr_time = dt.time()
-    return dtime(8, 30) <= curr_time <= dtime(16, 15)
 
 
 class GexDexService:
@@ -1160,37 +1138,6 @@ class GexDexService:
             fallback=_fallback,
             timeout=8.0
         )
-
-    async def warm_benchmark_cache(self, force_refresh: bool = False) -> int:
-        """Pre-warms in-memory cache for all benchmark tickers."""
-        t0 = time.perf_counter()
-        tasks = [
-            self.get_summary(ticker=sym, force_refresh=force_refresh)
-            for sym in BENCHMARK_WARM_TICKERS
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        warmed = 0
-        for res in results:
-            if isinstance(res, dict) and "error" not in res:
-                warmed += 1
-
-        elapsed_ms = (time.perf_counter() - t0) * 1000.0
-        logger.info(f"[Cache Warmer] Pre-warmed {warmed} benchmark tickers in {elapsed_ms:.1f} ms")
-        return warmed
-
-    async def run_cache_warmer_loop(self, interval_seconds: int = 180):
-        """Background market hours pre-cache warmer loop."""
-        logger.info(f"🚀 Starting In-Process Background Market Hours Pre-Cache Warmer (interval: {interval_seconds}s)")
-        try:
-            while True:
-                try:
-                    if is_market_warmer_window():
-                        await self.warm_benchmark_cache(force_refresh=True)
-                except Exception as e:
-                    logger.error(f"[Cache Warmer] Error during warm cycle: {e}")
-                await asyncio.sleep(interval_seconds)
-        except asyncio.CancelledError:
-            logger.info("[Cache Warmer] Background pre-cache warmer stopped gracefully.")
 
 
 # Export global singleton
