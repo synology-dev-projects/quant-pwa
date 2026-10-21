@@ -646,7 +646,16 @@ def cmd_promote_prod(args):
         sys.exit(1)
 
     # Merge develop2 into master across active repos
-    repos_to_sync = ["common-lib", "quant-pwa"]
+    repos_to_sync = [
+        "common-lib",
+        "market-confluence-pipeline",
+        "gexdex-snapshot-pipeline",
+        "quant-level-pipeline",
+        "unusual-option-flow-pipeline",
+        "ibkr-historical-data-pipeline",
+        "economic-events-pipeline",
+        "quant-pwa",
+    ]
     for r in repos_to_sync:
         if (WORKSPACE_ROOT / r).is_dir():
             rpaths = [WORKSPACE_ROOT / r]
