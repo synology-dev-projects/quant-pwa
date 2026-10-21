@@ -44,3 +44,15 @@
    - **Architectural Refactoring**: Trigger `/refactor-plan` (`.agents/skills/refactor-plan/SKILL.md`) to freeze behavior with characterization tests and slice changes into independent, low-risk commits.
    - **Code Hygiene & Deslop**: Trigger `/deslop` (`.agents/skills/deslop/SKILL.md`) before committing to scrub narrative comments, inline single-caller wrappers, enforce Zero Trade Advice, and verify the full regression test suite.
    - **Context Compaction**: Trigger `/handoff` (`.agents/skills/handoff/SKILL.md`) at the end of a session or when context reaches >40k tokens to generate a clean-reset prompt for fresh sessions.
+
+
+9. **Chat Lifecycle & Context Management (Golden Rules of Thumb)**:
+   - **Keep the Chat Open When**:
+     * You are in the middle of an active, multi-step debugging cycle for the same bug.
+     * You are actively executing a `/feature` protocol flow that has not yet reached Staging.
+   - **Start a Fresh Chat (Trigger `/handoff`) When**:
+     * You just promoted a feature to `master` and verified production.
+     * The protocol state graph was reset (`python scripts/protocol_graph.py reset`).
+     * You are switching mental domains (e.g., from Python pipeline scrapers to PWA CSS styling).
+     * The current chat has generated massive terminal output or logs and feels sluggish.
+   - **Mandatory Proactive Handoff**: Whenever a feature/bug workflow reaches completion or `protocol_graph.py reset` is executed, the agent MUST proactively invoke `/handoff`, persist the latest state into `HANDOFF.md` at the project root, and present the user with the 1-sentence resume prompt for their next chat.
