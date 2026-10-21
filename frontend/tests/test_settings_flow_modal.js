@@ -461,14 +461,14 @@ assert.strictEqual(syncSnapshotBtn.disabled, true, 'Sync snapshot button re-disa
 assert.strictEqual(snapshotStatusText.textContent, 'In Sync (2026-09-08)', 'Snapshot status flips to In Sync post-run');
 console.log('  ✓ PASS: Clicking sync snapshot button triggers backend sync and flips status to In Sync');
 
-// TEST 11: Inactive Pipelines are excluded from Dynamic Pipelines list
+// TEST 11: Active Pipelines render while inactive pipelines are excluded from Dynamic Pipelines list
 global.fetch = async (url) => {
   if (url === '/api/pipelines/status') {
     return {
       ok: true,
       json: async () => ({
         status: 'ok',
-        topological_order: ['quant_levels', 'unusual_options_flow', 'gexdex_snapshot', 'market_confluence'],
+        topological_order: ['quant_levels', 'unusual_options_flow', 'gexdex_snapshot', 'market_confluence', 'economic_events'],
         pipelines: {
           quant_levels: {
             pipeline_name: 'quant_levels',
@@ -485,12 +485,18 @@ global.fetch = async (url) => {
           gexdex_snapshot: {
             pipeline_name: 'gexdex_snapshot',
             display_name: 'GEX/DEX Snapshot',
-            status: 'NOT_STARTED',
-            is_active: false
+            status: 'SUCCESS',
+            is_active: true
           },
           market_confluence: {
             pipeline_name: 'market_confluence',
             display_name: 'Market Confluence',
+            status: 'SUCCESS',
+            is_active: true
+          },
+          economic_events: {
+            pipeline_name: 'economic_events',
+            display_name: 'Economic Events',
             status: 'NOT_STARTED',
             is_active: false
           }
@@ -505,9 +511,11 @@ await modal.checkPipelinesStatus();
 const renderedPipelines = dynamicPipelineList.children.map(c => c.dataset?.pipeline);
 assert.strictEqual(renderedPipelines.includes('quant_levels'), true, 'Active pipeline quant_levels is rendered');
 assert.strictEqual(renderedPipelines.includes('unusual_options_flow'), true, 'Active pipeline unusual_options_flow is rendered');
-assert.strictEqual(renderedPipelines.includes('gexdex_snapshot'), false, 'Disabled pipeline gexdex_snapshot is NOT rendered');
-assert.strictEqual(renderedPipelines.includes('market_confluence'), false, 'Disabled pipeline market_confluence is NOT rendered');
-console.log('  ✓ PASS: Disabled pipelines (gexdex_snapshot, market_confluence) do NOT show up in settings menu');
+assert.strictEqual(renderedPipelines.includes('gexdex_snapshot'), true, 'Active pipeline gexdex_snapshot is rendered');
+assert.strictEqual(renderedPipelines.includes('market_confluence'), true, 'Active pipeline market_confluence is rendered');
+assert.strictEqual(renderedPipelines.includes('economic_events'), false, 'Disabled pipeline economic_events is NOT rendered');
+console.log('  ✓ PASS: Active pipelines render in settings menu and inactive pipeline (economic_events) is excluded');
+
 
 console.log('\n==================================================================');
 console.log('  SETTINGS MODAL TESTS PASSED (100% COVERAGE)                     ');

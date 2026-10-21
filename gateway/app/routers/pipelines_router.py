@@ -112,7 +112,13 @@ def get_pipelines_status(
                     "error_message": None,
                     "metadata": {},
                 }
-            full_status_map[p_name]["is_active"] = p_name in ("quant_levels", "unusual_options_flow", "unusual_option_flow")
+            full_status_map[p_name]["is_active"] = p_name in (
+                "quant_levels",
+                "unusual_options_flow",
+                "unusual_option_flow",
+                "gexdex_snapshot",
+                "market_confluence"
+            )
 
         all_success = all(
             full_status_map[p]["status"] == "SUCCESS" for p in order if full_status_map[p].get("is_active", True)
@@ -161,10 +167,10 @@ def trigger_pipeline_run(
     Supports asynchronous non-blocking background dispatch.
     """
     try:
-        if req.pipeline_name in ("gexdex_snapshot", "market_confluence") and not req.dry_run:
+        if req.pipeline_name == "economic_events" and not req.dry_run:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Pipeline '{req.pipeline_name}' is currently INACTIVE. Only Quant Levels and Options Flow are active.",
+                detail=f"Pipeline '{req.pipeline_name}' is currently INACTIVE.",
             )
 
         config = load_config()

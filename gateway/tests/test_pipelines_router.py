@@ -122,10 +122,27 @@ def test_trigger_pipeline_run_background_dispatch(client, auth_headers):
 def test_trigger_pipeline_run_inactive_rejected(client, auth_headers):
     response = client.post(
         "/api/pipelines/run",
-        json={"pipeline_name": "gexdex_snapshot", "dry_run": False},
+        json={"pipeline_name": "economic_events", "dry_run": False},
         headers=auth_headers,
     )
     assert response.status_code == 400
     data = response.json()
     assert "INACTIVE" in data["detail"]
+
+
+def test_trigger_pipeline_run_gexdex_snapshot_active(client, auth_headers):
+    with patch("app.routers.pipelines_router.load_config"), \
+         patch("app.routers.pipelines_router.get_postgres_engine"), \
+         patch("app.routers.pipelines_router.ensure_pipeline_runs_table"), \
+         patch("app.routers.pipelines_router.run_dag_cycle") as mock_run:
+        mock_run.return_value = {"dry_run": True, "plan": ["gexdex_snapshot"]}
+        response = client.post(
+            "/api/pipelines/run",
+            json={"pipeline_name": "gexdex_snapshot", "dry_run": True},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+
 
