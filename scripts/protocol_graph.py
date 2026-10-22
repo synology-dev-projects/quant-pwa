@@ -20,6 +20,7 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
+FLEET_ROOT = WORKSPACE_ROOT.parent if (WORKSPACE_ROOT.parent / ".agents").exists() else WORKSPACE_ROOT
 STATE_FILE = WORKSPACE_ROOT / ".protocol_state.json"
 
 
@@ -97,41 +98,46 @@ NODE_SKILL_MAP = {
 
 
 def get_node_bound_skill(node_name, workflow_type=None, task_name=None):
-    """Resolve active domain skill, runbook path, and guidance hint for a protocol node."""
+    """Resolve active domain skill, canonical absolute runbook path, and guidance hint for a protocol node."""
+    def _abs(rel_path):
+        canonical = (FLEET_ROOT / rel_path).resolve()
+        return str(canonical).replace("\\", "/")
+
     if not node_name:
-        return "general-engineer", ".agents/skills/", "Follow workspace invariants."
+        return "general-engineer", _abs(".agents/skills/"), "Follow workspace invariants."
 
     if node_name in ["PHASE_2_SURGICAL_FIX", "PHASE_3_EXECUTION"]:
         task_str = str(task_name or "").lower()
         if any(k in task_str for k in ["ui", "front", "css", "html", "style", "table", "card", "view", "component", "screen", "pwa", "dark"]):
             return (
                 "bloomberg-terminal-components",
-                ".agents/skills/bloomberg-terminal-components/SKILL.md",
+                _abs(".agents/skills/bloomberg-terminal-components/SKILL.md"),
                 "Apply dark-theme tokens (#0b0f19), 44px touch targets, zero layout overflow."
             )
         elif any(k in task_str for k in ["db", "sql", "timescale", "hypertable", "query", "oracle", "database", "analytics", "snapshot"]):
             return (
                 "timescale-options-analytics",
-                ".agents/skills/timescale-options-analytics/SKILL.md",
+                _abs(".agents/skills/timescale-options-analytics/SKILL.md"),
                 "Single-scan CTEs, hypertable chunk constraints, explicit date casting."
             )
         elif any(k in task_str for k in ["sse", "stream", "fastapi", "api", "endpoint", "route", "gateway", "backend"]):
             return (
                 "fastapi-sse-streaming",
-                ".agents/skills/fastapi-sse-streaming/SKILL.md",
+                _abs(".agents/skills/fastapi-sse-streaming/SKILL.md"),
                 "FastAPI StreamingResponse, getReader() SSE client loop, keep-alive ping."
             )
         else:
             return (
                 "domain-router (bloomberg-ui | timescale-opt | fastapi-sse)",
-                ".agents/skills/",
+                _abs(".agents/skills/"),
                 "Follow domain runbook: UI (bloomberg-terminal-components), DB (timescale-options-analytics), or Streaming (fastapi-sse-streaming)."
             )
 
     meta = NODE_SKILL_MAP.get(node_name)
     if meta:
-        return meta.get("skill", "general-engineer"), meta.get("path", ".agents/skills/"), meta.get("hint", "")
-    return "general-engineer", ".agents/skills/", "Adhere to repository invariants."
+        rel = meta.get("path", ".agents/skills/")
+        return meta.get("skill", "general-engineer"), _abs(rel), meta.get("hint", "")
+    return "general-engineer", _abs(".agents/skills/"), "Adhere to repository invariants."
 
 
 def cmd_start(args):
@@ -361,6 +367,7 @@ def cmd_status(args):
     else:
         print(f"  QUANT PROTOCOL STATE GRAPH DASHBOARD ({state['workflow_id']})")
         print(f"Workflow Type:    {state.get('workflow_type', '').upper()}")
+        print(f"Execution Tier:   {state.get('execution_tier', 'S')}")
         print(f"Task Name:        {state.get('task_name', '')}")
         print(f"Active Node:      {state.get('active_node', '')}")
         print(f"Bound Skill:      {skill_name} ({skill_path})")
@@ -384,15 +391,18 @@ def cmd_plan_approve(args):
         print("[ERROR] No active workflow to approve.", file=sys.stderr)
         sys.exit(1)
 
+    tier = getattr(args, "tier", None) or "S"
+    tier = tier.upper()
+    state["execution_tier"] = tier
     state["guards"]["plan_approved"] = True
     if state["workflow_type"] == "bug":
         state["active_node"] = "PHASE_1_RED_GATE"
     elif state["workflow_type"] == "feature":
         state["active_node"] = "PHASE_2_SEQUENCING"
 
-    append_audit(state, "PLAN_APPROVED", "User/Director approved implementation plan")
+    append_audit(state, "PLAN_APPROVED", f"User approved plan under Execution Tier {tier}")
     save_state(state)
-    print(f"[OK] Plan Approved. Graph advanced to node: {state['active_node']}.")
+    print(f"[OK] Plan Approved (Execution Tier: {tier}). Graph advanced to node: {state['active_node']}.")
     skill_name, skill_path, skill_hint = get_node_bound_skill(state['active_node'], state['workflow_type'], state['task_name'])
     print(f"   [ACTIVE SKILL] {skill_name} ({skill_path}): {skill_hint}")
 
@@ -789,7 +799,8 @@ def main():
     subparsers.add_parser("resolve-defect", help="Resolve active nested defect / dealbreaker and resume parent workflow")
     subparsers.add_parser("cancel-bug", help="Cancel active staging defect and resume parent workflow")
     subparsers.add_parser("status")
-    subparsers.add_parser("plan-approve")
+    p_app = subparsers.add_parser("plan-approve")
+    p_app.add_argument("--tier", choices=["S", "M", "L", "s", "m", "l"], default="S", help="Execution Tier (S: Solo, M: Domain Crew, L: Full Fleet)")
 
     p_red = subparsers.add_parser("red")
     p_red.add_argument("--test", required=True, help="Path to reproduction test file")
