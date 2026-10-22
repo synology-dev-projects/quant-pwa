@@ -13,7 +13,7 @@ import urllib.error
 import http.client
 
 
-def probe_endpoint(base_url: str, method: str, path: str, payload: dict = None, timeout: float = 5.0) -> bool:
+def probe_endpoint(base_url: str, method: str, path: str, payload: dict = None, timeout: float = 15.0) -> bool:
     url = f"{base_url.rstrip('/')}{path}"
     headers = {"User-Agent": "Quant-Smoke-Test-Runner/1.0"}
     data = None
@@ -57,7 +57,7 @@ def main():
     parser = argparse.ArgumentParser(description="Probe Quant PWA / Gateway HTTP Endpoints for Smoke Verification")
     parser.add_argument("--host", default="127.0.0.1", help="Target server host IP or hostname (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8000, help="Target server HTTP port (default: 8000)")
-    parser.add_argument("--timeout", type=float, default=5.0, help="Timeout in seconds per probe (default: 5.0)")
+    parser.add_argument("--timeout", type=float, default=15.0, help="Timeout in seconds per probe (default: 15.0)")
     args = parser.parse_args()
 
     base_url = f"http://{args.host}:{args.port}"

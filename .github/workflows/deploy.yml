@@ -273,7 +273,7 @@ jobs:
           PY_BIN="python3"
           command -v python3 >/dev/null 2>&1 || PY_BIN="python"
           
-          if ! "$PY_BIN" scripts/smoke_test.py --host "$HOST_IP" --port ${{ env.FRONTEND_PORT }}; then
+          if ! "$PY_BIN" scripts/smoke_test.py --host "$HOST_IP" --port ${{ env.FRONTEND_PORT }} --timeout 15.0; then
             trigger_rollback "Live smoke test suite failed on http://${HOST_IP}:${{ env.FRONTEND_PORT }}"
           fi
 

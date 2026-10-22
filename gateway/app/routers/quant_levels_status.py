@@ -409,9 +409,9 @@ async def get_quant_levels_dates(ticker: str = "SPX"):
         if df.empty:
             return []
         dates = [
-            str(row["d"]).split()[0]
+            str(row["d"] if "d" in row else row["D"]).split()[0]
             for _, row in df.iterrows()
-            if pd_not_na(row["d"])
+            if pd_not_na(row.get("d") if "d" in row else row.get("D"))
         ]
         return dates
     except Exception as ex:
@@ -1149,43 +1149,46 @@ async def _get_candles_bars(target_date: date) -> List[CandlestickBar]:
         "Accept": "application/json"
     }
     bars: List[CandlestickBar] = []
-    async with httpx.AsyncClient(timeout=6.0) as client:
-        resp = await client.get(url, headers=headers)
-        if resp.status_code == 200:
-            data = resp.json()
-            results = data.get("chart", {}).get("result", [])
-            if results:
-                res0 = results[0]
-                timestamps = res0.get("timestamp", [])
-                indicators = res0.get("indicators", {}).get("quote", [{}])[0]
-                opens = indicators.get("open", [])
-                highs = indicators.get("high", [])
-                lows = indicators.get("low", [])
-                closes = indicators.get("close", [])
-                volumes = indicators.get("volume", [])
+    try:
+        async with httpx.AsyncClient(timeout=3.5) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data.get("chart", {}).get("result", [])
+                if results:
+                    res0 = results[0]
+                    timestamps = res0.get("timestamp", [])
+                    indicators = res0.get("indicators", {}).get("quote", [{}])[0]
+                    opens = indicators.get("open", [])
+                    highs = indicators.get("high", [])
+                    lows = indicators.get("low", [])
+                    closes = indicators.get("close", [])
+                    volumes = indicators.get("volume", [])
 
-                for i, ts in enumerate(timestamps):
-                    if i >= len(opens) or i >= len(highs) or i >= len(lows) or i >= len(closes):
-                        break
-                    o, h, l, c = opens[i], highs[i], lows[i], closes[i]
-                    if o is None or h is None or l is None or c is None:
-                        continue
-                    bar_dt = datetime.fromtimestamp(ts, eastern)
-                    if bar_dt.date() != target_date:
-                        continue
-                    bar_time = bar_dt.time()
-                    if bar_time < time(9, 30) or bar_time > time(16, 15):
-                        continue
-                    vol = int(volumes[i]) if (i < len(volumes) and volumes[i] is not None) else 0
-                    bars.append(CandlestickBar(
-                        timestamp=ts,
-                        datetime=bar_dt.strftime("%H:%M"),
-                        open=round(float(o), 2),
-                        high=round(float(h), 2),
-                        low=round(float(l), 2),
-                        close=round(float(c), 2),
-                        volume=vol
-                    ))
+                    for i, ts in enumerate(timestamps):
+                        if i >= len(opens) or i >= len(highs) or i >= len(lows) or i >= len(closes):
+                            break
+                        o, h, l, c = opens[i], highs[i], lows[i], closes[i]
+                        if o is None or h is None or l is None or c is None:
+                            continue
+                        bar_dt = datetime.fromtimestamp(ts, eastern)
+                        if bar_dt.date() != target_date:
+                            continue
+                        bar_time = bar_dt.time()
+                        if bar_time < time(9, 30) or bar_time > time(16, 15):
+                            continue
+                        vol = int(volumes[i]) if (i < len(volumes) and volumes[i] is not None) else 0
+                        bars.append(CandlestickBar(
+                            timestamp=ts,
+                            datetime=bar_dt.strftime("%H:%M"),
+                            open=round(float(o), 2),
+                            high=round(float(h), 2),
+                            low=round(float(l), 2),
+                            close=round(float(c), 2),
+                            volume=vol
+                        ))
+    except (httpx.TimeoutException, httpx.RequestError) as ex:
+        logger.warning(f"Timeout or request error fetching Yahoo Finance candles for {target_str}: {ex}")
 
     _CANDLES_CACHE[cache_key] = (time_module.time(), bars)
     return bars
