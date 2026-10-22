@@ -200,7 +200,20 @@ jobs:
           docker tag "quant-frontend-${{ env.CONTAINER_PREFIX }}:latest" "quant-frontend-${{ env.CONTAINER_PREFIX }}:rollback" 2>/dev/null || true
 
           echo "🏗️ Building Docker images..."
-          docker compose build
+          BUILD_SUCCESS=false
+          for i in 1 2 3; do
+            echo "🏗️ Building Docker images (attempt $i/3)..."
+            if docker compose build; then
+              BUILD_SUCCESS=true
+              break
+            fi
+            echo "⚠️ Docker build attempt $i failed (likely transient DNS/network timeout). Retrying in 5s..."
+            sleep 5
+          done
+          if [ "$BUILD_SUCCESS" != true ]; then
+            echo "❌ Docker compose build failed after 3 attempts."
+            exit 1
+          fi
           
           echo "🧪 Running Containerized Gateway Pytest Gate..."
           docker compose run --rm quant-gateway pytest tests/ -v
