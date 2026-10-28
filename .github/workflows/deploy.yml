@@ -199,6 +199,11 @@ jobs:
           docker tag "quant-gateway-${{ env.CONTAINER_PREFIX }}:latest" "quant-gateway-${{ env.CONTAINER_PREFIX }}:rollback" 2>/dev/null || true
           docker tag "quant-frontend-${{ env.CONTAINER_PREFIX }}:latest" "quant-frontend-${{ env.CONTAINER_PREFIX }}:rollback" 2>/dev/null || true
 
+          if [ "${{ github.ref_name }}" == "master" ]; then
+            echo "🐳 Pulling latest Cloudflare Tunnel image for production..."
+            docker pull cloudflare/cloudflared:latest || true
+          fi
+
           echo "🏗️ Building Docker images..."
           BUILD_SUCCESS=false
           for i in 1 2 3; do
