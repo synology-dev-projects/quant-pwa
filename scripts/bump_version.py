@@ -17,6 +17,7 @@ import json
 import argparse
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
@@ -111,7 +112,27 @@ def increment_patch_version(current: str) -> str:
     if not match:
         raise ValueError(f"Cannot auto-increment non-semver version: '{current}'")
     prefix, major, minor, patch = match.groups()
-    return f"{prefix or 'v'}{major}.{minor}.{int(patch) + 1}"
+    maj_int, min_int, patch_int = int(major), int(minor), int(patch)
+
+    patch_int += 1
+    if patch_int >= 10:
+        patch_int = 0
+        min_int += 1
+        if min_int >= 10:
+            min_int = 0
+            maj_int += 1
+
+    return f"{prefix or 'v'}{maj_int}.{min_int}.{patch_int}"
+
+
+def get_next_build_number(current_build: str, now_dt: Optional[datetime] = None) -> str:
+    now = now_dt or datetime.now(timezone.utc)
+    today_prefix = now.strftime("%Y-%m-%d")
+    match = re.match(rf"^{re.escape(today_prefix)}-(\d+)$", current_build.strip())
+    if match:
+        seq = int(match.group(1)) + 1
+        return f"{today_prefix}-{seq:02d}"
+    return f"{today_prefix}-01"
 
 
 def update_all_files(target_version: str) -> None:
@@ -127,6 +148,8 @@ def update_all_files(target_version: str) -> None:
     except Exception:
         json_obj = {}
     json_obj["version"] = target_version
+    current_build = str(json_obj.get("build", ""))
+    json_obj["build"] = get_next_build_number(current_build)
     json_obj["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     new_json_str = json.dumps(json_obj, indent=2) + "\n"
 
