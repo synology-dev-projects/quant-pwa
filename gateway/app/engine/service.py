@@ -915,8 +915,24 @@ def get_ibkr_strike_distribution(
                 df = pd.DataFrame(rows)
                 all_stks = sorted(df["strike"].unique())
 
+                is_cboe_fallback = False
                 if cboe_spot <= 0.0:
-                    cboe_spot = float(spot_hint or all_stks[len(all_stks) // 2])
+                    if spot_hint and float(spot_hint) > 0.0:
+                        cboe_spot = float(spot_hint)
+                    else:
+                        te_cached = _RAW_CACHE.get(f"{symbol}_50_25") or _RAW_CACHE.get(f"{symbol}_{max_dte}_{strike_range}")
+                        if te_cached and isinstance(te_cached, tuple) and len(te_cached) == 2:
+                            raw_dict = te_cached[1]
+                            if isinstance(raw_dict, dict) and raw_dict.get("spot"):
+                                try:
+                                    cboe_spot = float(raw_dict["spot"])
+                                except (TypeError, ValueError):
+                                    pass
+
+                if cboe_spot <= 0.0:
+                    logger.warning(f"Could not resolve authentic spot price for {symbol}; falling back to median strike.")
+                    cboe_spot = float(all_stks[len(all_stks) // 2])
+                    is_cboe_fallback = True
 
                 # Centered window of strikes around spot price
                 closest_idx = min(range(len(all_stks)), key=lambda i: abs(all_stks[i] - cboe_spot))
@@ -1024,7 +1040,8 @@ def get_ibkr_strike_distribution(
                     net_dex=round(net_dex_tot, 2),
                     expirations=sorted(list(expirations_set))[:11],
                     strikes=sorted(strike_details, key=lambda s: s.strike),
-                    updated_at=now_iso
+                    updated_at=now_iso,
+                    is_fallback=is_cboe_fallback
                 )
                 _IBKR_STRIKE_CACHE[cache_key] = (now_ts, dist_response)
                 return dist_response
