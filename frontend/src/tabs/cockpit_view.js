@@ -12,6 +12,7 @@ export class CockpitView {
     this.cockpitData = null;
     this.activeFilter = 'all'; // 'all' | 'whales' | 'calls' | 'puts' | 'unusual'
     this.chartMode = (typeof localStorage !== 'undefined' && localStorage.getItem('quant_cockpit_chart_mode')) || 'both'; // 'both' | 'gex' | 'dex'
+    this.activeDataSource = (typeof localStorage !== 'undefined' && localStorage.getItem('quant_cockpit_source_mode')) || 'tradingedge'; // 'tradingedge' | 'ibkr'
     this.activeAbortController = null;
     this.quantChartInstance = null;
     this.allFlowPrints = [];
@@ -91,6 +92,11 @@ export class CockpitView {
                 <h2 class="panel-title">Interactive Options Exposure</h2>
               </div>
               <div class="chart-controls-group">
+                <!-- Source Toggle: TradingEdge vs IBKR -->
+                <div class="source-toggle" id="sourceToggle">
+                  <button type="button" class="toggle-btn ${this.activeDataSource === 'tradingedge' ? 'active' : ''}" data-source="tradingedge">TradingEdge</button>
+                  <button type="button" class="toggle-btn ${this.activeDataSource === 'ibkr' ? 'active' : ''}" data-source="ibkr">IBKR</button>
+                </div>
                 <!-- Both | Net GEX | Net DEX Toggle Switch -->
                 <div class="gex-dex-toggle" id="gexDexToggle">
                   <button type="button" class="toggle-btn ${this.chartMode === 'both' ? 'active' : ''}" data-mode="both">Both</button>
@@ -291,6 +297,14 @@ export class CockpitView {
         return;
       }
 
+      // Source Toggle: TradingEdge vs IBKR
+      const sourceBtn = e.target.closest ? e.target.closest('#sourceToggle .toggle-btn') : null;
+      if (sourceBtn && this.container.contains(sourceBtn)) {
+        const src = sourceBtn.dataset.source;
+        this.setDataSource(src);
+        return;
+      }
+
       // Net GEX | Net DEX Toggle
       const toggleBtn = e.target.closest ? e.target.closest('#gexDexToggle .toggle-btn') : null;
       if (toggleBtn && this.container.contains(toggleBtn)) {
@@ -314,6 +328,23 @@ export class CockpitView {
         return;
       }
     });
+  }
+
+  setDataSource(source) {
+    if (!source || this.activeDataSource === source) return;
+    this.activeDataSource = source;
+    try {
+      localStorage.setItem('quant_cockpit_source_mode', source);
+    } catch (e) {}
+
+    const btns = this.container?.querySelectorAll('#sourceToggle .toggle-btn') || [];
+    btns.forEach(b => {
+      b.classList.toggle('active', b.dataset.source === source);
+    });
+
+    if (this.cockpitData) {
+      this.renderExposureChart(this.cockpitData);
+    }
   }
 
   setChartMode(mode) {
@@ -637,7 +668,10 @@ ${notableFlowMd}
   }
 
   renderExposureChart(data) {
-    const gex = data.gex || {};
+    let gex = data.gex || {};
+    if (this.activeDataSource === 'ibkr') {
+      gex = data.ibkr_gex || data.gex || {};
+    }
     const metrics = data.metrics || {};
 
     // Key levels
@@ -662,6 +696,7 @@ ${notableFlowMd}
     if (!chartSlot) return;
 
     let strikes = (gex.strikes && Array.isArray(gex.strikes)) ? gex.strikes : (data.strikes || []);
+    const sourceLabel = this.activeDataSource === 'ibkr' ? 'IBKR' : 'TradingEdge';
     const ticker = data.ticker || gex.ticker || this.currentTicker || 'QUANT';
 
     if (strikes.length === 0) {
@@ -673,7 +708,7 @@ ${notableFlowMd}
         <div class="chart-empty-state">
           <div class="empty-state-icon">📊</div>
           <h3>No Active Options Chain / Insufficient Gamma Liquidity for ${ticker}</h3>
-          <p>Real-time options open interest and dealer exposure surfaces are currently unavailable for this asset.</p>
+          <p>Real-time options open interest and dealer exposure surfaces are currently unavailable from ${sourceLabel} for this asset.</p>
           <button type="button" class="cockpit-retry-btn" id="cockpitChartRetryBtn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
             <span>Retry Feed</span>

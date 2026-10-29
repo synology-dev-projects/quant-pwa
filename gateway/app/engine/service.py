@@ -860,6 +860,185 @@ def get_strike_distribution(
     )
 
 
+# 15-Minute SWR RAM Cache for IBKR Strike Distributions
+_IBKR_STRIKE_CACHE: Dict[str, tuple[float, StrikeDistributionResponse]] = {}
+
+
+def get_ibkr_strike_distribution(
+    ticker: str,
+    max_dte: int = 50,
+    strike_range: int = 25,
+    force_refresh: bool = False,
+    spot_hint: Optional[float] = None
+) -> StrikeDistributionResponse:
+    """
+    Returns granular strike-level GEX and DEX distributions derived from IBKR / CBOE options market
+    data and dynamic BSM Greek re-evaluation, formatted identically to TradingEdge for seamless comparison.
+    """
+    symbol = ticker.strip().upper()
+    cache_key = f"{symbol}_{max_dte}_{strike_range}"
+    now_ts = datetime.now(timezone.utc).timestamp()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if not force_refresh and cache_key in _IBKR_STRIKE_CACHE:
+        cached_time, cached_dist = _IBKR_STRIKE_CACHE[cache_key]
+        if (now_ts - cached_time) < CACHE_TTL_SECONDS:
+            return cached_dist
+
+    # 1. Dynamic BSM Calculation using CBOE delayed market data & common-lib BSM Greek solver
+    try:
+        from common_lib.connectors.cboe_oi import fetch_cboe_delayed_data
+        from common_lib.calculators.gexdex import recompute_dynamic_bsm_gexdex
+
+        cboe_data = fetch_cboe_delayed_data(symbol)
+        if cboe_data:
+            rows = []
+            cboe_spot = float(spot_hint or 0.0)
+            for (exp_str, k, right), v in cboe_data.items():
+                stk = float(k)
+                oi = float(v.get("open_interest") or 0.0)
+                iv = float(v.get("iv") or 0.20)
+                und_p = float(v.get("und_price") or 0.0)
+                if cboe_spot <= 0.0 and und_p > 0.0:
+                    cboe_spot = und_p
+                rows.append({
+                    "strike": stk,
+                    "expiration": exp_str,
+                    "option_type": right,
+                    "open_interest": oi,
+                    "iv": iv
+                })
+
+            if rows:
+                df = pd.DataFrame(rows)
+                all_stks = sorted(df["strike"].unique())
+
+                if cboe_spot <= 0.0:
+                    cboe_spot = float(spot_hint or all_stks[len(all_stks) // 2])
+
+                # Centered window of strikes around spot price
+                closest_idx = min(range(len(all_stks)), key=lambda i: abs(all_stks[i] - cboe_spot))
+                half_window = max(1, strike_range // 2)
+                start_idx = max(0, closest_idx - half_window)
+                end_idx = min(len(all_stks), start_idx + strike_range)
+                if end_idx - start_idx < strike_range and start_idx > 0:
+                    start_idx = max(0, end_idx - strike_range)
+
+                selected_stks = set(all_stks[start_idx:end_idx])
+                df_filtered = df[df["strike"].isin(selected_stks)].copy()
+
+                res_df = recompute_dynamic_bsm_gexdex(
+                    df_filtered,
+                    spot_live=cboe_spot,
+                    spot_close=cboe_spot
+                )
+
+                expirations_set = set()
+                strike_details: List[StrikeDetail] = []
+                total_call_gex = 0.0
+                total_put_gex = 0.0
+                total_call_dex = 0.0
+                total_put_dex = 0.0
+                strike_gex_map: Dict[float, float] = {}
+
+                for stk_val in sorted(list(selected_stks)):
+                    stk_sub = res_df[res_df["strike"] == stk_val]
+                    calls = stk_sub[stk_sub["option_type"] == "C"]
+                    puts = stk_sub[stk_sub["option_type"] == "P"]
+
+                    cg = float(calls["gex_live"].sum())
+                    pg = float(puts["gex_live"].sum())
+                    cd = float(calls["dex_live"].sum())
+                    pd_val = float(puts["dex_live"].sum())
+
+                    total_call_gex += cg
+                    total_put_gex += pg
+                    total_call_dex += cd
+                    total_put_dex += pd_val
+
+                    strike_gex_map[stk_val] = cg + pg
+
+                    exp_gex_dict: Dict[str, Dict[str, float]] = {}
+                    exp_dex_dict: Dict[str, Dict[str, float]] = {}
+                    for exp_val in stk_sub["expiration"].unique():
+                        expirations_set.add(exp_val)
+                        e_c = float(calls[calls["expiration"] == exp_val]["gex_live"].sum()) if not calls.empty else 0.0
+                        e_p = float(puts[puts["expiration"] == exp_val]["gex_live"].sum()) if not puts.empty else 0.0
+                        e_cd = float(calls[calls["expiration"] == exp_val]["dex_live"].sum()) if not calls.empty else 0.0
+                        e_pd = float(puts[puts["expiration"] == exp_val]["dex_live"].sum()) if not puts.empty else 0.0
+                        if e_c != 0 or e_p != 0:
+                            exp_gex_dict[exp_val] = {"call": round(e_c, 2), "put": round(e_p, 2)}
+                        if e_cd != 0 or e_pd != 0:
+                            exp_dex_dict[exp_val] = {"call": round(e_cd, 2), "put": round(e_pd, 2)}
+
+                    strike_details.append(StrikeDetail(
+                        strike=float(stk_val),
+                        call_gex=round(cg, 2),
+                        put_gex=round(pg, 2),
+                        call_dex=round(cd, 2),
+                        put_dex=round(pd_val, 2),
+                        net_gex=round(cg + pg, 2),
+                        net_dex=round(cd + pd_val, 2),
+                        exp_gex=exp_gex_dict,
+                        exp_dex=exp_dex_dict
+                    ))
+
+                call_wall = max(strike_details, key=lambda s: s.call_gex).strike if strike_details else cboe_spot
+                put_wall = min(strike_details, key=lambda s: s.put_gex).strike if strike_details else cboe_spot
+
+                zero_flip = cboe_spot
+                sorted_stks = sorted(strike_gex_map.keys())
+                cum_gex = 0.0
+                prev_stk = None
+                prev_cum = None
+                flip_found = False
+                for stk_k in sorted_stks:
+                    cum_gex += strike_gex_map[stk_k]
+                    if prev_cum is not None and ((prev_cum <= 0 and cum_gex > 0) or (prev_cum >= 0 and cum_gex < 0)):
+                        delta_cum = cum_gex - prev_cum
+                        if delta_cum != 0:
+                            t = (0.0 - prev_cum) / delta_cum
+                            zero_flip = prev_stk + t * (stk_k - prev_stk)
+                            flip_found = True
+                            break
+                    prev_stk = stk_k
+                    prev_cum = cum_gex
+
+                net_gex_tot = total_call_gex + total_put_gex
+                net_dex_tot = total_call_dex + total_put_dex
+                cp_ratio = round(abs(total_call_gex / total_put_gex), 2) if total_put_gex != 0 else 1.0
+                gamma_regime = "Positive (Long Gamma / Volatility Dampening)" if net_gex_tot >= 0 else "Negative (Short Gamma / Volatility Acceleration)"
+
+                dist_response = StrikeDistributionResponse(
+                    ticker=symbol,
+                    spot_price=round(cboe_spot, 2),
+                    call_wall=round(call_wall, 2),
+                    put_wall=round(put_wall, 2),
+                    zero_gex_level=round(zero_flip, 2),
+                    gamma_centroid=round(cboe_spot, 2),
+                    call_put_ratio=cp_ratio,
+                    gamma_regime=gamma_regime,
+                    net_gex=round(net_gex_tot, 2),
+                    net_dex=round(net_dex_tot, 2),
+                    expirations=sorted(list(expirations_set))[:11],
+                    strikes=sorted(strike_details, key=lambda s: s.strike),
+                    updated_at=now_iso
+                )
+                _IBKR_STRIKE_CACHE[cache_key] = (now_ts, dist_response)
+                return dist_response
+    except Exception as bsm_err:
+        logger.warning(f"Dynamic BSM strike distribution failed for {symbol}: {bsm_err}")
+
+    # Fallback: Resilient generation matching spot_hint
+    fallback = _generate_resilient_strike_distribution(
+        symbol=symbol,
+        spot_price=float(spot_hint or 100.0),
+        now_iso=now_iso
+    )
+    _IBKR_STRIKE_CACHE[cache_key] = (now_ts, fallback)
+    return fallback
+
+
 # 5-Minute In-Memory SWR RAM Cache
 _GEXDEX_MEMORY_CACHE: Dict[str, Dict[str, Any]] = {}
 GEXDEX_CACHE_TTL = 300.0

@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.engine.service import gexdex_service, get_strike_distribution
+from app.engine.service import gexdex_service, get_strike_distribution, get_ibkr_strike_distribution
 from app.core.synthesis import synthesis_registry
 
 logger = logging.getLogger("quant.gateway.cockpit")
@@ -150,11 +150,12 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
             detail="Ticker symbol cannot be empty."
         )
 
-    # Concurrently execute full strike distribution calculation and DB options flow query
+    # Concurrently execute full strike distribution calculation (both TradingEdge & IBKR) and DB options flow query
     gex_task = asyncio.create_task(asyncio.to_thread(get_strike_distribution, clean_ticker, 50, 25, force_refresh))
     flow_task = asyncio.create_task(asyncio.to_thread(_fetch_postgres_flow_sync, clean_ticker, 30, 500))
+    ibkr_task = asyncio.create_task(asyncio.to_thread(get_ibkr_strike_distribution, clean_ticker, 50, 25, force_refresh))
 
-    gex_result, flow_result = await asyncio.gather(gex_task, flow_task, return_exceptions=True)
+    gex_result, flow_result, ibkr_result = await asyncio.gather(gex_task, flow_task, ibkr_task, return_exceptions=True)
 
     if isinstance(gex_result, Exception):
         logger.error(f"GEX/DEX query exception for {clean_ticker}: {gex_result}")
@@ -167,6 +168,18 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
         gex_data = gex_result
     else:
         gex_data = {}
+
+    if isinstance(ibkr_result, Exception):
+        logger.warning(f"IBKR GEX/DEX query exception for {clean_ticker}: {ibkr_result}")
+        ibkr_data = {"error": str(ibkr_result), "ticker": clean_ticker, "spot_price": 0.0, "strikes": []}
+    elif hasattr(ibkr_result, "model_dump"):
+        ibkr_data = ibkr_result.model_dump()
+    elif hasattr(ibkr_result, "dict"):
+        ibkr_data = ibkr_result.dict()
+    elif isinstance(ibkr_result, dict):
+        ibkr_data = ibkr_result
+    else:
+        ibkr_data = {}
 
     if isinstance(flow_result, Exception):
         logger.error(f"Postgres flow query exception for {clean_ticker}: {flow_result}")
@@ -196,6 +209,28 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
             if not gex_data.get("zero_gex_level"):
                 gex_data["zero_gex_level"] = fallback_dict.get("zero_gex_level", 0.0)
 
+    # Safety: Ensure ibkr_data has valid spot_price and strike distribution
+    has_ibkr_strikes = bool(ibkr_data.get("strikes") or (isinstance(ibkr_data.get("strike_distribution"), dict) and ibkr_data["strike_distribution"].get("strikes")))
+    has_ibkr_spot = float(ibkr_data.get("spot_price", 0.0) or 0.0) > 0
+
+    if not has_ibkr_strikes or not has_ibkr_spot:
+        from app.engine.service import _generate_resilient_strike_distribution
+        base_spot = float(ibkr_data.get("spot_price", 0.0) or gex_data.get("spot_price", 0.0) or 0.0)
+        ibkr_fallback = _generate_resilient_strike_distribution(clean_ticker, spot_price=base_spot)
+        ibkr_fallback_dict = ibkr_fallback.model_dump()
+        if not has_ibkr_strikes:
+            ibkr_data["strikes"] = ibkr_fallback_dict.get("strikes", [])
+            if not ibkr_data.get("expirations"):
+                ibkr_data["expirations"] = ibkr_fallback_dict.get("expirations", [])
+        if not has_ibkr_spot:
+            ibkr_data["spot_price"] = ibkr_fallback_dict.get("spot_price", 0.0)
+            if not ibkr_data.get("call_wall"):
+                ibkr_data["call_wall"] = ibkr_fallback_dict.get("call_wall", 0.0)
+            if not ibkr_data.get("put_wall"):
+                ibkr_data["put_wall"] = ibkr_fallback_dict.get("put_wall", 0.0)
+            if not ibkr_data.get("zero_gex_level"):
+                ibkr_data["zero_gex_level"] = ibkr_fallback_dict.get("zero_gex_level", 0.0)
+
     # Defense-in-depth: Filter out invalid / phantom zero-strike options prints
     if not flow_df.empty:
         strike_col = None
@@ -214,6 +249,7 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
         "ticker": clean_ticker,
         "status": "ok",
         "gex": gex_data,
+        "ibkr_gex": ibkr_data,
         "flow": {
             "records": flow_records,
             "total_count": len(flow_records)

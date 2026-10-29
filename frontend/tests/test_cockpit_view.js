@@ -956,6 +956,76 @@ assert(cockpitView.quantChartInstance !== null, 'QuantChart instance successfull
 assert(cockpitView.quantChartInstance.data.strikes.length === 4, `POWL has 4 strikes rendered in QuantChart (got ${cockpitView.quantChartInstance.data.strikes.length})`);
 assert(cockpitView.quantChartInstance.data.spot_price === 179.73, 'POWL QuantChart receives $179.73 spot price');
 
+// ----------------------------------------------------------------------------
+// TEST 10: Data Source Toggle (TradingEdge vs IBKR)
+// ----------------------------------------------------------------------------
+console.log('\n--- TEST 10: Data Source Toggle (TradingEdge vs IBKR) ---');
+// Mock cockpitData having distinct TradingEdge and IBKR GEX payloads
+cockpitView.cockpitData = {
+  ticker: 'NVDA',
+  spot_price: 217.50,
+  gex: {
+    ticker: 'NVDA',
+    spot_price: 217.50,
+    zero_gex_level: 214.00,
+    call_wall: 230.00,
+    put_wall: 200.00,
+    strikes: [
+      { strike: 200, call_gex: 100, put_gex: -50, call_dex: 10, put_dex: -5, net_gex: 50, net_dex: 5 },
+      { strike: 210, call_gex: 200, put_gex: -80, call_dex: 20, put_dex: -8, net_gex: 120, net_dex: 12 },
+      { strike: 220, call_gex: 300, put_gex: -100, call_dex: 30, put_dex: -10, net_gex: 200, net_dex: 20 }
+    ],
+    expirations: ['2026-11-20']
+  },
+  ibkr_gex: {
+    ticker: 'NVDA',
+    spot_price: 218.00,
+    zero_gex_level: 215.50,
+    call_wall: 235.00,
+    put_wall: 205.00,
+    strikes: [
+      { strike: 205, call_gex: 120, put_gex: -60, call_dex: 12, put_dex: -6, net_gex: 60, net_dex: 6 },
+      { strike: 215, call_gex: 250, put_gex: -90, call_dex: 25, put_dex: -9, net_gex: 160, net_dex: 16 },
+      { strike: 225, call_gex: 350, put_gex: -120, call_dex: 35, put_dex: -12, net_gex: 230, net_dex: 23 }
+    ],
+    expirations: ['2026-11-20']
+  }
+};
+
+const sourceToggle = rootContainer.querySelector('#sourceToggle');
+assert(sourceToggle !== null, 'Source toggle container mounted in chart header');
+
+const teSourceBtn = sourceToggle.querySelector('.toggle-btn[data-source="tradingedge"]');
+const ibkrSourceBtn = sourceToggle.querySelector('.toggle-btn[data-source="ibkr"]');
+assert(teSourceBtn !== null && ibkrSourceBtn !== null, 'Both TradingEdge and IBKR toggle buttons exist');
+
+// Reset to TradingEdge
+cockpitView.renderExposureChart(cockpitView.cockpitData);
+cockpitView.setDataSource('tradingedge');
+assert(cockpitView.activeDataSource === 'tradingedge', 'activeDataSource is tradingedge');
+assert(teSourceBtn.classList.contains('active'), 'TradingEdge button is active');
+assert(!ibkrSourceBtn.classList.contains('active'), 'IBKR button is not active');
+assert(klSpot.textContent === '$217.50', `TradingEdge spot price matches ($217.50, got ${klSpot.textContent})`);
+assert(klCall.textContent === '$230.00', `TradingEdge call wall matches ($230.00, got ${klCall.textContent})`);
+assert(klPut.textContent === '$200.00', `TradingEdge put wall matches ($200.00, got ${klPut.textContent})`);
+assert(cockpitView.quantChartInstance.data.strikes[0].strike === 200, 'TradingEdge strikes mounted');
+
+// Click IBKR button
+ibkrSourceBtn.click();
+assert(cockpitView.activeDataSource === 'ibkr', 'activeDataSource transitioned to ibkr');
+assert(ibkrSourceBtn.classList.contains('active'), 'IBKR button has active class');
+assert(!teSourceBtn.classList.contains('active'), 'TradingEdge button lost active class');
+assert(klSpot.textContent === '$218.00', `IBKR spot price matches ($218.00, got ${klSpot.textContent})`);
+assert(klCall.textContent === '$235.00', `IBKR call wall matches ($235.00, got ${klCall.textContent})`);
+assert(klPut.textContent === '$205.00', `IBKR put wall matches ($205.00, got ${klPut.textContent})`);
+assert(cockpitView.quantChartInstance.data.strikes[0].strike === 205, 'IBKR strikes mounted in QuantChart');
+
+// Toggle back to TradingEdge
+teSourceBtn.click();
+assert(cockpitView.activeDataSource === 'tradingedge', 'activeDataSource reverted to tradingedge');
+assert(teSourceBtn.classList.contains('active'), 'TradingEdge button is active again');
+assert(klCall.textContent === '$230.00', 'Key levels reverted to TradingEdge values');
+
 // ============================================================================
 // Summary & Exit
 // ============================================================================
