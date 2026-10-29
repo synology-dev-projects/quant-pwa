@@ -1,777 +1,793 @@
-/**
- * QuantChart - High Performance HTML5 Canvas Options Exposure Chart
- * Pixel-perfect implementation matching institutional double-sided stacked GEX & DEX charts.
- *
- * Layout:
- * - Dual Panels: GEX (Left) & DEX (Right)
- * - Double-sided X-axis centered at 0:
- *   - CALLS on Left (stacked bars extending LEFT from 0)
- *   - PUTS on Right (stacked bars extending RIGHT from 0)
- * - Stacked by Expiration Date using vivid color palette
- * - Horizontal Key Level Lines across both panels:
- *   - Call Wall (Cyan dashed #00f5d4)
- *   - Spot Price (Blue dashed #3a86ff)
- *   - Put Wall (Magenta dashed #ff006e)
- * - Interactive crosshair and touch/mouse inspection tooltips
- */
-
-const PALETTE = [
-  '#d90429', // 0: Crimson Red
-  '#ef233c', // 1: Red
-  '#f77f00', // 2: Vibrant Orange
-  '#fcbf49', // 3: Amber Yellow
-  '#e0a96d', // 4: Tan / Sand
-  '#1d3557', // 5: Navy Blue
-  '#457b9d', // 6: Steel Blue
-  '#3a86ff', // 7: Bright Blue
-  '#2a9d8f', // 8: Teal
-  '#a8dadc'  // 9: Ice Blue
-];
-
-export class QuantChart {
-  constructor(container, data, options = {}) {
-    this.container = container;
-    this.data = data;
-    this.options = options;
-    this.mode = options.mode || 'both'; // 'both' | 'gex' | 'dex'
-    this.canvas = null;
-    this.ctx = null;
-    this.hoveredStrike = null;
-    this.init();
-  }
-
-  setMode(mode) {
-    if (!mode || this.mode === mode) return;
-    this.mode = mode;
-    this.updateHeaderTitle();
-    requestAnimationFrame(() => this.draw());
-  }
-
-  updateHeaderTitle() {
-    const titleEl = this.wrapper?.querySelector('.chart-main-title');
-    if (!titleEl) return;
-    const ticker = this.data?.ticker || 'QUANT';
-    if (this.mode === 'gex') {
-      titleEl.textContent = `${ticker} Gamma Exposure (GEX)`;
-    } else if (this.mode === 'dex') {
-      titleEl.textContent = `${ticker} Delta Exposure (DEX)`;
-    } else {
-      titleEl.textContent = `${ticker} GEX DEX Chart`;
-    }
-  }
-
-  init() {
-    if (!this.data || !this.data.strikes || this.data.strikes.length === 0) {
-      this.renderFallback();
-      return;
-    }
-
-    this.wrapper = document.createElement('div');
-    this.wrapper.className = 'quant-chart-card';
-
-    // 1. Top Badges & Title Bar
-    const spot = this.data.spot_price || 0;
-    const callWall = this.data.call_wall || 0;
-    const putWall = this.data.put_wall || 0;
-    let cpRatio = Number(this.data.call_put_ratio || 0);
-
-    // Fallback: derive Call/Put ratio dynamically from strikes if omitted or 0
-    if (cpRatio <= 0 && Array.isArray(this.data.strikes) && this.data.strikes.length > 0) {
-      let callGexSum = 0;
-      let putGexSum = 0;
-      for (const s of this.data.strikes) {
-        callGexSum += Math.max(0, Number(s.call_gex || 0));
-        putGexSum += Math.abs(Math.min(0, Number(s.put_gex || 0)));
-      }
-      if (putGexSum > 0) {
-        cpRatio = callGexSum / putGexSum;
-      } else if (callGexSum > 0) {
-        cpRatio = 1.0;
-      }
-    }
-
-    const ticker = this.data.ticker || 'QUANT';
-
-    let initialTitle = `${ticker} GEX DEX Chart`;
-    if (this.mode === 'gex') initialTitle = `${ticker} Gamma Exposure (GEX)`;
-    else if (this.mode === 'dex') initialTitle = `${ticker} Delta Exposure (DEX)`;
-
-    const header = document.createElement('div');
-    header.className = 'chart-card-header';
-    header.innerHTML = `
-      <div class="chart-macro-grid">
-        <div class="macro-box spot-box">
-          <span class="macro-lbl">Spot Price</span>
-          <span class="macro-val">$${spot.toFixed(2)}</span>
-        </div>
-        <div class="macro-center">
-          <div class="macro-box cp-box">
-            <span class="macro-lbl">Call/Put Ratio</span>
-            <span class="macro-val">${cpRatio.toFixed(2)}</span>
-          </div>
-          <div class="chart-main-title">${initialTitle}</div>
-        </div>
-        <div class="macro-box summary-box">
-          <div>Spot: <strong>$${spot.toFixed(2)}</strong></div>
-          <div style="color:#00f5d4">Call Wall: <strong>$${callWall.toFixed(2)}</strong></div>
-          <div style="color:#ff006e">Put Wall: <strong>$${putWall.toFixed(2)}</strong></div>
-        </div>
-        <button class="expand-btn" title="Expand Fullscreen">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <polyline points="9 21 3 21 3 15"></polyline>
-            <line x1="21" y1="3" x2="14" y2="10"></line>
-            <line x1="3" y1="21" x2="10" y2="14"></line>
-          </svg>
-        </button>
-      </div>
-    `;
-
-    this.wrapper.appendChild(header);
-
-    // 2. Canvas Container
-    this.canvasContainer = document.createElement('div');
-    this.canvasContainer.className = 'chart-canvas-container';
-
-    this.canvas = document.createElement('canvas');
-    this.canvas.className = 'quant-canvas';
-    this.canvasContainer.appendChild(this.canvas);
-
-    // Floating Tooltip
-    this.tooltip = document.createElement('div');
-    this.tooltip.className = 'chart-tooltip';
-    this.tooltip.style.display = 'none';
-    this.canvasContainer.appendChild(this.tooltip);
-
-    this.wrapper.appendChild(this.canvasContainer);
-
-    // 3. Expirations Legend
-    const expirations = (Array.isArray(this.data.expirations) && this.data.expirations.length > 0)
-      ? this.data.expirations
-      : (this.data.strikes?.[0]?.exp_gex ? Object.keys(this.data.strikes[0].exp_gex) : []);
-    if (expirations.length > 0) {
-      const legend = document.createElement('div');
-      legend.className = 'chart-legend';
-      legend.innerHTML = `<span class="legend-title">Expiries:</span>`;
-      expirations.slice(0, 10).forEach((exp, idx) => {
-        const color = PALETTE[idx % PALETTE.length];
-        const item = document.createElement('span');
-        item.className = 'legend-item';
-        item.innerHTML = `<span class="legend-dot" style="background:${color}"></span>${exp}`;
-        legend.appendChild(item);
-      });
-      this.wrapper.appendChild(legend);
-    }
-
-    this.container.appendChild(this.wrapper);
-    this.ctx = this.canvas.getContext('2d');
-
-    this.bindEvents();
-
-    // Instant initial draw on next animation frame after DOM layout
-    requestAnimationFrame(() => this.draw());
-
-    // Continuous auto-redraw whenever container geometry changes
-    if (typeof ResizeObserver !== 'undefined') {
-      this.resizeObserver = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          if (entry.contentRect.width > 0) {
-            this.draw();
-          }
-        }
-      });
-      this.resizeObserver.observe(this.canvasContainer);
-    } else {
-      this._onWindowResize = () => this.draw();
-      window.addEventListener('resize', this._onWindowResize);
-    }
-  }
-
-  destroy() {
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-    }
-    if (this._onWindowResize) {
-      window.removeEventListener('resize', this._onWindowResize);
-      this._onWindowResize = null;
-    }
-    if (this.canvas) {
-      if (this._onMove) {
-        this.canvas.removeEventListener?.('mousemove', this._onMove);
-        this.canvas.removeEventListener?.('touchstart', this._onMove);
-      }
-      if (this._onLeave) {
-        this.canvas.removeEventListener?.('mouseleave', this._onLeave);
-        this.canvas.removeEventListener?.('touchend', this._onLeave);
-      }
-    }
-    const expandBtn = this.wrapper?.querySelector('.expand-btn');
-    if (expandBtn && this._onExpandClick) {
-      expandBtn.removeEventListener?.('click', this._onExpandClick);
-    }
-    if (this.ctx && this.canvas) {
-      try {
-        this.ctx.clearRect(0, 0, this.canvas.width || 0, this.canvas.height || 0);
-      } catch (e) {}
-    }
-    this.canvas = null;
-    this.ctx = null;
-  }
-
-  renderFallback() {
-    const ticker = this.data?.ticker || 'QUANT';
-    this.container.innerHTML = `
-      <div class="quant-chart-card empty">
-        <div class="chart-ticker-badge">${ticker} EXPOSURE</div>
-        <p>No Active Options Chain for ${ticker}</p>
-      </div>
-    `;
-  }
-
-  bindEvents() {
-    this._onExpandClick = () => this.toggleFullscreen();
-    const expandBtn = this.wrapper?.querySelector('.expand-btn');
-    if (expandBtn) {
-      expandBtn.addEventListener('click', this._onExpandClick);
-    }
-
-    this._onMove = (e) => {
-      if (!this.canvas) return;
-      const rect = this.canvas.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
-      this.handleHover(x, y);
-    };
-
-    this._onLeave = () => {
-      this.hoveredStrike = null;
-      if (this.tooltip) this.tooltip.style.display = 'none';
-      this.draw();
-    };
-
-    if (this.canvas) {
-      this.canvas.addEventListener('mousemove', this._onMove);
-      this.canvas.addEventListener('mouseleave', this._onLeave);
-      this.canvas.addEventListener('touchstart', this._onMove, { passive: true });
-      this.canvas.addEventListener('touchend', this._onLeave);
-    }
-  }
-
-  toggleFullscreen() {
-    if (window.quantLightbox) {
-      const modalContent = document.createElement('div');
-      modalContent.className = 'modal-chart-wrapper';
-      new QuantChart(modalContent, this.data, { mode: this.mode });
-      window.quantLightbox.openCustom(modalContent);
-    }
-  }
-
-  handleHover(x, y) {
-    if (!this.strikesList || this.strikesList.length === 0) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const canvasH = this.canvas.height / dpr;
-    const paddingTop = 45;
-    const paddingBottom = 40;
-    const chartH = canvasH - paddingTop - paddingBottom;
-
-    const ratio = (y - paddingTop) / chartH;
-    const clampedRatio = Math.max(0, Math.min(1, ratio));
-
-    const strikeIdx = Math.round(clampedRatio * (this.strikesList.length - 1));
-    const strikeData = this.strikesList[this.strikesList.length - 1 - strikeIdx];
-
-    if (!strikeData) return;
-
-    this.hoveredStrike = strikeData.strike;
-    this.draw();
-
-    // Render Detailed Tooltip
-    const spot = this.data.spot_price || 0;
-    const diffPct = spot > 0 ? (((strikeData.strike - spot) / spot) * 100).toFixed(1) : 0;
-    const sign = diffPct > 0 ? '+' : '';
-    const mode = this.mode || 'both';
-
-    let expRowsHtml = '';
-    const expirations = this.data.expirations || [];
-    const expMap = mode === 'dex' ? strikeData.exp_dex : strikeData.exp_gex;
-
-    if (expMap && Object.keys(expMap).length > 0) {
-      expRowsHtml = `<div class="tt-exp-breakdown">`;
-      expirations.forEach((exp, idx) => {
-        const info = expMap[exp];
-        if (info && (info.call > 0 || info.put > 0)) {
-          const color = PALETTE[idx % PALETTE.length];
-          expRowsHtml += `
-            <div class="tt-exp-row">
-              <span style="color:${color}"><span class="legend-dot" style="display:inline-block;width:6px;height:6px;background:${color};border-radius:2px;margin-right:4px;vertical-align:middle;"></span>${exp}:</span>
-              <span>C: $${this.formatCurrency(info.call)} / P: $${this.formatCurrency(info.put)}</span>
-            </div>
-          `;
-        }
-      });
-      expRowsHtml += `</div>`;
-    }
-
-    let rowsHtml = '';
-    if (mode === 'both' || mode === 'gex') {
-      rowsHtml += `
-        <div class="tt-row">
-          <span style="color:#ef233c">Call GEX:</span>
-          <strong>$${this.formatCurrency(strikeData.call_gex)}</strong>
-        </div>
-        <div class="tt-row">
-          <span style="color:#2a9d8f">Put GEX:</span>
-          <strong>$${this.formatCurrency(strikeData.put_gex)}</strong>
-        </div>
-      `;
-    }
-    if (mode === 'both' || mode === 'dex') {
-      rowsHtml += `
-        <div class="tt-row">
-          <span style="color:#f77f00">Call DEX:</span>
-          <strong>$${this.formatCurrency(strikeData.call_dex)}</strong>
-        </div>
-        <div class="tt-row">
-          <span style="color:#3a86ff">Put DEX:</span>
-          <strong>$${this.formatCurrency(strikeData.put_dex)}</strong>
-        </div>
-      `;
-    }
-
-    this.tooltip.innerHTML = `
-      <div class="tt-header">
-        <strong>Strike: $${strikeData.strike.toFixed(2)}</strong>
-        <span class="tt-dist">(${sign}${diffPct}%)</span>
-      </div>
-      ${rowsHtml}
-      ${expRowsHtml}
-    `;
-
-    this.tooltip.style.display = 'block';
-    this.tooltip.style.left = `${Math.min(window.innerWidth - 220, Math.max(10, x - 100))}px`;
-    this.tooltip.style.top = `${Math.max(10, y - 80)}px`;
-  }
-
-  formatCurrency(val) {
-    const abs = Math.abs(val || 0);
-    const sign = val < 0 ? '-' : '';
-    if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(2)}B`;
-    if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}M`;
-    if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(0)}K`;
-    return `${sign}${abs.toFixed(0)}`;
-  }
-
-  _drawGexBars(ctx, s, y, barHeight, center, halfW, maxScaled, expirations) {
-    const exps = (Array.isArray(expirations) && expirations.length > 0)
-      ? expirations
-      : (s.exp_gex ? Object.keys(s.exp_gex) : []);
-
-    // 1. CALLS (Left of Center)
-    let callDrawn = false;
-    if (s.exp_gex && Object.keys(s.exp_gex).length > 0 && exps.length > 0) {
-      let curLeft = center;
-      exps.forEach((exp, expIdx) => {
-        const rawVal = s.exp_gex[exp]?.call || 0;
-        const segVal = Math.abs(rawVal);
-        if (segVal > 0) {
-          const segW = (segVal / maxScaled) * halfW;
-          ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
-          ctx.fillRect(curLeft - segW, y, segW, barHeight);
-          curLeft -= segW;
-          callDrawn = true;
-        }
-      });
-    }
-    if (!callDrawn && Math.abs(s.call_gex || 0) > 0) {
-      const w = (Math.abs(s.call_gex) / maxScaled) * halfW;
-      ctx.fillStyle = '#ef233c';
-      ctx.fillRect(center - w, y, w, barHeight);
-    }
-
-    // 2. PUTS (Right of Center)
-    let putDrawn = false;
-    if (s.exp_gex && Object.keys(s.exp_gex).length > 0 && exps.length > 0) {
-      let curRight = center;
-      exps.forEach((exp, expIdx) => {
-        const rawVal = s.exp_gex[exp]?.put || 0;
-        const segVal = Math.abs(rawVal);
-        if (segVal > 0) {
-          const segW = (segVal / maxScaled) * halfW;
-          ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
-          ctx.fillRect(curRight, y, segW, barHeight);
-          curRight += segW;
-          putDrawn = true;
-        }
-      });
-    }
-    if (!putDrawn && Math.abs(s.put_gex || 0) > 0) {
-      const w = (Math.abs(s.put_gex) / maxScaled) * halfW;
-      ctx.fillStyle = '#2a9d8f';
-      ctx.fillRect(center, y, w, barHeight);
-    }
-  }
-
-  _drawDexBars(ctx, s, y, barHeight, center, halfW, maxScaled, expirations) {
-    const exps = (Array.isArray(expirations) && expirations.length > 0)
-      ? expirations
-      : (s.exp_dex ? Object.keys(s.exp_dex) : []);
-
-    // 1. CALLS (Left of Center)
-    let callDrawn = false;
-    if (s.exp_dex && Object.keys(s.exp_dex).length > 0 && exps.length > 0) {
-      let curLeft = center;
-      exps.forEach((exp, expIdx) => {
-        const rawVal = s.exp_dex[exp]?.call || 0;
-        const segVal = Math.abs(rawVal);
-        if (segVal > 0) {
-          const segW = (segVal / maxScaled) * halfW;
-          ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
-          ctx.fillRect(curLeft - segW, y, segW, barHeight);
-          curLeft -= segW;
-          callDrawn = true;
-        }
-      });
-    }
-    if (!callDrawn && Math.abs(s.call_dex || 0) > 0) {
-      const w = (Math.abs(s.call_dex) / maxScaled) * halfW;
-      ctx.fillStyle = '#f77f00';
-      ctx.fillRect(center - w, y, w, barHeight);
-    }
-
-    // 2. PUTS (Right of Center)
-    let putDrawn = false;
-    if (s.exp_dex && Object.keys(s.exp_dex).length > 0 && exps.length > 0) {
-      let curRight = center;
-      exps.forEach((exp, expIdx) => {
-        const rawVal = s.exp_dex[exp]?.put || 0;
-        const segVal = Math.abs(rawVal);
-        if (segVal > 0) {
-          const segW = (segVal / maxScaled) * halfW;
-          ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
-          ctx.fillRect(curRight, y, segW, barHeight);
-          curRight += segW;
-          putDrawn = true;
-        }
-      });
-    }
-    if (!putDrawn && Math.abs(s.put_dex || 0) > 0) {
-      const w = (Math.abs(s.put_dex) / maxScaled) * halfW;
-      ctx.fillStyle = '#3a86ff';
-      ctx.fillRect(center, y, w, barHeight);
-    }
-  }
-
-  getYForStrike(strikeVal, paddingTop, chartH) {
-    if (!this.strikesList || this.strikesList.length === 0 || typeof strikeVal !== 'number' || isNaN(strikeVal)) {
-      return null;
-    }
-    const n = this.strikesList.length;
-    const minStrike = this.strikesList[0].strike;
-    const maxStrike = this.strikesList[n - 1].strike;
-
-    if (strikeVal < minStrike || strikeVal > maxStrike) return null;
-
-    const rowStep = chartH / n;
-
-    // Piecewise strike search to handle non-uniform strike spacing accurately
-    let k = 0;
-    while (k < n - 1 && this.strikesList[k + 1].strike <= strikeVal) {
-      k++;
-    }
-
-    let fractionalIdx = k;
-    if (k < n - 1) {
-      const s0 = this.strikesList[k].strike;
-      const s1 = this.strikesList[k + 1].strike;
-      const span = s1 - s0;
-      if (span > 0) {
-        fractionalIdx = k + (strikeVal - s0) / span;
-      }
-    }
-
-    return paddingTop + (n - 1 - fractionalIdx) * rowStep + rowStep / 2;
-  }
-
-  _drawRefLines(ctx, lefts, rights, paddingTop, chartH) {
-    const n = this.strikesList ? this.strikesList.length : 0;
-    if (n === 0) return;
-
-    const drawRefLine = (strikeVal, color, label) => {
-      const y = this.getYForStrike(strikeVal, paddingTop, chartH);
-      if (y === null) return;
-
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-
-      ctx.beginPath();
-      for (let i = 0; i < lefts.length; i++) {
-        ctx.moveTo(lefts[i], y);
-        ctx.lineTo(rights[i], y);
-      }
-      ctx.stroke();
-
-      // Label Tag on First Panel
-      ctx.fillStyle = color;
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(`${label} $${strikeVal.toFixed(2)}`, lefts[0] + 4, y - 3);
-      ctx.restore();
-    };
-
-    if (this.data.call_wall) drawRefLine(this.data.call_wall, '#00f5d4', 'CALL WALL');
-    if (this.data.spot_price) drawRefLine(this.data.spot_price, '#3a86ff', 'SPOT');
-    if (this.data.put_wall) drawRefLine(this.data.put_wall, '#ff006e', 'PUT WALL');
-  }
-
-  draw() {
-    if (!this.canvas || !this.ctx || !this.data || !this.data.strikes) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const displayW = this.canvasContainer.clientWidth || 380;
-    const displayH = Math.max(420, Math.min(560, this.data.strikes.length * 18));
-
-    this.canvas.width = displayW * dpr;
-    this.canvas.height = displayH * dpr;
-    this.canvas.style.width = `${displayW}px`;
-    this.canvas.style.height = `${displayH}px`;
-
-    const ctx = this.ctx;
-    ctx.resetTransform();
-    ctx.scale(dpr, dpr);
-
-    // Deep Dark Navy Background
-    ctx.fillStyle = '#0a0e17';
-    ctx.fillRect(0, 0, displayW, displayH);
-
-    const paddingTop = 45;
-    const paddingBottom = 40;
-    const chartH = displayH - paddingTop - paddingBottom;
-    const mode = this.mode || 'both';
-
-    // Strikes Sorting (Top = Highest Strike, Bottom = Lowest Strike)
-    this.strikesList = [...this.data.strikes].sort((a, b) => a.strike - b.strike);
-    const n = this.strikesList.length;
-    if (n === 0) return;
-
-    const expirations = (Array.isArray(this.data.expirations) && this.data.expirations.length > 0)
-      ? this.data.expirations
-      : (this.strikesList[0]?.exp_gex ? Object.keys(this.strikesList[0].exp_gex) : []);
-
-    // Calculate maximum magnitude for scaling
-    let maxGex = 1;
-    let maxDex = 1;
-    this.strikesList.forEach(s => {
-      maxGex = Math.max(maxGex, Math.abs(s.call_gex || 0), Math.abs(s.put_gex || 0));
-      maxDex = Math.max(maxDex, Math.abs(s.call_dex || 0), Math.abs(s.put_dex || 0));
-    });
-
-    const maxGexScaled = maxGex * 1.15;
-    const maxDexScaled = maxDex * 1.15;
-    const rowStep = chartH / n;
-    const barHeight = Math.max(3, rowStep * 0.65);
-
-    if (mode === 'both') {
-      // Dual-Panel Layout
-      const paddingLeft = 44;
-      const paddingRight = 14;
-      const gap = 38;
-      const usableW = displayW - paddingLeft - paddingRight - gap;
-      const panelW = usableW / 2;
-
-      const p1_left = paddingLeft;
-      const p1_right = p1_left + panelW;
-      const p1_center = p1_left + panelW / 2;
-
-      const p2_left = p1_right + gap;
-      const p2_right = p2_left + panelW;
-      const p2_center = p2_left + panelW / 2;
-
-      // Panel Backgrounds
-      ctx.fillStyle = '#0f1422';
-      ctx.fillRect(p1_left, paddingTop, panelW, chartH);
-      ctx.fillRect(p2_left, paddingTop, panelW, chartH);
-
-      // Panel Borders
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(p1_left, paddingTop, panelW, chartH);
-      ctx.strokeRect(p2_left, paddingTop, panelW, chartH);
-
-      // Subtitles
-      ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-      ctx.fillStyle = '#e2e8f0';
-      ctx.textAlign = 'center';
-      ctx.fillText('Gamma Exposure (GEX)', p1_center, displayH - 12);
-      ctx.fillText('Delta Exposure (DEX)', p2_center, displayH - 12);
-
-      // CALLS / PUTS headers
-      ctx.font = 'bold 10px sans-serif';
-      ctx.fillStyle = '#cbd5e1';
-      ctx.fillText('CALLS', p1_left + panelW * 0.25, paddingTop - 12);
-      ctx.fillText('PUTS', p1_left + panelW * 0.75, paddingTop - 12);
-      ctx.fillText('CALLS', p2_left + panelW * 0.25, paddingTop - 12);
-      ctx.fillText('PUTS', p2_left + panelW * 0.75, paddingTop - 12);
-
-      // Draw Bars
-      this.strikesList.forEach((s, idx) => {
-        const y = paddingTop + (n - 1 - idx) * rowStep + (rowStep - barHeight) / 2;
-        const centerY = y + barHeight / 2;
-
-        ctx.save();
-        ctx.strokeStyle = '#172033';
-        ctx.lineWidth = 0.5;
-        ctx.setLineDash([2, 4]);
-        ctx.beginPath();
-        ctx.moveTo(p1_left, centerY);
-        ctx.lineTo(p1_right, centerY);
-        ctx.moveTo(p2_left, centerY);
-        ctx.lineTo(p2_right, centerY);
-        ctx.stroke();
-        ctx.restore();
-
-        if (this.hoveredStrike === s.strike) {
-          ctx.fillStyle = 'rgba(58, 134, 255, 0.18)';
-          ctx.fillRect(0, y - 2, displayW, barHeight + 4);
-        }
-
-        // Panel 1: GEX
-        this._drawGexBars(ctx, s, y, barHeight, p1_center, panelW / 2, maxGexScaled, expirations);
-        // Panel 2: DEX
-        this._drawDexBars(ctx, s, y, barHeight, p2_center, panelW / 2, maxDexScaled, expirations);
-
-        // Strike labels
-        const isTick = idx % Math.max(1, Math.floor(n / 16)) === 0 || this.hoveredStrike === s.strike;
-        if (isTick) {
-          ctx.fillStyle = this.hoveredStrike === s.strike ? '#ffffff' : '#94a3b8';
-          ctx.font = this.hoveredStrike === s.strike ? 'bold 10px monospace' : '9px monospace';
-          ctx.textAlign = 'right';
-          ctx.fillText(`$${s.strike.toFixed(0)}`, paddingLeft - 5, y + barHeight - 1);
-          ctx.textAlign = 'center';
-          ctx.fillText(`$${s.strike.toFixed(0)}`, p1_right + gap / 2, y + barHeight - 1);
-        }
-      });
-
-      // Zero Axis Center Lines
-      ctx.strokeStyle = '#64748b';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(p1_center, paddingTop);
-      ctx.lineTo(p1_center, paddingTop + chartH);
-      ctx.moveTo(p2_center, paddingTop);
-      ctx.lineTo(p2_center, paddingTop + chartH);
-      ctx.stroke();
-
-      // X-Axis Symmetric Ticks
-      ctx.font = '9px monospace';
-      ctx.fillStyle = '#64748b';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${this.formatCurrency(maxGex)}`, p1_left + 15, displayH - 26);
-      ctx.fillText(`${this.formatCurrency(maxGex / 2)}`, p1_left + panelW * 0.25, displayH - 26);
-      ctx.fillText('0', p1_center, displayH - 26);
-      ctx.fillText(`${this.formatCurrency(maxGex / 2)}`, p1_left + panelW * 0.75, displayH - 26);
-      ctx.fillText(`${this.formatCurrency(maxGex)}`, p1_right - 15, displayH - 26);
-
-      ctx.fillText(`${this.formatCurrency(maxDex)}`, p2_left + 15, displayH - 26);
-      ctx.fillText(`${this.formatCurrency(maxDex / 2)}`, p2_left + panelW * 0.25, displayH - 26);
-      ctx.fillText('0', p2_center, displayH - 26);
-      ctx.fillText(`${this.formatCurrency(maxDex / 2)}`, p2_left + panelW * 0.75, displayH - 26);
-      ctx.fillText(`${this.formatCurrency(maxDex)}`, p2_right - 15, displayH - 26);
-
-      // Ref Lines across both panels
-      this._drawRefLines(ctx, [p1_left, p2_left], [p1_right, p2_right], paddingTop, chartH);
-    } else {
-      // Single Full-Width Panel Layout (GEX or DEX)
-      const paddingLeft = 48;
-      const paddingRight = 20;
-      const panelW = displayW - paddingLeft - paddingRight;
-      const p_left = paddingLeft;
-      const p_right = p_left + panelW;
-      const p_center = p_left + panelW / 2;
-      const isGex = mode === 'gex';
-      const maxScaled = isGex ? maxGexScaled : maxDexScaled;
-      const maxVal = isGex ? maxGex : maxDex;
-
-      // Panel Background & Border
-      ctx.fillStyle = '#0f1422';
-      ctx.fillRect(p_left, paddingTop, panelW, chartH);
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(p_left, paddingTop, panelW, chartH);
-
-      // Subtitle
-      ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
-      ctx.fillStyle = '#e2e8f0';
-      ctx.textAlign = 'center';
-      ctx.fillText(isGex ? 'Gamma Exposure (GEX) — Full Curve' : 'Delta Exposure (DEX) — Full Curve', p_center, displayH - 12);
-
-      // CALLS / PUTS headers
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillStyle = '#cbd5e1';
-      ctx.fillText('CALLS (Left of 0)', p_left + panelW * 0.25, paddingTop - 12);
-      ctx.fillText('PUTS (Right of 0)', p_left + panelW * 0.75, paddingTop - 12);
-
-      // Draw Bars
-      this.strikesList.forEach((s, idx) => {
-        const y = paddingTop + (n - 1 - idx) * rowStep + (rowStep - barHeight) / 2;
-        const centerY = y + barHeight / 2;
-
-        ctx.save();
-        ctx.strokeStyle = '#172033';
-        ctx.lineWidth = 0.5;
-        ctx.setLineDash([2, 4]);
-        ctx.beginPath();
-        ctx.moveTo(p_left, centerY);
-        ctx.lineTo(p_right, centerY);
-        ctx.stroke();
-        ctx.restore();
-
-        if (this.hoveredStrike === s.strike) {
-          ctx.fillStyle = 'rgba(58, 134, 255, 0.18)';
-          ctx.fillRect(0, y - 2, displayW, barHeight + 4);
-        }
-
-        if (isGex) {
-          this._drawGexBars(ctx, s, y, barHeight, p_center, panelW / 2, maxScaled, expirations);
-        } else {
-          this._drawDexBars(ctx, s, y, barHeight, p_center, panelW / 2, maxScaled, expirations);
-        }
-
-        // Strike labels on left axis
-        const isTick = idx % Math.max(1, Math.floor(n / 16)) === 0 || this.hoveredStrike === s.strike;
-        if (isTick) {
-          ctx.fillStyle = this.hoveredStrike === s.strike ? '#ffffff' : '#94a3b8';
-          ctx.font = this.hoveredStrike === s.strike ? 'bold 10px monospace' : '9px monospace';
-          ctx.textAlign = 'right';
-          ctx.fillText(`$${s.strike.toFixed(0)}`, paddingLeft - 6, y + barHeight - 1);
-        }
-      });
-
-      // Zero Axis Center Line
-      ctx.strokeStyle = '#64748b';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(p_center, paddingTop);
-      ctx.lineTo(p_center, paddingTop + chartH);
-      ctx.stroke();
-
-      // X-Axis Symmetric Ticks
-      ctx.font = '10px monospace';
-      ctx.fillStyle = '#64748b';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${this.formatCurrency(maxVal)}`, p_left + 24, displayH - 26);
-      ctx.fillText(`${this.formatCurrency(maxVal / 2)}`, p_left + panelW * 0.25, displayH - 26);
-      ctx.fillText('0', p_center, displayH - 26);
-      ctx.fillText(`${this.formatCurrency(maxVal / 2)}`, p_left + panelW * 0.75, displayH - 26);
-      ctx.fillText(`${this.formatCurrency(maxVal)}`, p_right - 24, displayH - 26);
-
-      // Ref Lines across single panel
-      this._drawRefLines(ctx, [p_left], [p_right], paddingTop, chartH);
-    }
-  }
-}
+/**
+ * QuantChart - High Performance HTML5 Canvas Options Exposure Chart
+ * Pixel-perfect implementation matching institutional double-sided stacked GEX & DEX charts.
+ *
+ * Layout:
+ * - Dual Panels: GEX (Left) & DEX (Right)
+ * - Double-sided X-axis centered at 0:
+ *   - CALLS on Left (stacked bars extending LEFT from 0)
+ *   - PUTS on Right (stacked bars extending RIGHT from 0)
+ * - Stacked by Expiration Date using vivid color palette
+ * - Horizontal Key Level Lines across both panels:
+ *   - Call Wall (Cyan dashed #00f5d4)
+ *   - Spot Price (Blue dashed #3a86ff)
+ *   - Put Wall (Magenta dashed #ff006e)
+ * - Interactive crosshair and touch/mouse inspection tooltips
+ */
+
+const PALETTE = [
+  '#d90429', // 0: Crimson Red
+  '#ef233c', // 1: Red
+  '#f77f00', // 2: Vibrant Orange
+  '#fcbf49', // 3: Amber Yellow
+  '#e0a96d', // 4: Tan / Sand
+  '#1d3557', // 5: Navy Blue
+  '#457b9d', // 6: Steel Blue
+  '#3a86ff', // 7: Bright Blue
+  '#2a9d8f', // 8: Teal
+  '#a8dadc'  // 9: Ice Blue
+];
+
+export class QuantChart {
+  constructor(container, data, options = {}) {
+    this.container = container;
+    this.data = data;
+    this.options = options;
+    this.mode = options.mode || 'both'; // 'both' | 'gex' | 'dex'
+    this.canvas = null;
+    this.ctx = null;
+    this.hoveredStrike = null;
+    this.init();
+  }
+
+  setMode(mode) {
+    if (!mode || this.mode === mode) return;
+    this.mode = mode;
+    this.updateHeaderTitle();
+    requestAnimationFrame(() => this.draw());
+  }
+
+  updateHeaderTitle() {
+    const titleEl = this.wrapper?.querySelector('.chart-main-title');
+    if (!titleEl) return;
+    const ticker = this.data?.ticker || 'QUANT';
+    if (this.mode === 'gex') {
+      titleEl.textContent = `${ticker} Gamma Exposure (GEX)`;
+    } else if (this.mode === 'dex') {
+      titleEl.textContent = `${ticker} Delta Exposure (DEX)`;
+    } else {
+      titleEl.textContent = `${ticker} GEX DEX Chart`;
+    }
+  }
+
+  init() {
+    if (!this.data || !this.data.strikes || this.data.strikes.length === 0) {
+      this.renderFallback();
+      return;
+    }
+
+    this.wrapper = document.createElement('div');
+    this.wrapper.className = 'quant-chart-card';
+
+    // 1. Top Badges & Title Bar
+    const spot = this.data.spot_price || 0;
+    const callWall = this.data.call_wall || 0;
+    const putWall = this.data.put_wall || 0;
+    let cpRatio = Number(this.data.call_put_ratio || 0);
+
+    // Fallback: derive Call/Put ratio dynamically from strikes if omitted or 0
+    if (cpRatio <= 0 && Array.isArray(this.data.strikes) && this.data.strikes.length > 0) {
+      let callGexSum = 0;
+      let putGexSum = 0;
+      for (const s of this.data.strikes) {
+        callGexSum += Math.max(0, Number(s.call_gex || 0));
+        putGexSum += Math.abs(Math.min(0, Number(s.put_gex || 0)));
+      }
+      if (putGexSum > 0) {
+        cpRatio = callGexSum / putGexSum;
+      } else if (callGexSum > 0) {
+        cpRatio = 1.0;
+      }
+    }
+
+    const ticker = this.data.ticker || 'QUANT';
+
+    let initialTitle = `${ticker} GEX DEX Chart`;
+    if (this.mode === 'gex') initialTitle = `${ticker} Gamma Exposure (GEX)`;
+    else if (this.mode === 'dex') initialTitle = `${ticker} Delta Exposure (DEX)`;
+
+    const header = document.createElement('div');
+    header.className = 'chart-card-header';
+    header.innerHTML = `
+      <div class="chart-macro-grid">
+        <div class="macro-box spot-box">
+          <span class="macro-lbl">Spot Price</span>
+          <span class="macro-val">$${spot.toFixed(2)}</span>
+        </div>
+        <div class="macro-center">
+          <div class="macro-box cp-box">
+            <span class="macro-lbl">Call/Put Ratio</span>
+            <span class="macro-val">${cpRatio.toFixed(2)}</span>
+          </div>
+          <div class="chart-main-title">${initialTitle}</div>
+        </div>
+        <div class="macro-box summary-box">
+          <div>Spot: <strong>$${spot.toFixed(2)}</strong></div>
+          <div style="color:#00f5d4">Call Wall: <strong>$${callWall.toFixed(2)}</strong></div>
+          <div style="color:#ff006e">Put Wall: <strong>$${putWall.toFixed(2)}</strong></div>
+        </div>
+        <button class="expand-btn" title="Expand Fullscreen">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+        </button>
+      </div>
+    `;
+
+    this.wrapper.appendChild(header);
+
+    // 2. Canvas Container
+    this.canvasContainer = document.createElement('div');
+    this.canvasContainer.className = 'chart-canvas-container';
+
+    this.canvas = document.createElement('canvas');
+    this.canvas.className = 'quant-canvas';
+    this.canvasContainer.appendChild(this.canvas);
+
+    // Floating Tooltip
+    this.tooltip = document.createElement('div');
+    this.tooltip.className = 'chart-tooltip';
+    this.tooltip.style.display = 'none';
+    this.canvasContainer.appendChild(this.tooltip);
+
+    this.wrapper.appendChild(this.canvasContainer);
+
+    // 3. Expirations Legend
+    const expirations = (Array.isArray(this.data.expirations) && this.data.expirations.length > 0)
+      ? this.data.expirations
+      : (this.data.strikes?.[0]?.exp_gex ? Object.keys(this.data.strikes[0].exp_gex) : []);
+    if (expirations.length > 0) {
+      const legend = document.createElement('div');
+      legend.className = 'chart-legend';
+      legend.innerHTML = `<span class="legend-title">Expiries:</span>`;
+      expirations.slice(0, 10).forEach((exp, idx) => {
+        const color = PALETTE[idx % PALETTE.length];
+        const item = document.createElement('span');
+        item.className = 'legend-item';
+        item.innerHTML = `<span class="legend-dot" style="background:${color}"></span>${exp}`;
+        legend.appendChild(item);
+      });
+      this.wrapper.appendChild(legend);
+    }
+
+    this.container.appendChild(this.wrapper);
+    this.ctx = this.canvas.getContext('2d');
+
+    this.bindEvents();
+
+    // Instant initial draw on next animation frame after DOM layout
+    requestAnimationFrame(() => this.draw());
+
+    // Continuous auto-redraw whenever container geometry changes
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0) {
+            this.draw();
+          }
+        }
+      });
+      this.resizeObserver.observe(this.canvasContainer);
+    } else {
+      this._onWindowResize = () => this.draw();
+      window.addEventListener('resize', this._onWindowResize);
+    }
+  }
+
+  destroy() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+    if (this._onWindowResize) {
+      window.removeEventListener('resize', this._onWindowResize);
+      this._onWindowResize = null;
+    }
+    if (this.canvas) {
+      if (this._onMove) {
+        this.canvas.removeEventListener?.('mousemove', this._onMove);
+        this.canvas.removeEventListener?.('touchstart', this._onMove);
+      }
+      if (this._onLeave) {
+        this.canvas.removeEventListener?.('mouseleave', this._onLeave);
+        this.canvas.removeEventListener?.('touchend', this._onLeave);
+      }
+    }
+    const expandBtn = this.wrapper?.querySelector('.expand-btn');
+    if (expandBtn && this._onExpandClick) {
+      expandBtn.removeEventListener?.('click', this._onExpandClick);
+    }
+    if (this.ctx && this.canvas) {
+      try {
+        this.ctx.clearRect(0, 0, this.canvas.width || 0, this.canvas.height || 0);
+      } catch (e) {}
+    }
+    this.canvas = null;
+    this.ctx = null;
+  }
+
+  renderFallback() {
+    const ticker = this.data?.ticker || 'QUANT';
+    this.container.innerHTML = `
+      <div class="quant-chart-card empty">
+        <div class="chart-ticker-badge">${ticker} EXPOSURE</div>
+        <p>No Active Options Chain for ${ticker}</p>
+      </div>
+    `;
+  }
+
+  bindEvents() {
+    this._onExpandClick = () => this.toggleFullscreen();
+    const expandBtn = this.wrapper?.querySelector('.expand-btn');
+    if (expandBtn) {
+      expandBtn.addEventListener('click', this._onExpandClick);
+    }
+
+    this._onMove = (e) => {
+      if (!this.canvas) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      this.handleHover(x, y);
+    };
+
+    this._onLeave = () => {
+      this.hoveredStrike = null;
+      if (this.tooltip) this.tooltip.style.display = 'none';
+      this.draw();
+    };
+
+    if (this.canvas) {
+      this.canvas.addEventListener('mousemove', this._onMove);
+      this.canvas.addEventListener('mouseleave', this._onLeave);
+      this.canvas.addEventListener('touchstart', this._onMove, { passive: true });
+      this.canvas.addEventListener('touchend', this._onLeave);
+    }
+  }
+
+  toggleFullscreen() {
+    if (window.quantLightbox) {
+      const modalContent = document.createElement('div');
+      modalContent.className = 'modal-chart-wrapper';
+      new QuantChart(modalContent, this.data, { mode: this.mode });
+      window.quantLightbox.openCustom(modalContent);
+    }
+  }
+
+  handleHover(x, y) {
+    if (!this.strikesList || this.strikesList.length === 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const canvasH = this.canvas.height / dpr;
+    const displayW = this.canvasContainer ? (this.canvasContainer.clientWidth || 380) : 380;
+    const isMobile = displayW <= 480;
+    const paddingTop = isMobile ? 24 : 45;
+    const paddingBottom = isMobile ? 32 : 40;
+    const chartH = canvasH - paddingTop - paddingBottom;
+
+    const ratio = (y - paddingTop) / chartH;
+    const clampedRatio = Math.max(0, Math.min(1, ratio));
+
+    const strikeIdx = Math.round(clampedRatio * (this.strikesList.length - 1));
+    const strikeData = this.strikesList[this.strikesList.length - 1 - strikeIdx];
+
+    if (!strikeData) return;
+
+    this.hoveredStrike = strikeData.strike;
+    this.draw();
+
+    // Render Detailed Tooltip
+    const spot = this.data.spot_price || 0;
+    const diffPct = spot > 0 ? (((strikeData.strike - spot) / spot) * 100).toFixed(1) : 0;
+    const sign = diffPct > 0 ? '+' : '';
+    const mode = this.mode || 'both';
+
+    let expRowsHtml = '';
+    const expirations = this.data.expirations || [];
+    const expMap = mode === 'dex' ? strikeData.exp_dex : strikeData.exp_gex;
+
+    if (expMap && Object.keys(expMap).length > 0) {
+      expRowsHtml = `<div class="tt-exp-breakdown">`;
+      expirations.forEach((exp, idx) => {
+        const info = expMap[exp];
+        if (info && (info.call > 0 || info.put > 0)) {
+          const color = PALETTE[idx % PALETTE.length];
+          expRowsHtml += `
+            <div class="tt-exp-row">
+              <span style="color:${color}"><span class="legend-dot" style="display:inline-block;width:6px;height:6px;background:${color};border-radius:2px;margin-right:4px;vertical-align:middle;"></span>${exp}:</span>
+              <span>C: $${this.formatCurrency(info.call)} / P: $${this.formatCurrency(info.put)}</span>
+            </div>
+          `;
+        }
+      });
+      expRowsHtml += `</div>`;
+    }
+
+    let rowsHtml = '';
+    if (mode === 'both' || mode === 'gex') {
+      rowsHtml += `
+        <div class="tt-row">
+          <span style="color:#ef233c">Call GEX:</span>
+          <strong>$${this.formatCurrency(strikeData.call_gex)}</strong>
+        </div>
+        <div class="tt-row">
+          <span style="color:#2a9d8f">Put GEX:</span>
+          <strong>$${this.formatCurrency(strikeData.put_gex)}</strong>
+        </div>
+      `;
+    }
+    if (mode === 'both' || mode === 'dex') {
+      rowsHtml += `
+        <div class="tt-row">
+          <span style="color:#f77f00">Call DEX:</span>
+          <strong>$${this.formatCurrency(strikeData.call_dex)}</strong>
+        </div>
+        <div class="tt-row">
+          <span style="color:#3a86ff">Put DEX:</span>
+          <strong>$${this.formatCurrency(strikeData.put_dex)}</strong>
+        </div>
+      `;
+    }
+
+    this.tooltip.innerHTML = `
+      <div class="tt-header">
+        <strong>Strike: $${strikeData.strike.toFixed(2)}</strong>
+        <span class="tt-dist">(${sign}${diffPct}%)</span>
+      </div>
+      ${rowsHtml}
+      ${expRowsHtml}
+    `;
+
+    this.tooltip.style.display = 'block';
+    this.tooltip.style.left = `${Math.min(window.innerWidth - 220, Math.max(10, x - 100))}px`;
+    this.tooltip.style.top = `${Math.max(10, y - 80)}px`;
+  }
+
+  formatCurrency(val) {
+    const abs = Math.abs(val || 0);
+    const sign = val < 0 ? '-' : '';
+    if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(2)}B`;
+    if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}M`;
+    if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(0)}K`;
+    return `${sign}${abs.toFixed(0)}`;
+  }
+
+  _drawGexBars(ctx, s, y, barHeight, center, halfW, maxScaled, expirations) {
+    const exps = (Array.isArray(expirations) && expirations.length > 0)
+      ? expirations
+      : (s.exp_gex ? Object.keys(s.exp_gex) : []);
+
+    // 1. CALLS (Left of Center)
+    let callDrawn = false;
+    if (s.exp_gex && Object.keys(s.exp_gex).length > 0 && exps.length > 0) {
+      let curLeft = center;
+      exps.forEach((exp, expIdx) => {
+        const rawVal = s.exp_gex[exp]?.call || 0;
+        const segVal = Math.abs(rawVal);
+        if (segVal > 0) {
+          const segW = (segVal / maxScaled) * halfW;
+          ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
+          ctx.fillRect(curLeft - segW, y, segW, barHeight);
+          curLeft -= segW;
+          callDrawn = true;
+        }
+      });
+    }
+    if (!callDrawn && Math.abs(s.call_gex || 0) > 0) {
+      const w = (Math.abs(s.call_gex) / maxScaled) * halfW;
+      ctx.fillStyle = '#ef233c';
+      ctx.fillRect(center - w, y, w, barHeight);
+    }
+
+    // 2. PUTS (Right of Center)
+    let putDrawn = false;
+    if (s.exp_gex && Object.keys(s.exp_gex).length > 0 && exps.length > 0) {
+      let curRight = center;
+      exps.forEach((exp, expIdx) => {
+        const rawVal = s.exp_gex[exp]?.put || 0;
+        const segVal = Math.abs(rawVal);
+        if (segVal > 0) {
+          const segW = (segVal / maxScaled) * halfW;
+          ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
+          ctx.fillRect(curRight, y, segW, barHeight);
+          curRight += segW;
+          putDrawn = true;
+        }
+      });
+    }
+    if (!putDrawn && Math.abs(s.put_gex || 0) > 0) {
+      const w = (Math.abs(s.put_gex) / maxScaled) * halfW;
+      ctx.fillStyle = '#2a9d8f';
+      ctx.fillRect(center, y, w, barHeight);
+    }
+  }
+
+  _drawDexBars(ctx, s, y, barHeight, center, halfW, maxScaled, expirations) {
+    const exps = (Array.isArray(expirations) && expirations.length > 0)
+      ? expirations
+      : (s.exp_dex ? Object.keys(s.exp_dex) : []);
+
+    // 1. CALLS (Left of Center)
+    let callDrawn = false;
+    if (s.exp_dex && Object.keys(s.exp_dex).length > 0 && exps.length > 0) {
+      let curLeft = center;
+      exps.forEach((exp, expIdx) => {
+        const rawVal = s.exp_dex[exp]?.call || 0;
+        const segVal = Math.abs(rawVal);
+        if (segVal > 0) {
+          const segW = (segVal / maxScaled) * halfW;
+          ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
+          ctx.fillRect(curLeft - segW, y, segW, barHeight);
+          curLeft -= segW;
+          callDrawn = true;
+        }
+      });
+    }
+    if (!callDrawn && Math.abs(s.call_dex || 0) > 0) {
+      const w = (Math.abs(s.call_dex) / maxScaled) * halfW;
+      ctx.fillStyle = '#f77f00';
+      ctx.fillRect(center - w, y, w, barHeight);
+    }
+
+    // 2. PUTS (Right of Center)
+    let putDrawn = false;
+    if (s.exp_dex && Object.keys(s.exp_dex).length > 0 && exps.length > 0) {
+      let curRight = center;
+      exps.forEach((exp, expIdx) => {
+        const rawVal = s.exp_dex[exp]?.put || 0;
+        const segVal = Math.abs(rawVal);
+        if (segVal > 0) {
+          const segW = (segVal / maxScaled) * halfW;
+          ctx.fillStyle = PALETTE[expIdx % PALETTE.length];
+          ctx.fillRect(curRight, y, segW, barHeight);
+          curRight += segW;
+          putDrawn = true;
+        }
+      });
+    }
+    if (!putDrawn && Math.abs(s.put_dex || 0) > 0) {
+      const w = (Math.abs(s.put_dex) / maxScaled) * halfW;
+      ctx.fillStyle = '#3a86ff';
+      ctx.fillRect(center, y, w, barHeight);
+    }
+  }
+
+  getYForStrike(strikeVal, paddingTop, chartH) {
+    if (!this.strikesList || this.strikesList.length === 0 || typeof strikeVal !== 'number' || isNaN(strikeVal)) {
+      return null;
+    }
+    const n = this.strikesList.length;
+    const minStrike = this.strikesList[0].strike;
+    const maxStrike = this.strikesList[n - 1].strike;
+
+    if (strikeVal < minStrike || strikeVal > maxStrike) return null;
+
+    const rowStep = chartH / n;
+
+    // Piecewise strike search to handle non-uniform strike spacing accurately
+    let k = 0;
+    while (k < n - 1 && this.strikesList[k + 1].strike <= strikeVal) {
+      k++;
+    }
+
+    let fractionalIdx = k;
+    if (k < n - 1) {
+      const s0 = this.strikesList[k].strike;
+      const s1 = this.strikesList[k + 1].strike;
+      const span = s1 - s0;
+      if (span > 0) {
+        fractionalIdx = k + (strikeVal - s0) / span;
+      }
+    }
+
+    return paddingTop + (n - 1 - fractionalIdx) * rowStep + rowStep / 2;
+  }
+
+  _drawRefLines(ctx, lefts, rights, paddingTop, chartH) {
+    const n = this.strikesList ? this.strikesList.length : 0;
+    if (n === 0) return;
+
+    const drawRefLine = (strikeVal, color, label) => {
+      const y = this.getYForStrike(strikeVal, paddingTop, chartH);
+      if (y === null) return;
+
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+
+      ctx.beginPath();
+      for (let i = 0; i < lefts.length; i++) {
+        ctx.moveTo(lefts[i], y);
+        ctx.lineTo(rights[i], y);
+      }
+      ctx.stroke();
+
+      // Label Tag on First Panel
+      ctx.fillStyle = color;
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${label} $${strikeVal.toFixed(2)}`, lefts[0] + 4, y - 3);
+      ctx.restore();
+    };
+
+    if (this.data.call_wall) drawRefLine(this.data.call_wall, '#00f5d4', 'CALL WALL');
+    if (this.data.spot_price) drawRefLine(this.data.spot_price, '#3a86ff', 'SPOT');
+    if (this.data.put_wall) drawRefLine(this.data.put_wall, '#ff006e', 'PUT WALL');
+  }
+
+  draw() {
+    if (!this.canvas || !this.ctx || !this.data || !this.data.strikes) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const displayW = this.canvasContainer.clientWidth || 380;
+    const isMobile = displayW <= 480;
+    const minH = isMobile ? 320 : 420;
+    const maxH = isMobile ? 360 : 560;
+    const strikeMultiplier = isMobile ? 13.5 : 18;
+    const displayH = Math.max(minH, Math.min(maxH, this.data.strikes.length * strikeMultiplier));
+
+    this.canvas.width = displayW * dpr;
+    this.canvas.height = displayH * dpr;
+    this.canvas.style.width = `${displayW}px`;
+    this.canvas.style.height = `${displayH}px`;
+
+    const ctx = this.ctx;
+    ctx.resetTransform();
+    ctx.scale(dpr, dpr);
+
+    // Deep Dark Navy Background
+    ctx.fillStyle = '#0a0e17';
+    ctx.fillRect(0, 0, displayW, displayH);
+
+    const paddingTop = isMobile ? 24 : 45;
+    const paddingBottom = isMobile ? 32 : 40;
+    const chartH = displayH - paddingTop - paddingBottom;
+    const mode = this.mode || 'both';
+
+    // Strikes Sorting (Top = Highest Strike, Bottom = Lowest Strike)
+    this.strikesList = [...this.data.strikes].sort((a, b) => a.strike - b.strike);
+    const n = this.strikesList.length;
+    if (n === 0) return;
+
+    const expirations = (Array.isArray(this.data.expirations) && this.data.expirations.length > 0)
+      ? this.data.expirations
+      : (this.strikesList[0]?.exp_gex ? Object.keys(this.strikesList[0].exp_gex) : []);
+
+    // Calculate maximum magnitude for scaling
+    let maxGex = 1;
+    let maxDex = 1;
+    this.strikesList.forEach(s => {
+      maxGex = Math.max(maxGex, Math.abs(s.call_gex || 0), Math.abs(s.put_gex || 0));
+      maxDex = Math.max(maxDex, Math.abs(s.call_dex || 0), Math.abs(s.put_dex || 0));
+    });
+
+    const maxGexScaled = maxGex * 1.15;
+    const maxDexScaled = maxDex * 1.15;
+    const rowStep = chartH / n;
+    const barHeight = Math.max(3, rowStep * 0.65);
+
+    if (mode === 'both') {
+      // Dual-Panel Layout
+      const paddingLeft = 44;
+      const paddingRight = 14;
+      const gap = 38;
+      const usableW = displayW - paddingLeft - paddingRight - gap;
+      const panelW = usableW / 2;
+
+      const p1_left = paddingLeft;
+      const p1_right = p1_left + panelW;
+      const p1_center = p1_left + panelW / 2;
+
+      const p2_left = p1_right + gap;
+      const p2_right = p2_left + panelW;
+      const p2_center = p2_left + panelW / 2;
+
+      // Panel Backgrounds
+      ctx.fillStyle = '#0f1422';
+      ctx.fillRect(p1_left, paddingTop, panelW, chartH);
+      ctx.fillRect(p2_left, paddingTop, panelW, chartH);
+
+      // Panel Borders
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(p1_left, paddingTop, panelW, chartH);
+      ctx.strokeRect(p2_left, paddingTop, panelW, chartH);
+
+      // Subtitles
+      const subY = isMobile ? displayH - 8 : displayH - 12;
+      ctx.font = isMobile ? 'bold 9.5px system-ui, sans-serif' : 'bold 11px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.textAlign = 'center';
+      ctx.fillText('Gamma Exposure (GEX)', p1_center, subY);
+      ctx.fillText('Delta Exposure (DEX)', p2_center, subY);
+
+      // CALLS / PUTS headers
+      const headerY = isMobile ? paddingTop - 7 : paddingTop - 12;
+      ctx.font = isMobile ? 'bold 8.5px sans-serif' : 'bold 10px sans-serif';
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillText('CALLS', p1_left + panelW * 0.25, headerY);
+      ctx.fillText('PUTS', p1_left + panelW * 0.75, headerY);
+      ctx.fillText('CALLS', p2_left + panelW * 0.25, headerY);
+      ctx.fillText('PUTS', p2_left + panelW * 0.75, headerY);
+
+      // Draw Bars
+      this.strikesList.forEach((s, idx) => {
+        const y = paddingTop + (n - 1 - idx) * rowStep + (rowStep - barHeight) / 2;
+        const centerY = y + barHeight / 2;
+
+        ctx.save();
+        ctx.strokeStyle = '#172033';
+        ctx.lineWidth = 0.5;
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath();
+        ctx.moveTo(p1_left, centerY);
+        ctx.lineTo(p1_right, centerY);
+        ctx.moveTo(p2_left, centerY);
+        ctx.lineTo(p2_right, centerY);
+        ctx.stroke();
+        ctx.restore();
+
+        if (this.hoveredStrike === s.strike) {
+          ctx.fillStyle = 'rgba(58, 134, 255, 0.18)';
+          ctx.fillRect(0, y - 2, displayW, barHeight + 4);
+        }
+
+        // Panel 1: GEX
+        this._drawGexBars(ctx, s, y, barHeight, p1_center, panelW / 2, maxGexScaled, expirations);
+        // Panel 2: DEX
+        this._drawDexBars(ctx, s, y, barHeight, p2_center, panelW / 2, maxDexScaled, expirations);
+
+        // Strike labels
+        const isTick = idx % Math.max(1, Math.floor(n / 16)) === 0 || this.hoveredStrike === s.strike;
+        if (isTick) {
+          ctx.fillStyle = this.hoveredStrike === s.strike ? '#ffffff' : '#94a3b8';
+          ctx.font = this.hoveredStrike === s.strike
+            ? (isMobile ? 'bold 9px monospace' : 'bold 10px monospace')
+            : (isMobile ? '8px monospace' : '9px monospace');
+          ctx.textAlign = 'right';
+          ctx.fillText(`$${s.strike.toFixed(0)}`, paddingLeft - 5, y + barHeight - 1);
+          ctx.textAlign = 'center';
+          ctx.fillText(`$${s.strike.toFixed(0)}`, p1_right + gap / 2, y + barHeight - 1);
+        }
+      });
+
+      // Zero Axis Center Lines
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(p1_center, paddingTop);
+      ctx.lineTo(p1_center, paddingTop + chartH);
+      ctx.moveTo(p2_center, paddingTop);
+      ctx.lineTo(p2_center, paddingTop + chartH);
+      ctx.stroke();
+
+      // X-Axis Symmetric Ticks
+      const tickY = isMobile ? displayH - 20 : displayH - 26;
+      ctx.font = isMobile ? '8px monospace' : '9px monospace';
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${this.formatCurrency(maxGex)}`, p1_left + 15, tickY);
+      ctx.fillText(`${this.formatCurrency(maxGex / 2)}`, p1_left + panelW * 0.25, tickY);
+      ctx.fillText('0', p1_center, tickY);
+      ctx.fillText(`${this.formatCurrency(maxGex / 2)}`, p1_left + panelW * 0.75, tickY);
+      ctx.fillText(`${this.formatCurrency(maxGex)}`, p1_right - 15, tickY);
+
+      ctx.fillText(`${this.formatCurrency(maxDex)}`, p2_left + 15, tickY);
+      ctx.fillText(`${this.formatCurrency(maxDex / 2)}`, p2_left + panelW * 0.25, tickY);
+      ctx.fillText('0', p2_center, tickY);
+      ctx.fillText(`${this.formatCurrency(maxDex / 2)}`, p2_left + panelW * 0.75, tickY);
+      ctx.fillText(`${this.formatCurrency(maxDex)}`, p2_right - 15, tickY);
+
+      // Ref Lines across both panels
+      this._drawRefLines(ctx, [p1_left, p2_left], [p1_right, p2_right], paddingTop, chartH);
+    } else {
+      // Single Full-Width Panel Layout (GEX or DEX)
+      const paddingLeft = 48;
+      const paddingRight = 20;
+      const panelW = displayW - paddingLeft - paddingRight;
+      const p_left = paddingLeft;
+      const p_right = p_left + panelW;
+      const p_center = p_left + panelW / 2;
+      const isGex = mode === 'gex';
+      const maxScaled = isGex ? maxGexScaled : maxDexScaled;
+      const maxVal = isGex ? maxGex : maxDex;
+
+      // Panel Background & Border
+      ctx.fillStyle = '#0f1422';
+      ctx.fillRect(p_left, paddingTop, panelW, chartH);
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(p_left, paddingTop, panelW, chartH);
+
+      // Subtitle
+      const subY = isMobile ? displayH - 8 : displayH - 12;
+      ctx.font = isMobile ? 'bold 10px system-ui, sans-serif' : 'bold 12px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.textAlign = 'center';
+      ctx.fillText(isGex ? 'Gamma Exposure (GEX) — Full Curve' : 'Delta Exposure (DEX) — Full Curve', p_center, subY);
+
+      // CALLS / PUTS headers
+      const headerY = isMobile ? paddingTop - 7 : paddingTop - 12;
+      ctx.font = isMobile ? 'bold 9px sans-serif' : 'bold 11px sans-serif';
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillText('CALLS (Left of 0)', p_left + panelW * 0.25, headerY);
+      ctx.fillText('PUTS (Right of 0)', p_left + panelW * 0.75, headerY);
+
+      // Draw Bars
+      this.strikesList.forEach((s, idx) => {
+        const y = paddingTop + (n - 1 - idx) * rowStep + (rowStep - barHeight) / 2;
+        const centerY = y + barHeight / 2;
+
+        ctx.save();
+        ctx.strokeStyle = '#172033';
+        ctx.lineWidth = 0.5;
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath();
+        ctx.moveTo(p_left, centerY);
+        ctx.lineTo(p_right, centerY);
+        ctx.stroke();
+        ctx.restore();
+
+        if (this.hoveredStrike === s.strike) {
+          ctx.fillStyle = 'rgba(58, 134, 255, 0.18)';
+          ctx.fillRect(0, y - 2, displayW, barHeight + 4);
+        }
+
+        if (isGex) {
+          this._drawGexBars(ctx, s, y, barHeight, p_center, panelW / 2, maxScaled, expirations);
+        } else {
+          this._drawDexBars(ctx, s, y, barHeight, p_center, panelW / 2, maxScaled, expirations);
+        }
+
+        // Strike labels on left axis
+        const isTick = idx % Math.max(1, Math.floor(n / 16)) === 0 || this.hoveredStrike === s.strike;
+        if (isTick) {
+          ctx.fillStyle = this.hoveredStrike === s.strike ? '#ffffff' : '#94a3b8';
+          ctx.font = this.hoveredStrike === s.strike
+            ? (isMobile ? 'bold 9px monospace' : 'bold 10px monospace')
+            : (isMobile ? '8px monospace' : '9px monospace');
+          ctx.textAlign = 'right';
+          ctx.fillText(`$${s.strike.toFixed(0)}`, paddingLeft - 6, y + barHeight - 1);
+        }
+      });
+
+      // Zero Axis Center Line
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(p_center, paddingTop);
+      ctx.lineTo(p_center, paddingTop + chartH);
+      ctx.stroke();
+
+      // X-Axis Symmetric Ticks
+      const tickY = isMobile ? displayH - 20 : displayH - 26;
+      ctx.font = isMobile ? '8.5px monospace' : '10px monospace';
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${this.formatCurrency(maxVal)}`, p_left + 24, tickY);
+      ctx.fillText(`${this.formatCurrency(maxVal / 2)}`, p_left + panelW * 0.25, tickY);
+      ctx.fillText('0', p_center, tickY);
+      ctx.fillText(`${this.formatCurrency(maxVal / 2)}`, p_left + panelW * 0.75, tickY);
+      ctx.fillText(`${this.formatCurrency(maxVal)}`, p_right - 24, tickY);
+
+      // Ref Lines across single panel
+      this._drawRefLines(ctx, [p_left], [p_right], paddingTop, chartH);
+    }
+  }
+}
