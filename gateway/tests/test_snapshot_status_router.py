@@ -57,7 +57,7 @@ def test_snapshot_status_synced_with_last_market_day():
     }])
 
     with patch("app.routers.snapshot_status.get_market_calendar_context", return_value=(True, date(2026, 9, 8), date(2026, 9, 4))), \
-         patch("common_lib.connectors.postgres.sql", side_effect=[tbl_df, summary_df]):
+         patch("app.routers.snapshot_status.postgres.sql", side_effect=[tbl_df, summary_df]):
 
         res = client.get("/api/snapshot/status")
         assert res.status_code == 200
@@ -79,7 +79,7 @@ def test_snapshot_status_synced_with_today():
     }])
 
     with patch("app.routers.snapshot_status.get_market_calendar_context", return_value=(True, date(2026, 9, 8), date(2026, 9, 4))), \
-         patch("common_lib.connectors.postgres.sql", side_effect=[tbl_df, summary_df]):
+         patch("app.routers.snapshot_status.postgres.sql", side_effect=[tbl_df, summary_df]):
 
         res = client.get("/api/snapshot/status")
         assert res.status_code == 200
@@ -99,7 +99,7 @@ def test_snapshot_status_stale_older_than_last_market_day():
     }])
 
     with patch("app.routers.snapshot_status.get_market_calendar_context", return_value=(True, date(2026, 9, 8), date(2026, 9, 4))), \
-         patch("common_lib.connectors.postgres.sql", side_effect=[tbl_df, summary_df]):
+         patch("app.routers.snapshot_status.postgres.sql", side_effect=[tbl_df, summary_df]):
 
         res = client.get("/api/snapshot/status")
         assert res.status_code == 200
@@ -120,7 +120,7 @@ def test_snapshot_status_non_market_day():
     }])
 
     with patch("app.routers.snapshot_status.get_market_calendar_context", return_value=(False, date(2026, 9, 6), date(2026, 9, 4))), \
-         patch("common_lib.connectors.postgres.sql", side_effect=[tbl_df, summary_df]):
+         patch("app.routers.snapshot_status.postgres.sql", side_effect=[tbl_df, summary_df]):
 
         res = client.get("/api/snapshot/status")
         assert res.status_code == 200
@@ -133,7 +133,7 @@ def test_snapshot_status_table_missing():
     tbl_df = pd.DataFrame([{"tbl_exists": False}])
 
     with patch("app.routers.snapshot_status.get_market_calendar_context", return_value=(True, date(2026, 9, 8), date(2026, 9, 4))), \
-         patch("common_lib.connectors.postgres.sql", return_value=tbl_df):
+         patch("app.routers.snapshot_status.postgres.sql", return_value=tbl_df):
 
         res = client.get("/api/snapshot/status")
         assert res.status_code == 200

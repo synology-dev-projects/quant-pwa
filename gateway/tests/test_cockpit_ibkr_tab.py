@@ -20,6 +20,7 @@ def test_get_ibkr_strike_distribution_schema():
     res = get_ibkr_strike_distribution("SPY", max_dte=30, strike_range=25, spot_hint=580.0)
     assert isinstance(res, StrikeDistributionResponse)
     assert res.ticker == "SPY"
+    assert res.is_fallback is False
     assert res.spot_price > 0.0
     assert res.call_wall > 0.0
     assert res.put_wall > 0.0
@@ -48,6 +49,7 @@ def test_cockpit_data_contains_both_tradingedge_and_ibkr_gex(auth_header):
     # Both GEX distributions must be present
     assert "gex" in data
     assert "ibkr_gex" in data
+    assert data["ibkr_gex"].get("is_fallback") is False
 
     te_gex = data["gex"]
     ib_gex = data["ibkr_gex"]

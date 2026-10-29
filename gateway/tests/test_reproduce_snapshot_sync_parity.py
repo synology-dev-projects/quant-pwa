@@ -45,21 +45,27 @@ def test_reproduce_snapshot_flow_parity_tuesday_late_night():
         "expected_day_count": 107
     }])
 
+    def fake_sql(config, sql_text, params=None):
+        if "information_schema.tables" in sql_text:
+            return tbl_df
+        elif "gexdex_snapshot" in sql_text:
+            return snapshot_summary_df
+        elif "unusual_option_flow_te" in sql_text:
+            return flow_summary_df
+        return pd.DataFrame()
+
     with patch("app.routers.flow_status.datetime") as mock_flow_dt, \
          patch("app.routers.snapshot_status.datetime") as mock_snap_dt, \
+         patch("app.routers.snapshot_status.postgres.sql") as mock_snap_sql, \
+         patch("app.routers.flow_status.postgres.sql") as mock_flow_sql, \
          patch("common_lib.connectors.postgres.sql") as mock_sql:
+
+        mock_snap_sql.side_effect = fake_sql
+        mock_flow_sql.side_effect = fake_sql
+        mock_sql.side_effect = fake_sql
 
         mock_flow_dt.now.return_value = ref_dt
         mock_snap_dt.now.return_value = ref_dt
-
-        def fake_sql(config, sql_text, params=None):
-            if "information_schema.tables" in sql_text:
-                return tbl_df
-            elif "gexdex_snapshot" in sql_text:
-                return snapshot_summary_df
-            elif "unusual_option_flow_te" in sql_text:
-                return flow_summary_df
-            return pd.DataFrame()
 
         mock_sql.side_effect = fake_sql
 

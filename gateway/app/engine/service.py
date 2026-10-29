@@ -121,6 +121,7 @@ class StrikeDistributionResponse(BaseModel):
     expirations: List[str]
     strikes: List[StrikeDetail]
     updated_at: str
+    is_fallback: bool = False
 
 
 def calculate_metrics_from_raw(ticker: str, raw_data: dict) -> Optional[GexDexTickerMetrics]:
@@ -856,7 +857,8 @@ def get_strike_distribution(
         net_dex=net_dex,
         expirations=expirations,
         strikes=strike_details,
-        updated_at=now_iso
+        updated_at=now_iso,
+        is_fallback=True
     )
 
 
