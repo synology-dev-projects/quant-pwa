@@ -153,12 +153,19 @@ def update_all_files(target_version: str) -> None:
     json_obj["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     new_json_str = json.dumps(json_obj, indent=2) + "\n"
 
+    new_build = json_obj["build"]
+
     # 2. gateway/app/config.py
     raw_config = read_file(CONFIG_PY)
     new_config = re.sub(
         r'(APP_VERSION:\s*str\s*=\s*os\.getenv\("APP_VERSION",\s*")[^"]+("\))',
         rf'\g<1>{target_version}\g<2>',
         raw_config,
+    )
+    new_config = re.sub(
+        r'(APP_BUILD:\s*str\s*=\s*os\.getenv\("APP_BUILD",\s*")[^"]+("\))',
+        rf'\g<1>{new_build}\g<2>',
+        new_config,
     )
 
     # 3. frontend/src/components/settings_modal.js
@@ -167,6 +174,11 @@ def update_all_files(target_version: str) -> None:
         r"(export\s+const\s+CLIENT_VERSION\s*=\s*['\"])[^'\"]+(['\"];?)",
         rf'\g<1>{target_version}\g<2>',
         raw_settings,
+    )
+    new_settings = re.sub(
+        r"(export\s+const\s+CLIENT_BUILD\s*=\s*['\"])[^'\"]+(['\"];?)",
+        rf'\g<1>{new_build}\g<2>',
+        new_settings,
     )
 
     # 4. frontend/sw.js
@@ -190,8 +202,8 @@ def update_all_files(target_version: str) -> None:
         new_html,
     )
     new_html = re.sub(
-        r'(id=["\']appBuildVersion["\']>)[^<\(]*\s*(\([^\)]+\)</span>)',
-        rf'\g<1>{target_version} \g<2>',
+        r'(id=["\']appBuildVersion["\']>)[^<]+(</span>)',
+        rf'\g<1>{target_version} ({new_build}) (Production)\g<2>',
         new_html,
     )
     new_html = re.sub(

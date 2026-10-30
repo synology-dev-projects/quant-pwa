@@ -137,7 +137,7 @@ global.sessionStorage = {
   removeItem: (k) => { delete global.sessionStorage.store[k]; }
 };
 
-const { SettingsModal, CLIENT_VERSION } = await import('../src/components/settings_modal.js');
+const { SettingsModal, CLIENT_VERSION, CLIENT_BUILD } = await import('../src/components/settings_modal.js');
 
 console.log('==================================================================');
 console.log('  PROBING SETTINGS MODAL OPTIONS FLOW FRESHNESS UI (SETTINGS-04)  ');
@@ -150,7 +150,9 @@ const versionJsonPath = path.resolve(__dirname, '../../version.json');
 const versionJson = JSON.parse(fs.readFileSync(versionJsonPath, 'utf8'));
 
 assert.strictEqual(CLIENT_VERSION, versionJson.version, 'CLIENT_VERSION must match version.json');
+assert.strictEqual(CLIENT_BUILD, versionJson.build, 'CLIENT_BUILD must match version.json');
 console.log(`  ✓ PASS: CLIENT_VERSION (${CLIENT_VERSION}) matches version.json (${versionJson.version})`);
+console.log(`  ✓ PASS: CLIENT_BUILD (${CLIENT_BUILD}) matches version.json (${versionJson.build})`);
 
 const modal = new SettingsModal();
 
@@ -166,7 +168,7 @@ global.fetch = async (url) => {
 };
 
 await modal.checkVersionStatus();
-assert.strictEqual(elements.appBuildVersion.textContent, `${CLIENT_VERSION} (Staging)`, `App build shows ${CLIENT_VERSION} (Staging)`);
+assert.strictEqual(elements.appBuildVersion.textContent, `${CLIENT_VERSION} (${CLIENT_BUILD}) (Staging)`, `App build shows ${CLIENT_VERSION} (${CLIENT_BUILD}) (Staging)`);
 assert.strictEqual(elements.syncStatusText.textContent, `Synchronized (${CLIENT_VERSION})`, 'Sync status text is synchronized');
 assert.strictEqual(elements.forceUpdateBtn.disabled, true, 'Force update button is disabled when in sync');
 assert.strictEqual(elements.forceUpdateBtn.className, 'btn btn-synced', 'Force update button has btn-synced class');
@@ -278,7 +280,7 @@ global.window.location.port = '80';
 global.window.location.hostname = 'app.quant.internal';
 
 await modal.checkVersionStatus();
-assert.strictEqual(elements.appBuildVersion.textContent, `${CLIENT_VERSION} (Production)`, `App build shows ${CLIENT_VERSION} (Production)`);
+assert.strictEqual(elements.appBuildVersion.textContent, `${CLIENT_VERSION} (${CLIENT_BUILD}) (Production)`, `App build shows ${CLIENT_VERSION} (${CLIENT_BUILD}) (Production)`);
 assert.strictEqual(elements.syncStatusText.textContent, 'Update Available (v9.9.9)', 'Sync status text reflects update available');
 assert.strictEqual(elements.forceUpdateBtn.disabled, false, 'Force update button enabled when update available');
 assert.strictEqual(elements.forceUpdateBtn.className, 'btn btn-danger btn-pulse', 'Force update button has danger-pulse class');

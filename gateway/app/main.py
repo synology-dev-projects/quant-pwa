@@ -327,6 +327,7 @@ def health_check():
         "status": "ok",
         "service": "quant-gateway",
         "version": settings.APP_VERSION,
+        "build": settings.APP_BUILD,
         "environment": settings.ENVIRONMENT,
         "market": market_meta
     }

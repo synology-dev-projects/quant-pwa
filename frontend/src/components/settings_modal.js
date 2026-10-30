@@ -1,6 +1,7 @@
 import { AppState } from '../state.js';
 
-export const CLIENT_VERSION = 'v1.1.45';
+export const CLIENT_VERSION = 'v1.2.0';
+export const CLIENT_BUILD = '2026-10-30-01';
 
 export class SettingsModal {
   constructor({ onSettingsChanged, onLockApp } = {}) {
@@ -134,7 +135,7 @@ export class SettingsModal {
         (window.location.hostname && (window.location.hostname.includes('staging') || window.location.hostname.includes('develop')))
       ));
       const initialLabel = isStaging ? '(Staging)' : '(Production)';
-      this.appBuildVersion.textContent = `${CLIENT_VERSION} ${initialLabel}`;
+      this.appBuildVersion.textContent = `${CLIENT_VERSION} (${CLIENT_BUILD}) ${initialLabel}`;
     }
 
     try {
@@ -151,7 +152,10 @@ export class SettingsModal {
         const label = isStaging ? '(Staging)' : '(Production)';
 
         if (this.appBuildVersion) {
-          this.appBuildVersion.textContent = `${CLIENT_VERSION} ${label}`;
+          const serverBuild = data.build || CLIENT_BUILD;
+        if (this.appBuildVersion) {
+          this.appBuildVersion.textContent = `${CLIENT_VERSION} (${CLIENT_BUILD}) ${label}`;
+        }
         }
 
         if (serverVersion === CLIENT_VERSION) {

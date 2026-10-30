@@ -655,6 +655,20 @@ def cmd_promote_prod(args):
         print("   Run: python scripts/protocol_graph.py prod-authorize", file=sys.stderr)
         sys.exit(1)
 
+    # 0. Automate version & build bump on quant-pwa prior to production merge
+    quant_pwa_root = Path("C:/Coding/VSCode/Quant System/quant-pwa")
+    bump_script = quant_pwa_root / "scripts" / "bump_version.py"
+    if bump_script.exists():
+        print("🏷️  [AUTO-BUMP] Executing version & daily build incrementation for quant-pwa...")
+        bump_res = subprocess.run([sys.executable, str(bump_script)], cwd=str(quant_pwa_root), capture_output=True, text=True)
+        if bump_res.returncode == 0:
+            print(f"   {bump_res.stdout.strip()}")
+            subprocess.run(["git", "add", "version.json", "gateway/app/config.py", "frontend/src/components/settings_modal.js", "frontend/sw.js", "frontend/index.html"], cwd=str(quant_pwa_root))
+            subprocess.run(["git", "commit", "-m", "chore(release): auto-increment version and build number"], cwd=str(quant_pwa_root))
+            subprocess.run(["git", "push", "origin", "develop2"], cwd=str(quant_pwa_root))
+        else:
+            print(f"   [WARN] Auto-bump failed: {bump_res.stderr}", file=sys.stderr)
+
     # Merge develop2 into master across active repos
     repos_to_sync = [
         "common-lib",
