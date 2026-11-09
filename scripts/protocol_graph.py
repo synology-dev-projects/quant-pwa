@@ -718,7 +718,7 @@ def cmd_promote_prod(args):
     print("\n🚀 Executing Automated Fleet Promotion to Production (master)...")
     env = os.environ.copy()
     env["QUANT_FLEET_ORCHESTRATED"] = "1"
-    cmd = [sys.executable, str(push_script), "--branch", "master"]
+    cmd = [sys.executable, str(push_script), "--branch", "master", "--timeout", "1800"]
     res = subprocess.run(cmd, cwd=str(WORKSPACE_ROOT), env=env)
     if res.returncode != 0:
         print("\n🛑 [PROD PROMOTION FAILED] Fleet push or CI verification failed on master.", file=sys.stderr)
