@@ -1,7 +1,7 @@
 import { AppState } from '../state.js';
 
-export const CLIENT_VERSION = 'v1.2.1';
-export const CLIENT_BUILD = '2026-10-30-02';
+export const CLIENT_VERSION = 'v1.2.2';
+export const CLIENT_BUILD = '2026-11-09-01';
 
 export class SettingsModal {
   constructor({ onSettingsChanged, onLockApp } = {}) {

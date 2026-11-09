@@ -25,6 +25,7 @@ from common_lib.orchestration import (
     run_dag_cycle,
     ensure_pipeline_runs_table,
 )
+from common_lib.orchestration.state import _check_table_has_data_for_date
 from app.core.auth import get_current_user
 from app.routers.snapshot_status import get_market_calendar_context
 
@@ -76,11 +77,16 @@ def get_pipelines_status(
         engine = get_postgres_engine(config)
         ensure_pipeline_runs_table(engine)
 
+        today_statuses = {}
+        is_today_market = False
+        today_date = None
         if date_str:
             target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         else:
-            _, _, last_market_day = get_market_calendar_context()
+            is_today_market, today_date, last_market_day = get_market_calendar_context()
             target_date = last_market_day
+            if is_today_market and today_date != target_date:
+                today_statuses = get_all_pipeline_statuses(engine, today_date)
 
         statuses = get_all_pipeline_statuses(engine, target_date)
         dag = get_registered_dag()
@@ -88,12 +94,65 @@ def get_pipelines_status(
 
         # Build full status map including unstarted pipelines and metadata
         full_status_map = {}
+        default_table_map = {
+            "unusual_option_flow": ["unusual_option_flow_te"],
+            "unusual_options_flow": ["unusual_option_flow_te"],
+            "quant_levels": ["quant_lvl_data_te"],
+            "gexdex_snapshot": ["gexdex_snapshot"],
+            "market_confluence": ["daily_confluence_scans", "daily_confluence_summary"],
+        }
+
         for p_name in order:
             meta = dag.get(p_name, {})
             display_name = meta.get("display_name") or p_name.replace("_", " ").title()
             
-            if p_name in statuses:
+            # Determine appropriate session date for this pipeline
+            p_session_date = target_date
+            item = None
+
+            # Quant levels evaluates today's session if active/run on today
+            if not date_str and p_name == "quant_levels" and is_today_market:
+                if "quant_levels" in today_statuses:
+                    item = dict(today_statuses["quant_levels"])
+                    p_session_date = today_date
+                else:
+                    # Check if today has records in quant_lvl_data_te
+                    cnt_today = _check_table_has_data_for_date(engine, "quant_lvl_data_te", today_date)
+                    if cnt_today > 0:
+                        p_session_date = today_date
+                        item = {
+                            "pipeline_name": p_name,
+                            "session_date": str(today_date),
+                            "status": "SUCCESS",
+                            "rows_affected": cnt_today,
+                            "started_at": None,
+                            "completed_at": None,
+                            "error_message": None,
+                            "metadata": {"fallback": "target_table_freshness"},
+                        }
+
+            if item is None and p_name in statuses:
                 item = dict(statuses[p_name])
+
+            # Target table data fallback if unrecorded or not SUCCESS
+            if item is None or item.get("status") != "SUCCESS":
+                target_tables = meta.get("target_tables") or default_table_map.get(p_name, [])
+                for tbl in target_tables:
+                    cnt = _check_table_has_data_for_date(engine, tbl, p_session_date)
+                    if cnt > 0:
+                        item = {
+                            "pipeline_name": p_name,
+                            "session_date": str(p_session_date),
+                            "status": "SUCCESS",
+                            "rows_affected": cnt,
+                            "started_at": None,
+                            "completed_at": None,
+                            "error_message": None,
+                            "metadata": {"fallback": "target_table_freshness"},
+                        }
+                        break
+
+            if item:
                 item["display_name"] = display_name
                 item["description"] = meta.get("description", "")
                 item["upstream"] = meta.get("upstream", [])
@@ -104,7 +163,7 @@ def get_pipelines_status(
                     "display_name": display_name,
                     "description": meta.get("description", ""),
                     "upstream": meta.get("upstream", []),
-                    "session_date": str(target_date),
+                    "session_date": str(p_session_date),
                     "status": "NOT_STARTED",
                     "rows_affected": 0,
                     "started_at": None,
