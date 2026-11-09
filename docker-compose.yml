@@ -29,6 +29,8 @@ services:
     build:
       context: ./gateway
       dockerfile: Dockerfile
+      cache_from:
+        - quant-gateway-${CONTAINER_PREFIX:-prod}:latest
     container_name: quant-gateway-${CONTAINER_PREFIX:-prod}
     restart: unless-stopped
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/common_lib"]
@@ -72,6 +74,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      cache_from:
+        - quant-frontend-${CONTAINER_PREFIX:-prod}:latest
     container_name: quant-frontend-${CONTAINER_PREFIX:-prod}
     restart: unless-stopped
     ports:

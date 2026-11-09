@@ -665,7 +665,8 @@ def cmd_promote_prod(args):
             print(f"   {bump_res.stdout.strip()}")
             subprocess.run(["git", "add", "version.json", "gateway/app/config.py", "frontend/src/components/settings_modal.js", "frontend/sw.js", "frontend/index.html"], cwd=str(quant_pwa_root))
             subprocess.run(["git", "commit", "-m", "chore(release): auto-increment version and build number"], cwd=str(quant_pwa_root))
-            subprocess.run(["git", "push", "origin", "develop2"], cwd=str(quant_pwa_root))
+            # Suppress redundant staging push during production promotion (push_fleet deploys directly to master)
+            # subprocess.run(["git", "push", "origin", "develop2"], cwd=str(quant_pwa_root))
         else:
             print(f"   [WARN] Auto-bump failed: {bump_res.stderr}", file=sys.stderr)
 
