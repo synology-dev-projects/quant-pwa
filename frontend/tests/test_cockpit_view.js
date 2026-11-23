@@ -822,7 +822,8 @@ assert(chartSlot !== null, 'Chart slot container located');
 
 const emptyCard = chartSlot.querySelector('.chart-empty-state');
 assert(emptyCard !== null, 'Honest empty state element is rendered instead of fake canvas graph');
-assert(emptyCard.textContent.includes('No Active Options Chain / Insufficient Gamma Liquidity for XYZ'), 'Empty state displays honest message with ticker');
+assert(emptyCard.textContent.includes('Unable to Load') && emptyCard.textContent.includes('XYZ'), 'Empty state displays honest error message with ticker');
+assert(emptyCard.querySelector('.cockpit-error-code-badge') !== null, 'Error state displays error code badge');
 
 const retryBtn = chartSlot.querySelector('#cockpitChartRetryBtn');
 assert(retryBtn !== null, 'Empty state includes interactive retry button');

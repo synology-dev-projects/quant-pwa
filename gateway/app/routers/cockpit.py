@@ -2,6 +2,7 @@ import json
 import logging
 import asyncio
 import math
+import traceback
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 import pandas as pd
@@ -158,8 +159,18 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
     gex_result, flow_result, ibkr_result = await asyncio.gather(gex_task, flow_task, ibkr_task, return_exceptions=True)
 
     if isinstance(gex_result, Exception):
+        tb_str = "".join(traceback.format_exception(type(gex_result), gex_result, gex_result.__traceback__))
         logger.error(f"GEX/DEX query exception for {clean_ticker}: {gex_result}")
-        gex_data = {"error": str(gex_result), "ticker": clean_ticker, "spot_price": 0.0, "strikes": []}
+        gex_data = {
+            "error": str(gex_result),
+            "error_code": "TRADINGEDGE_QUERY_EXCEPTION",
+            "error_message": str(gex_result),
+            "error_traceback": tb_str,
+            "ticker": clean_ticker,
+            "spot_price": 0.0,
+            "strikes": [],
+            "expirations": [],
+        }
     elif hasattr(gex_result, "model_dump"):
         gex_data = gex_result.model_dump()
     elif hasattr(gex_result, "dict"):
@@ -170,8 +181,18 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
         gex_data = {}
 
     if isinstance(ibkr_result, Exception):
+        tb_str = "".join(traceback.format_exception(type(ibkr_result), ibkr_result, ibkr_result.__traceback__))
         logger.warning(f"IBKR GEX/DEX query exception for {clean_ticker}: {ibkr_result}")
-        ibkr_data = {"error": str(ibkr_result), "ticker": clean_ticker, "spot_price": 0.0, "strikes": []}
+        ibkr_data = {
+            "error": str(ibkr_result),
+            "error_code": "IBKR_QUERY_EXCEPTION",
+            "error_message": str(ibkr_result),
+            "error_traceback": tb_str,
+            "ticker": clean_ticker,
+            "spot_price": 0.0,
+            "strikes": [],
+            "expirations": [],
+        }
     elif hasattr(ibkr_result, "model_dump"):
         ibkr_data = ibkr_result.model_dump()
     elif hasattr(ibkr_result, "dict"):
@@ -186,50 +207,6 @@ async def get_cockpit_full_payload(ticker: str, force_refresh: bool = False) -> 
         flow_df = pd.DataFrame()
     else:
         flow_df = flow_result if isinstance(flow_result, pd.DataFrame) else pd.DataFrame()
-
-    # Safety: Ensure gex_data has valid spot_price and strike distribution
-    has_strikes = bool(gex_data.get("strikes") or (isinstance(gex_data.get("strike_distribution"), dict) and gex_data["strike_distribution"].get("strikes")))
-    has_spot = float(gex_data.get("spot_price", 0.0) or 0.0) > 0
-
-    if not has_strikes or not has_spot:
-        from app.engine.service import _generate_resilient_strike_distribution
-        existing_spot = float(gex_data.get("spot_price", 0.0) or 0.0) if has_spot else 0.0
-        fallback_dist = _generate_resilient_strike_distribution(clean_ticker, spot_price=existing_spot)
-        fallback_dict = fallback_dist.model_dump()
-        if not has_strikes:
-            gex_data["strikes"] = fallback_dict.get("strikes", [])
-            if not gex_data.get("expirations"):
-                gex_data["expirations"] = fallback_dict.get("expirations", [])
-        if not has_spot:
-            gex_data["spot_price"] = fallback_dict.get("spot_price", 0.0)
-            if not gex_data.get("call_wall"):
-                gex_data["call_wall"] = fallback_dict.get("call_wall", 0.0)
-            if not gex_data.get("put_wall"):
-                gex_data["put_wall"] = fallback_dict.get("put_wall", 0.0)
-            if not gex_data.get("zero_gex_level"):
-                gex_data["zero_gex_level"] = fallback_dict.get("zero_gex_level", 0.0)
-
-    # Safety: Ensure ibkr_data has valid spot_price and strike distribution
-    has_ibkr_strikes = bool(ibkr_data.get("strikes") or (isinstance(ibkr_data.get("strike_distribution"), dict) and ibkr_data["strike_distribution"].get("strikes")))
-    has_ibkr_spot = float(ibkr_data.get("spot_price", 0.0) or 0.0) > 0
-
-    if not has_ibkr_strikes or not has_ibkr_spot:
-        from app.engine.service import _generate_resilient_strike_distribution
-        base_spot = float(ibkr_data.get("spot_price", 0.0) or gex_data.get("spot_price", 0.0) or 0.0)
-        ibkr_fallback = _generate_resilient_strike_distribution(clean_ticker, spot_price=base_spot)
-        ibkr_fallback_dict = ibkr_fallback.model_dump()
-        if not has_ibkr_strikes:
-            ibkr_data["strikes"] = ibkr_fallback_dict.get("strikes", [])
-            if not ibkr_data.get("expirations"):
-                ibkr_data["expirations"] = ibkr_fallback_dict.get("expirations", [])
-        if not has_ibkr_spot:
-            ibkr_data["spot_price"] = ibkr_fallback_dict.get("spot_price", 0.0)
-            if not ibkr_data.get("call_wall"):
-                ibkr_data["call_wall"] = ibkr_fallback_dict.get("call_wall", 0.0)
-            if not ibkr_data.get("put_wall"):
-                ibkr_data["put_wall"] = ibkr_fallback_dict.get("put_wall", 0.0)
-            if not ibkr_data.get("zero_gex_level"):
-                ibkr_data["zero_gex_level"] = ibkr_fallback_dict.get("zero_gex_level", 0.0)
 
     # Defense-in-depth: Filter out invalid / phantom zero-strike options prints
     if not flow_df.empty:

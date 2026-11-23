@@ -7,6 +7,7 @@ import time
 import base64
 import asyncio
 import math
+import traceback
 from typing import Optional, Dict, List, Any, Union
 from datetime import datetime, timezone, time as dtime
 from pathlib import Path
@@ -122,6 +123,9 @@ class StrikeDistributionResponse(BaseModel):
     strikes: List[StrikeDetail]
     updated_at: str
     is_fallback: bool = False
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    error_traceback: Optional[str] = None
 
 
 def calculate_metrics_from_raw(ticker: str, raw_data: dict) -> Optional[GexDexTickerMetrics]:
@@ -785,8 +789,15 @@ def get_strike_distribution(
         )
 
     if df_raw is None or df_raw.empty:
-        return _generate_resilient_strike_distribution(
-            symbol=symbol,
+        err_code = "TRADINGEDGE_NO_DATA" if raw_data is None else "TRADINGEDGE_EMPTY_STRIKES"
+        err_msg = (
+            f"TradingEdge API returned no data for {symbol} (authentication rejected, rate-limited HTTP 429, or upstream unavailable)."
+            if raw_data is None
+            else f"TradingEdge API returned an empty option chain / zero non-zero GEX strikes for {symbol}."
+        )
+        err_tb = "".join(traceback.format_stack(limit=6))
+        return StrikeDistributionResponse(
+            ticker=symbol,
             spot_price=spot_price,
             call_wall=call_wall,
             put_wall=put_wall,
@@ -796,7 +807,13 @@ def get_strike_distribution(
             gamma_regime=gamma_regime,
             net_gex=net_gex,
             net_dex=net_dex,
-            now_iso=now_iso
+            expirations=[],
+            strikes=[],
+            updated_at=now_iso,
+            is_fallback=False,
+            error_code=err_code,
+            error_message=err_msg,
+            error_traceback=err_tb,
         )
 
     df_copy = df_raw.copy()
@@ -858,7 +875,7 @@ def get_strike_distribution(
         expirations=expirations,
         strikes=strike_details,
         updated_at=now_iso,
-        is_fallback=True
+        is_fallback=False
     )
 
 
@@ -1046,16 +1063,47 @@ def get_ibkr_strike_distribution(
                 _IBKR_STRIKE_CACHE[cache_key] = (now_ts, dist_response)
                 return dist_response
     except Exception as bsm_err:
+        tb_str = traceback.format_exc()
         logger.warning(f"Dynamic BSM strike distribution failed for {symbol}: {bsm_err}")
+        return StrikeDistributionResponse(
+            ticker=symbol,
+            spot_price=float(spot_hint or 0.0),
+            call_wall=0.0,
+            put_wall=0.0,
+            zero_gex_level=0.0,
+            gamma_centroid=0.0,
+            call_put_ratio=1.0,
+            gamma_regime="Error",
+            net_gex=0.0,
+            net_dex=0.0,
+            expirations=[],
+            strikes=[],
+            updated_at=now_iso,
+            is_fallback=False,
+            error_code="IBKR_BSM_CALC_ERROR",
+            error_message=f"IBKR/CBOE GEX/DEX calculation failed for {symbol}: {bsm_err}",
+            error_traceback=tb_str,
+        )
 
-    # Fallback: Resilient generation matching spot_hint
-    fallback = _generate_resilient_strike_distribution(
-        symbol=symbol,
-        spot_price=float(spot_hint or 100.0),
-        now_iso=now_iso
+    return StrikeDistributionResponse(
+        ticker=symbol,
+        spot_price=float(spot_hint or 0.0),
+        call_wall=0.0,
+        put_wall=0.0,
+        zero_gex_level=0.0,
+        gamma_centroid=0.0,
+        call_put_ratio=1.0,
+        gamma_regime="Unavailable",
+        net_gex=0.0,
+        net_dex=0.0,
+        expirations=[],
+        strikes=[],
+        updated_at=now_iso,
+        is_fallback=False,
+        error_code="IBKR_NO_CHAIN_DATA",
+        error_message=f"IBKR/CBOE returned no active options chain data for {symbol}.",
+        error_traceback="".join(traceback.format_stack(limit=6)),
     )
-    _IBKR_STRIKE_CACHE[cache_key] = (now_ts, fallback)
-    return fallback
 
 
 # 5-Minute In-Memory SWR RAM Cache

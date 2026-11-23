@@ -15,9 +15,39 @@ def auth_header():
     return {"Authorization": f"Bearer {token}"}
 
 
+def _mock_cboe_chain():
+    return {
+        ("2026-12-18", 580.0, "C"): {"open_interest": 12000, "iv": 0.22, "und_price": 580.0},
+        ("2026-12-18", 580.0, "P"): {"open_interest": 10000, "iv": 0.24, "und_price": 580.0},
+        ("2026-12-18", 590.0, "C"): {"open_interest": 18000, "iv": 0.21, "und_price": 580.0},
+        ("2026-12-18", 570.0, "P"): {"open_interest": 15000, "iv": 0.25, "und_price": 580.0},
+    }
+
+
+def _mock_te_raw(ticker="NVDA", spot=217.5):
+    return {
+        "ticker": ticker,
+        "spot_price": spot,
+        "call_wall": spot + 10.0,
+        "put_wall": spot - 10.0,
+        "zero_gex_level": spot - 2.0,
+        "call_put_ratio": 1.3,
+        "strikes": [
+            {
+                "strike": spot,
+                "expirations": {
+                    "2026-12-18": {"call_gex": 500000.0, "put_gex": 300000.0, "call_dex": 250000.0, "put_dex": 150000.0}
+                },
+            }
+        ],
+    }
+
+
 def test_get_ibkr_strike_distribution_schema():
     """Verify get_ibkr_strike_distribution produces valid StrikeDistributionResponse with all required keys."""
-    res = get_ibkr_strike_distribution("SPY", max_dte=30, strike_range=25, spot_hint=580.0)
+    with patch("app.engine.service._IBKR_STRIKE_CACHE", {}), \
+         patch("common_lib.connectors.cboe_oi.fetch_cboe_delayed_data", return_value=_mock_cboe_chain()):
+        res = get_ibkr_strike_distribution("SPY", max_dte=30, strike_range=25, spot_hint=580.0)
     assert isinstance(res, StrikeDistributionResponse)
     assert res.ticker == "SPY"
     assert res.is_fallback is False
@@ -39,7 +69,10 @@ def test_get_ibkr_strike_distribution_schema():
 
 def test_cockpit_data_contains_both_tradingedge_and_ibkr_gex(auth_header):
     """Verify /api/cockpit/data returns both gex (TradingEdge) and ibkr_gex (IBKR) with matching schemas."""
-    response = client.get("/api/cockpit/data?ticker=NVDA", headers=auth_header)
+    with patch("app.engine.service.fetch_raw_data_for_ticker", return_value=_mock_te_raw("NVDA", 217.5)), \
+         patch("app.engine.service._IBKR_STRIKE_CACHE", {}), \
+         patch("common_lib.connectors.cboe_oi.fetch_cboe_delayed_data", return_value=_mock_cboe_chain()):
+        response = client.get("/api/cockpit/data?ticker=NVDA", headers=auth_header)
     assert response.status_code == 200
     data = response.json()
 

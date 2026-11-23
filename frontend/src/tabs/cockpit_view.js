@@ -503,8 +503,17 @@ export class CockpitView {
           this.dataCache.set(ticker, data);
         }
       } else {
+        let errBody = '';
+        try {
+          errBody = await res.text();
+        } catch (_) {}
         console.warn(`Cockpit data fetch returned status ${res.status} for ${ticker}`);
-        data = this.generateFallbackData(ticker);
+        data = this.buildErrorPayload(
+          ticker,
+          `HTTP_${res.status}`,
+          `Gateway returned HTTP ${res.status} ${res.statusText || ''} for ${ticker}.`.trim(),
+          errBody || `POST /api/cockpit/data failed with HTTP ${res.status}`
+        );
       }
     } catch (err) {
       if (err.name === 'AbortError') return;
@@ -513,7 +522,12 @@ export class CockpitView {
         return;
       }
       console.warn(`Cockpit data network error for ${ticker}:`, err);
-      data = this.generateFallbackData(ticker);
+      data = this.buildErrorPayload(
+        ticker,
+        'NETWORK_ERROR',
+        err.message || `Network error fetching cockpit data for ${ticker}.`,
+        err.stack || String(err)
+      );
     }
 
     if (data && this.currentTicker === ticker) {
@@ -704,11 +718,24 @@ ${notableFlowMd}
         this.quantChartInstance.destroy();
         this.quantChartInstance = null;
       }
+      const errCode = this.escapeHtml(gex.error_code || 'UPSTREAM_NO_DATA');
+      const errMsg = this.escapeHtml(
+        gex.error_message || gex.error || `Real-time options open interest and dealer exposure surfaces are currently unavailable from ${sourceLabel} for ${ticker}.`
+      );
+      const errTrace = gex.error_traceback ? this.escapeHtml(gex.error_traceback) : '';
+      const traceBlock = errTrace
+        ? `<details class="cockpit-error-details" open><summary>Stack Trace</summary><pre class="cockpit-error-traceback">${errTrace}</pre></details>`
+        : '';
+
       chartSlot.innerHTML = `
-        <div class="chart-empty-state">
-          <div class="empty-state-icon">📊</div>
-          <h3>No Active Options Chain / Insufficient Gamma Liquidity for ${ticker}</h3>
-          <p>Real-time options open interest and dealer exposure surfaces are currently unavailable from ${sourceLabel} for this asset.</p>
+        <div class="chart-empty-state cockpit-error-panel" role="alert">
+          <div class="cockpit-error-header">
+            <span class="cockpit-error-code-badge">${errCode}</span>
+            <span class="cockpit-error-source">${this.escapeHtml(sourceLabel)}</span>
+          </div>
+          <h3>Unable to Load ${this.escapeHtml(sourceLabel)} GEX/DEX for ${this.escapeHtml(ticker)}</h3>
+          <p class="cockpit-error-message">${errMsg}</p>
+          ${traceBlock}
           <button type="button" class="cockpit-retry-btn" id="cockpitChartRetryBtn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
             <span>Retry Feed</span>
@@ -864,122 +891,39 @@ ${notableFlowMd}
     return `${sign}$${abs.toFixed(2)}`;
   }
 
-  generateFallbackData(ticker) {
-    const sym = (ticker || 'NVDA').toUpperCase();
-    let spot = 150.00;
-    if (sym === 'SPY') spot = 769.00;
-    else if (sym === 'QQQ') spot = 716.00;
-    else if (sym === 'TSLA') spot = 348.00;
-    else if (sym === 'AAPL') spot = 320.00;
-    else if (sym === 'AMD') spot = 465.00;
-    else if (sym === 'NVDA') spot = 217.00;
-    else if (sym === 'COIN') spot = 178.00;
-    else if (sym === 'POWL') spot = 182.00;
-    else if (sym === 'META') spot = 578.00;
-    else if (sym === 'MSFT') spot = 513.00;
-
-    const callWall = Math.round(spot * 1.07 * 100) / 100;
-    const putWall = Math.round(spot * 0.93 * 100) / 100;
-    const zeroFlip = Math.round(spot * 0.99 * 100) / 100;
-
-    const step = spot >= 2000 ? 25 : spot >= 500 ? 10 : spot >= 200 ? 5 : spot >= 50 ? 2.5 : 1.0;
-    const centerStk = Math.round(spot / step) * step;
-    const expList = ['Front Expiry', 'Next Weekly', 'Monthly OPEX'];
-    const strikes = [];
-    for (let i = -10; i <= 10; i++) {
-      const stk = Math.round((centerStk + i * step) * 100) / 100;
-      const distCw = (stk - callWall) / spot;
-      const distPw = (stk - putWall) / spot;
-      const distSp = (stk - spot) / spot;
-      const callW = Math.max(0.05, Math.exp(-Math.pow(distCw * 8, 2)) * 0.8 + Math.exp(-Math.pow(distSp * 6, 2)) * 0.4);
-      const putW = Math.max(0.05, Math.exp(-Math.pow(distPw * 8, 2)) * 0.8 + Math.exp(-Math.pow(distSp * 6, 2)) * 0.4);
-      const baseMag = spot * 10000;
-      const cg = Math.round(callW * baseMag);
-      const pg = Math.round(putW * baseMag);
-      const cd = Math.round(cg * 0.5);
-      const pd = Math.round(pg * 0.5);
-      strikes.push({
-        strike: stk,
-        call_gex: cg,
-        put_gex: pg,
-        call_dex: cd,
-        put_dex: pd,
-        net_gex: cg - pg,
-        net_dex: cd - pd,
-        exp_gex: {
-          'Front Expiry': { call: Math.round(cg * 0.5), put: Math.round(pg * 0.5) },
-          'Next Weekly': { call: Math.round(cg * 0.3), put: Math.round(pg * 0.3) },
-          'Monthly OPEX': { call: Math.round(cg * 0.2), put: Math.round(pg * 0.2) }
-        },
-        exp_dex: {
-          'Front Expiry': { call: Math.round(cd * 0.5), put: Math.round(pd * 0.5) },
-          'Next Weekly': { call: Math.round(cd * 0.3), put: Math.round(pd * 0.3) },
-          'Monthly OPEX': { call: Math.round(cd * 0.2), put: Math.round(pd * 0.2) }
-        }
-      });
-    }
-
-    return {
-      ticker: sym,
-      status: 'ok',
-      gex: {
-        ticker: sym,
-        spot_price: spot,
-        zero_gex_level: zeroFlip,
-        call_wall: callWall,
-        put_wall: putWall,
-        call_put_ratio: 1.45,
-        gamma_regime: 'LONG GAMMA (+GEX)',
-        expirations: expList,
-        strikes: strikes
-      },
-      flow: {
-        records: this.generateMockFlowPrints(sym, spot),
-        total_count: 7
-      },
-      metrics: {
-        spot_price: spot,
-        zero_gamma_flip: zeroFlip,
-        call_wall: callWall,
-        put_wall: putWall,
-        confluence_bias: 'BULLISH CONFLUENCE',
-        gamma_regime: 'LONG GAMMA (+GEX)',
-        flow_ratio: '71% CALL FLOW',
-        call_pct: 71.0,
-        put_pct: 29.0,
-        call_flow: 35000000,
-        put_flow: 14000000,
-        whale_count: 4,
-        unusual_oi_count: 3
-      }
-    };
+  escapeHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
-  generateMockFlowPrints(sym, spot) {
-    const prints = [
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.05, spot: spot, otm_pct: 5.0, premium: 14500000, size: 12000, open_interest: 18500, is_unusual_oi: true },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.08, spot: spot, otm_pct: 8.0, premium: 10200000, size: 9500, open_interest: 8200, is_unusual_oi: false },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.95, spot: spot, otm_pct: -5.0, premium: 8900000, size: 6200, open_interest: 4500, is_unusual_oi: false },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.02, spot: spot, otm_pct: 2.0, premium: 6400000, size: 5800, open_interest: 12000, is_unusual_oi: true },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'SELL PUT', strike: spot * 0.96, spot: spot, otm_pct: -4.0, premium: 4800000, size: 4200, open_interest: 3100, is_unusual_oi: false },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.10, spot: spot, otm_pct: 10.0, premium: 3500000, size: 7500, open_interest: 22000, is_unusual_oi: true },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.04, spot: spot, otm_pct: 4.0, premium: 2800000, size: 3100, open_interest: 2500, is_unusual_oi: false },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.92, spot: spot, otm_pct: -8.0, premium: 2100000, size: 2800, open_interest: 1900, is_unusual_oi: false },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.06, spot: spot, otm_pct: 6.0, premium: 1600000, size: 2200, open_interest: 1700, is_unusual_oi: false },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'SELL CALL', strike: spot * 1.15, spot: spot, otm_pct: 15.0, premium: 1200000, size: 4500, open_interest: 9800, is_unusual_oi: false },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.03, spot: spot, otm_pct: 3.0, premium: 950000, size: 1800, open_interest: 1400, is_unusual_oi: false },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.90, spot: spot, otm_pct: -10.0, premium: 820000, size: 2100, open_interest: 1200, is_unusual_oi: false },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.07, spot: spot, otm_pct: 7.0, premium: 760000, size: 1600, open_interest: 1100, is_unusual_oi: false },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.09, spot: spot, otm_pct: 9.0, premium: 690000, size: 1900, open_interest: 1500, is_unusual_oi: false },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.12, spot: spot, otm_pct: 12.0, premium: 620000, size: 2400, open_interest: 8500, is_unusual_oi: true },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.94, spot: spot, otm_pct: -6.0, premium: 580000, size: 1300, open_interest: 900, is_unusual_oi: false },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.01, spot: spot, otm_pct: 1.0, premium: 540000, size: 900, open_interest: 800, is_unusual_oi: false },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'SELL PUT', strike: spot * 0.88, spot: spot, otm_pct: -12.0, premium: 510000, size: 3100, open_interest: 4200, is_unusual_oi: false },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.08, spot: spot, otm_pct: 8.0, premium: 480000, size: 1200, open_interest: 750, is_unusual_oi: false },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY PUT', strike: spot * 0.96, spot: spot, otm_pct: -4.0, premium: 450000, size: 1100, open_interest: 700, is_unusual_oi: false },
-      { expiration: '2026-10-16', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.14, spot: spot, otm_pct: 14.0, premium: 420000, size: 2600, open_interest: 6500, is_unusual_oi: true },
-      { expiration: '2026-09-18', symbol: sym, order_type: 'BUY CALL', strike: spot * 1.05, spot: spot, otm_pct: 5.0, premium: 390000, size: 950, open_interest: 600, is_unusual_oi: false }
-    ];
-    return prints;
+  buildErrorPayload(ticker, errorCode, errorMessage, errorTraceback) {
+    const sym = (ticker || 'QUANT').toUpperCase();
+    const errNode = {
+      ticker: sym,
+      spot_price: 0,
+      zero_gex_level: 0,
+      call_wall: 0,
+      put_wall: 0,
+      call_put_ratio: 0,
+      gamma_regime: 'Error',
+      expirations: [],
+      strikes: [],
+      is_fallback: false,
+      error_code: errorCode,
+      error_message: errorMessage,
+      error_traceback: errorTraceback || ''
+    };
+    return {
+      ticker: sym,
+      status: 'error',
+      gex: { ...errNode },
+      ibkr_gex: { ...errNode },
+      flow: { records: [], total_count: 0 },
+      metrics: {}
+    };
   }
 }

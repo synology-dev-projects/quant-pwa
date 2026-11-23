@@ -4,12 +4,11 @@ from app.routers.cockpit import get_cockpit_full_payload
 
 
 @pytest.mark.anyio
-async def test_cockpit_gexdex_chart_loads_when_scraper_fails():
+async def test_cockpit_gexdex_chart_surfaces_error_when_scraper_fails():
     """
-    Bug reproduction: Cockpit GEX/DEX chart isn't loading anything when live scraper
-    is unavailable or returns empty raw data.
-    Expected: get_cockpit_full_payload must provide fallback strike distribution
-    and valid spot price so the Interactive Exposure Chart and Key Levels strip load.
+    When live scraper is unavailable or returns empty raw data,
+    get_cockpit_full_payload must NOT synthesize fake fallback strikes.
+    Instead it must return strikes=[] with explicit error_code, error_message, and error_traceback.
     """
     # Simulate live scraper failure / auth lock
     with patch("app.engine.service.extract_raw_data", return_value=None):
@@ -19,18 +18,7 @@ async def test_cockpit_gexdex_chart_loads_when_scraper_fails():
         assert payload["ticker"] == "SPY"
 
         gex = payload.get("gex", {})
-        metrics = payload.get("metrics", {})
-
-        # Bug assertion: currently gex['spot_price'] == 0 and gex['strikes'] == []
-        assert gex.get("spot_price", 0.0) > 0, "gex.spot_price must be > 0 so key levels load"
-        assert metrics.get("spot_price", 0.0) > 0, "metrics.spot_price must be > 0"
-
-        strikes = gex.get("strikes", [])
-        assert isinstance(strikes, list)
-        assert len(strikes) > 0, "gex.strikes must contain strike distribution for chart rendering"
-
-        first_strike = strikes[0]
-        assert "strike" in first_strike
-        assert "call_gex" in first_strike
-        assert "put_gex" in first_strike
-        assert "net_gex" in first_strike
+        assert gex.get("strikes") == [], "Synthetic fallback strikes must not be returned when scraper fails"
+        assert gex.get("error_code") == "TRADINGEDGE_NO_DATA"
+        assert gex.get("error_message")
+        assert gex.get("error_traceback")

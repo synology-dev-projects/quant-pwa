@@ -3841,3 +3841,85 @@ th.sort-desc .sort-icon::after {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Honest Error Panel & Stack Trace Diagnostics in Cockpit */
+.cockpit-error-panel {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  padding: 18px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.cockpit-error-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.cockpit-error-code-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  color: #f87171;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.cockpit-error-source {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.cockpit-error-message {
+  color: #e2e8f0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  margin: 6px 0 12px;
+  word-break: break-word;
+}
+
+.cockpit-error-details {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.cockpit-error-details summary {
+  cursor: pointer;
+  color: #fbbf24;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.cockpit-error-traceback {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 220px;
+  max-width: 100%;
+  overflow: auto;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #0b0f19;
+  color: #fca5a5;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.cockpit-retry-btn {
+  min-height: 44px;
+}
