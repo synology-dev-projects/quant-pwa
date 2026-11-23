@@ -6,8 +6,8 @@ load_dotenv()
 
 class Settings:
     # Application & Environment Metadata
-    APP_VERSION: str = os.getenv("APP_VERSION", "v1.2.5")
-    APP_BUILD: str = os.getenv("APP_BUILD", "2026-11-09-04")
+    APP_VERSION: str = os.getenv("APP_VERSION", "v1.2.6")
+    APP_BUILD: str = os.getenv("APP_BUILD", "2026-11-23-01")
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "production")
 
     # Security & Passcode / Session Auth

@@ -68,8 +68,10 @@ export function getEasternMarketStatus(now = new Date()) {
 }
 
 export class LevelsView {
-  constructor() {
+  constructor(options = {}) {
     this.ticker = 'SPX'; // Strictly locked to SPX
+    this.hideCandlestick = !!options.hideCandlestick;
+    this.onLevelsLoaded = typeof options.onLevelsLoaded === 'function' ? options.onLevelsLoaded : null;
     this.container = null;
     this.availableDates = [];
     this.selectedDate = '';
@@ -1017,18 +1019,26 @@ export class LevelsView {
       datePicker.value = data.as_of_date || this.selectedDate;
     }
 
-    mount.innerHTML = `
-      <!-- Candlestick Chart Section -->
-      <div class="levels-candlestick-section" id="levelsCandlestickMount">
-        <div class="candlestick-loading-placeholder">
-          <div class="candlestick-pulse-spinner"></div>
-          <span>Loading SPX Intraday Candlesticks (5m)...</span>
-        </div>
-      </div>
-    `;
+    if (this.onLevelsLoaded) {
+      this.onLevelsLoaded(data);
+    }
 
-    // Asynchronously load and mount 5-minute session candlesticks
-    this.loadCandlesData(data);
+    if (!this.hideCandlestick) {
+      mount.innerHTML = `
+        <!-- Candlestick Chart Section -->
+        <div class="levels-candlestick-section" id="levelsCandlestickMount">
+          <div class="candlestick-loading-placeholder">
+            <div class="candlestick-pulse-spinner"></div>
+            <span>Loading SPX Intraday Candlesticks (5m)...</span>
+          </div>
+        </div>
+      `;
+
+      // Asynchronously load and mount 5-minute session candlesticks
+      this.loadCandlesData(data);
+    } else {
+      mount.innerHTML = '';
+    }
 
     // Evaluate live market hours & start polling if viewing today's session
     this.checkAndStartPolling();

@@ -34,6 +34,7 @@ from app.routers.radar import router as radar_router
 from app.routers.pipelines_router import router as pipelines_router
 from app.routers.watchlists import router as watchlists_router
 from app.routers.economic_events import router as economic_events_router
+from app.routers.market_overview import router as market_overview_router
 from app.engine.service import gexdex_service
 from app.engine.level_alert_monitor import level_alert_monitor
 
@@ -194,6 +195,12 @@ app.include_router(watchlists_router)
 
 # Mount Economic Events & Macro RAG Feed Router
 app.include_router(economic_events_router)
+
+# Mount Market Overview Candlesticks & VWAP Router
+app.include_router(
+    market_overview_router,
+    prefix="/api/market"
+)
 
 
 

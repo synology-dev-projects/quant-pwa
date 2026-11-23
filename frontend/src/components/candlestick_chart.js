@@ -18,6 +18,8 @@ export class CandlestickChart {
       : (this.candles.length > 0 ? this.candles[this.candles.length - 1].close : null);
     this.asOfDate = options.as_of_date || '';
     this.ticker = options.ticker || 'SPX';
+    this.timeframe = options.timeframe || 'intraday';
+    this.showVwap = options.showVwap !== false;
     this.isLightbox = !!options.isLightbox;
 
     this.wrapper = null;
@@ -46,6 +48,8 @@ export class CandlestickChart {
     }
     if (newOptions.as_of_date !== undefined) this.asOfDate = newOptions.as_of_date || '';
     if (newOptions.ticker !== undefined) this.ticker = newOptions.ticker || 'SPX';
+    if (newOptions.timeframe !== undefined) this.timeframe = newOptions.timeframe || 'intraday';
+    if (newOptions.showVwap !== undefined) this.showVwap = newOptions.showVwap !== false;
 
     this.renderMetrics();
     requestAnimationFrame(() => this.draw());
@@ -61,11 +65,15 @@ export class CandlestickChart {
 
     const headerLeft = document.createElement('div');
     headerLeft.className = 'candlestick-header-left';
+    const tfBadge = this.timeframe === 'daily' ? '1D' : '5M';
+    const tfSubtitle = this.timeframe === 'daily'
+      ? `Daily OHLC (6M) &bull; Latest: ${this.asOfDate || 'Latest'}`
+      : `Regular Trading Hours (09:30 &ndash; 16:15 ET) &bull; Session: ${this.asOfDate || 'Latest'}`;
     headerLeft.innerHTML = `
-      <span class="candlestick-badge">${this.ticker} 5M</span>
+      <span class="candlestick-badge">${this.ticker} ${tfBadge}</span>
       <div>
-        <div class="candlestick-title">${this.ticker} Session Candlesticks &amp; Structure</div>
-        <div class="candlestick-subtitle">Regular Trading Hours (09:30 &ndash; 16:15 ET) &bull; Session: ${this.asOfDate || 'Latest'}</div>
+        <div class="candlestick-title">${this.ticker} ${this.timeframe === 'daily' ? 'Daily' : 'Session'} Candlesticks</div>
+        <div class="candlestick-subtitle">${tfSubtitle}</div>
       </div>
     `;
     header.appendChild(headerLeft);
@@ -125,15 +133,18 @@ export class CandlestickChart {
     // 3. Legend Bar
     const legend = document.createElement('div');
     legend.className = 'candlestick-legend';
+    const hasLevels = this.levels && this.levels.length > 0;
+    const hasVwap = this.timeframe === 'intraday' && this.showVwap && this.candles.some((c) => c.vwap != null);
     legend.innerHTML = `
-      <div class="legend-item"><span class="legend-dot dot-buy"></span><span>BUY Level</span></div>
-      <div class="legend-item"><span class="legend-dot dot-sell"></span><span>SELL Level</span></div>
-      <div class="legend-item"><span class="legend-dot dot-pivot"></span><span>PIVOT Level</span></div>
-      <div class="legend-item"><span class="legend-line line-imm-res"></span><span>IMM Resistance</span></div>
-      <div class="legend-item"><span class="legend-line line-imm-sup"></span><span>IMM Support</span></div>
+      ${hasLevels ? `
+        <div class="legend-item"><span class="legend-dot dot-buy"></span><span>BUY Level</span></div>
+        <div class="legend-item"><span class="legend-dot dot-sell"></span><span>SELL Level</span></div>
+        <div class="legend-item"><span class="legend-dot dot-pivot"></span><span>PIVOT Level</span></div>
+      ` : ''}
+      ${hasVwap ? `<div class="legend-item"><span class="legend-line line-vwap"></span><span>VWAP</span></div>` : ''}
       <div class="legend-item"><span class="legend-line line-spot"></span><span>Live Spot</span></div>
-      <div class="legend-item"><span class="legend-box box-bull"></span><span>Bullish (5m)</span></div>
-      <div class="legend-item"><span class="legend-box box-bear"></span><span>Bearish (5m)</span></div>
+      <div class="legend-item"><span class="legend-box box-bull"></span><span>Bullish</span></div>
+      <div class="legend-item"><span class="legend-box box-bear"></span><span>Bearish</span></div>
     `;
     this.wrapper.appendChild(legend);
 
@@ -316,12 +327,13 @@ export class CandlestickChart {
     }
 
     this.tooltip.innerHTML = `
-      <div class="tooltip-time-badge">${bar.datetime} ET</div>
+      <div class="tooltip-time-badge">${bar.datetime}${this.timeframe === 'intraday' ? ' ET' : ''}</div>
       <div class="tooltip-ohlc-grid">
         <div class="ohlc-row"><span class="ohlc-lbl">Open:</span><span class="ohlc-val">$${bar.open.toFixed(2)}</span></div>
         <div class="ohlc-row"><span class="ohlc-lbl">High:</span><span class="ohlc-val text-emerald">$${bar.high.toFixed(2)}</span></div>
         <div class="ohlc-row"><span class="ohlc-lbl">Low:</span><span class="ohlc-val text-rose">$${bar.low.toFixed(2)}</span></div>
         <div class="ohlc-row"><span class="ohlc-lbl">Close:</span><span class="ohlc-val" style="color:${colorStyle};">$${bar.close.toFixed(2)}</span></div>
+        ${bar.vwap != null ? `<div class="ohlc-row"><span class="ohlc-lbl">VWAP:</span><span class="ohlc-val" style="color:#22d3ee;">$${Number(bar.vwap).toFixed(2)}</span></div>` : ''}
         <div class="ohlc-row"><span class="ohlc-lbl">Change:</span><span class="ohlc-val" style="color:${colorStyle};">${sign}${change.toFixed(2)} (${sign}${changePct.toFixed(2)}%)</span></div>
         ${bar.volume > 0 ? `<div class="ohlc-row"><span class="ohlc-lbl">Volume:</span><span class="ohlc-val">${bar.volume.toLocaleString()}</span></div>` : ''}
       </div>
@@ -388,6 +400,10 @@ export class CandlestickChart {
       for (const c of this.candles) {
         if (c.low < minY) minY = c.low;
         if (c.high > maxY) maxY = c.high;
+        if (this.timeframe === 'intraday' && this.showVwap && c.vwap != null) {
+          if (c.vwap < minY) minY = c.vwap;
+          if (c.vwap > maxY) maxY = c.vwap;
+        }
       }
     }
 
@@ -474,7 +490,10 @@ export class CandlestickChart {
         ctx.lineTo(x, height - paddingBottom);
         ctx.stroke();
 
-        ctx.fillText(bar.datetime, x, height - paddingBottom + 8);
+        const labelStr = this.timeframe === 'daily' && bar.datetime.length >= 10
+          ? bar.datetime.slice(5).replace('-', '/')
+          : bar.datetime;
+        ctx.fillText(labelStr, x, height - paddingBottom + 8);
       }
       // Draw last bar time if not overlapping
       const lastIdx = this.candles.length - 1;
@@ -604,6 +623,29 @@ export class CandlestickChart {
         const bodyTop = Math.min(yOpen, yClose);
         const bodyH = Math.max(1.5, Math.abs(yClose - yOpen));
         ctx.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyH);
+      }
+
+      // 7b. Draw Intraday VWAP Curve
+      if (this.timeframe === 'intraday' && this.showVwap) {
+        ctx.save();
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        let started = false;
+        for (let i = 0; i < this.candles.length; i++) {
+          const bar = this.candles[i];
+          if (bar.vwap == null) continue;
+          const vx = getX(i);
+          const vy = getY(bar.vwap);
+          if (!started) {
+            ctx.moveTo(vx, vy);
+            started = true;
+          } else {
+            ctx.lineTo(vx, vy);
+          }
+        }
+        if (started) ctx.stroke();
+        ctx.restore();
       }
 
       // 8. Crosshair Lines

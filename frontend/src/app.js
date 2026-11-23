@@ -1,11 +1,10 @@
 import { AppState, fetchWithAuth } from './state.js?v=30';
 import { TabManager } from './tabs/tab_manager.js?v=30';
+import { OverviewView } from './tabs/overview_view.js?v=36';
 import { CockpitView } from './tabs/cockpit_view.js?v=30';
 import { RadarView } from './tabs/radar_view.js?v=31';
 import { FlowView } from './tabs/flow_view.js?v=32';
 import { WatchlistView } from './tabs/watchlist_view.js?v=33';
-import { LevelsView } from './tabs/levels_view.js?v=35';
-import { MacroView } from './tabs/macro_view.js?v=35';
 import { Lightbox } from './components/lightbox.js?v=30';
 import { LockScreen } from './components/lock_screen.js?v=30';
 import { SettingsModal } from './components/settings_modal.js?v=30';
@@ -13,12 +12,11 @@ import { DiagnosticsModal } from './components/diagnostics_modal.js?v=30';
 
 class App {
   constructor() {
+    this.overviewView = new OverviewView();
     this.cockpitView = new CockpitView();
     this.radarView = new RadarView();
     this.flowView = new FlowView();
     this.watchlistView = new WatchlistView();
-    this.levelsView = new LevelsView();
-    this.macroView = new MacroView();
     this.lightbox = new Lightbox();
     window.quantLightbox = this.lightbox;
 
@@ -91,11 +89,10 @@ class App {
         this.watchlistView.loadWatchlists();
       }
     }
-    if (this.levelsView && AppState.getActiveTab() === 'levels') {
-      this.levelsView.loadLevelsData();
-    }
-    if (this.macroView && AppState.getActiveTab() === 'macro') {
-      this.macroView.loadEvents();
+    if (this.overviewView && AppState.getActiveTab() === 'overview') {
+      this.overviewView.loadCharts();
+      this.overviewView.levelsView?.loadLevelsData();
+      this.overviewView.macroView?.loadEvents();
     }
   }
 
@@ -116,14 +113,15 @@ class App {
           this.flowView.loadFlowData();
         }
       }
-      if (tabId === 'levels' && this.levelsView) {
-        if (!this.levelsView.currentData) {
-          this.levelsView.loadInitialData();
+      if (tabId === 'overview' && this.overviewView) {
+        if (!this.overviewView.charts || this.overviewView.charts.size === 0) {
+          this.overviewView.loadCharts();
         }
-      }
-      if (tabId === 'macro' && this.macroView) {
-        if (!this.macroView.currentEvents || this.macroView.currentEvents.length === 0) {
-          this.macroView.loadEvents();
+        if (this.overviewView.levelsView && !this.overviewView.levelsView.currentData) {
+          this.overviewView.levelsView.loadInitialData();
+        }
+        if (this.overviewView.macroView && (!this.overviewView.macroView.currentEvents || this.overviewView.macroView.currentEvents.length === 0)) {
+          this.overviewView.macroView.loadEvents();
         }
       }
       if (tabId === 'watchlists' && this.watchlistView) {
@@ -138,7 +136,15 @@ class App {
       }
     });
 
-    // 1. Options Flow Aggregate Tab
+    // 1. Market Overview Tab (Charts + SPX Levels + Economic Events)
+    this.tabManager.registerTab({
+      id: 'overview',
+      title: 'Overview',
+      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>`,
+      render: (container) => this.overviewView.render(container)
+    });
+
+    // 2. Options Flow Aggregate Tab
     this.tabManager.registerTab({
       id: 'flow',
       title: 'Flow',
@@ -146,7 +152,7 @@ class App {
       render: (container) => this.flowView.render(container)
     });
 
-    // 2. Ticker Cockpit Tab
+    // 3. Ticker Cockpit Tab
     this.tabManager.registerTab({
       id: 'cockpit',
       title: 'Cockpit',
@@ -154,7 +160,7 @@ class App {
       render: (container) => this.cockpitView.render(container)
     });
 
-    // 3. Confluence Radar Tab
+    // 4. Confluence Radar Tab
     this.tabManager.registerTab({
       id: 'radar',
       title: 'Confluence Radar',
@@ -162,7 +168,7 @@ class App {
       render: (container) => this.radarView.render(container)
     });
 
-    // 4. Watchlists Tab
+    // 5. Watchlists Tab
     this.tabManager.registerTab({
       id: 'watchlists',
       title: 'Watchlists',
@@ -170,26 +176,10 @@ class App {
       render: (container) => this.watchlistView.render(container)
     });
 
-    // 5. SPX Quant Levels Tab (PWA-01 - Locked to SPX)
-    this.tabManager.registerTab({
-      id: 'levels',
-      title: 'SPX Levels',
-      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v18M16 3v18M8 7h8M8 12h8M8 17h8"></path></svg>`,
-      render: (container) => this.levelsView.render(container)
-    });
-
-    // 6. Macroeconomic Calendar & RAG Tab
-    this.tabManager.registerTab({
-      id: 'macro',
-      title: 'Macro',
-      iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`,
-      render: (container) => this.macroView.render(container)
-    });
-
     // Activate initial tab from localStorage
     const savedTab = AppState.getActiveTab();
-    const validTabs = ['flow', 'cockpit', 'radar', 'watchlists', 'levels', 'macro'];
-    const activeTab = validTabs.includes(savedTab) ? savedTab : 'flow';
+    const validTabs = ['overview', 'flow', 'cockpit', 'radar', 'watchlists'];
+    const activeTab = validTabs.includes(savedTab) ? savedTab : 'overview';
     this.tabManager.switchTab(activeTab);
   }
 
